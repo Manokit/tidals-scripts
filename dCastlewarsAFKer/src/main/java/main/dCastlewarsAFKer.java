@@ -36,11 +36,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dCastlewarsAFKer",
         description = "AFKs the castle wars minigame on mass worlds",
         skillCategory = SkillCategory.OTHER,
-        version = 1.8,
+        version = 1.9,
         author = "JustDavyy"
 )
 public class dCastlewarsAFKer extends Script {
-    public static final String scriptVersion = "1.8";
+    public static final String scriptVersion = "1.9";
     private final String scriptName = "CastlewarsAFKer";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

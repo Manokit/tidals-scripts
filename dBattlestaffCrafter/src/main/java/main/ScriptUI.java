@@ -14,7 +14,7 @@ import javafx.util.StringConverter;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_SELECTED_STAFF = "dbattlestaffcrafter_selected_staff";
     private static final String PREF_WEBHOOK_ENABLED = "dbattlestaffcrafter_webhook_enabled";
     private static final String PREF_WEBHOOK_URL = "dbattlestaffcrafter_webhook_url";

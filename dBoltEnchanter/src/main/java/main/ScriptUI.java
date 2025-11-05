@@ -17,7 +17,7 @@ import java.util.Set;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
 
     private static final String PREF_WEBHOOK_ENABLED = "dboltenchanter_webhook_enabled";
     private static final String PREF_WEBHOOK_URL = "dboltenchanter_webhook_url";

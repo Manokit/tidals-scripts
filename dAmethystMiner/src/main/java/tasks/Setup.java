@@ -25,7 +25,7 @@ public class Setup extends Task {
     public boolean execute() {
         // Check mining level
         task = "Get mining level";
-        SkillsTabComponent.SkillLevel miningSkillLevel = script.getWidgetManager().getSkillTab().getSkillLevel(SkillType.FISHING);
+        SkillsTabComponent.SkillLevel miningSkillLevel = script.getWidgetManager().getSkillTab().getSkillLevel(SkillType.MINING);
         if (miningSkillLevel == null) {
             script.log(getClass(), "Failed to get skill levels.");
             return false;
@@ -35,7 +35,7 @@ public class Setup extends Task {
 
         // Check crafting level
         task = "Get crafting level";
-        SkillsTabComponent.SkillLevel craftingSkillLevel = script.getWidgetManager().getSkillTab().getSkillLevel(SkillType.COOKING);
+        SkillsTabComponent.SkillLevel craftingSkillLevel = script.getWidgetManager().getSkillTab().getSkillLevel(SkillType.CRAFTING);
         if (craftingSkillLevel == null) {
             script.log(getClass(), "Failed to get skill levels.");
             return false;

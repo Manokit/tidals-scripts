@@ -14,7 +14,7 @@ import javafx.util.StringConverter;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_SELECTED_WINE = "selected_wine";
 
     private static final String PREF_WEBHOOK_ENABLED = "dwinemaker_webhook_enabled";

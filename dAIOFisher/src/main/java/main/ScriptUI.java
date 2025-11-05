@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
 
     private static final String PREF_WEBHOOK_ENABLED = "daiofisher_webhook_enabled";
     private static final String PREF_WEBHOOK_URL = "daiofisher_webhook_url";

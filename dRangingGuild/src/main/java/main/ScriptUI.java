@@ -15,7 +15,7 @@ import javafx.util.StringConverter;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private final Script script;
     private static ScriptUI instance;
 

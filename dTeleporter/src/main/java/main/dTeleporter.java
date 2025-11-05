@@ -35,11 +35,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dTeleporter",
         description = "Trains magic by continuously casting teleportation spells.",
         skillCategory = SkillCategory.MAGIC,
-        version = 1.8,
+        version = 1.9,
         author = "JustDavyy"
 )
 public class dTeleporter extends Script {
-    public static final String scriptVersion = "1.8";
+    public static final String scriptVersion = "1.9";
     private final String scriptName = "Teleporter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

@@ -22,7 +22,7 @@ import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_SELECTION_MODE = "dcooker_selection_mode";
     private static final String PREF_SELECTED_ITEM = "dcooker_selected_item";
     private static final String PREF_SELECTED_MULTIPLE_ITEMS = "dcooker_selected_multiple_items";

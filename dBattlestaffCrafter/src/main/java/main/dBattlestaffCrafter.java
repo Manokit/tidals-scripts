@@ -42,12 +42,12 @@ import javax.imageio.ImageIO;
         name = "dBattlestaffCrafter",
         description = "Attaches orbs to battlestaves for quick crafting experience",
         skillCategory = SkillCategory.CRAFTING,
-        version = 2.0,
+        version = 2.1,
         author = "JustDavyy"
 )
 
 public class dBattlestaffCrafter extends Script {
-    public static final String scriptVersion = "2.0";
+    public static final String scriptVersion = "2.1";
     private final String scriptName = "BattlestaffCrafter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

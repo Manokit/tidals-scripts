@@ -36,11 +36,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dOffering",
         description = "Performs the Sinister or Demonic offering spell for prayer gains",
         skillCategory = SkillCategory.PRAYER,
-        version = 2.2,
+        version = 2.3,
         author = "JustDavyy"
 )
 public class dOffering extends Script {
-    public static final String scriptVersion = "2.2";
+    public static final String scriptVersion = "2.3";
     private final String scriptName = "Offering";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

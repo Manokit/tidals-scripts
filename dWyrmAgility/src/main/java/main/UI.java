@@ -14,7 +14,7 @@ import javafx.util.StringConverter;
 import java.util.prefs.Preferences;
 
 public class UI {
-    private final Preferences prefs = Preferences.userNodeForPackage(UI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_SELECTED_COURSE = "dwyrmagility_selected_course";
     private static final String PREF_WEBHOOK_ENABLED = "dwyrmagility_webhook_enabled";
     private static final String PREF_WEBHOOK_URL = "dwyrmagility_webhook_url";

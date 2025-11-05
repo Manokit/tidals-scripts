@@ -18,7 +18,7 @@ import javafx.util.StringConverter;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
 
     // === Pref keys (webhook) ===
     private static final String PREF_WEBHOOK_ENABLED        = "dgemstonecrabber_webhook_enabled";

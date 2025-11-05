@@ -20,7 +20,7 @@ import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
 
     private static final String PREF_SELECTED_SPELL = "doffering_selected_spell";
     private static final String PREF_SELECTED_ITEM = "doffering_selected_item";

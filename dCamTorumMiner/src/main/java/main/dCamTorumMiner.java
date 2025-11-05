@@ -38,11 +38,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dCamTorumMiner",
         description = "Mines blessed bone shards in the Cam Torum mine",
         skillCategory = SkillCategory.MINING,
-        version = 2.6,
+        version = 2.7,
         author = "JustDavyy"
 )
 public class dCamTorumMiner extends Script {
-    public static final String scriptVersion = "2.6";
+    public static final String scriptVersion = "2.7";
     private final String scriptName = "CamTorumMiner";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -55,10 +55,14 @@ public class dCamTorumMiner extends Script {
     public static boolean smithMode = false;
     public static boolean dropAllMode = false;
     public static Timer lastXpGain = new Timer();
-    public static final Area miningArea = new RectangleArea(1498, 9541, 3, 3, 1);
+    public static Area miningArea = new RectangleArea(1498, 9541, 3, 3, 1);
+    public static Area wdhArea;
     public static final Area bankWalkArea = new RectangleArea(1449, 9567, 4, 1, 1);
     public static final Area bankArea = new RectangleArea(1448, 9564, 11, 7, 1);
     public static final Area anvilPlusBankArea = new RectangleArea(1432, 9557, 36, 35, 1);
+    public static int theWDHThreshold = 1;
+    public static boolean useWDH = false;
+    public static String miningLocation = "East";
 
     public static final Set<Integer> ITEM_IDS_TO_NOT_DEPOSIT = new HashSet<>(Set.of(
             ItemID.PAYDIRT, ItemID.BRONZE_PICKAXE, ItemID.IRON_PICKAXE,
@@ -125,6 +129,17 @@ public class dCamTorumMiner extends Script {
         smithMode = ui.getDepositAction().equals("Smith");
         dropMode = ui.getDepositAction().equals("Drop");
         dropAllMode = ui.isAlsoDropGemsAndClues();
+        useWDH = ui.useWDH();
+        theWDHThreshold = ui.getWDHPlayersRequired();
+        miningLocation = ui.getMiningLocation();
+
+        if (miningLocation.equalsIgnoreCase("East")) {
+            miningArea = new RectangleArea(1511, 9540, 11, 7, 1);
+            wdhArea = new RectangleArea(1509, 9534, 16, 17, 1);
+        } else {
+            miningArea = new RectangleArea(1496, 9539, 7, 8, 1);
+            wdhArea = new RectangleArea(1492, 9533, 18, 18, 1);
+        }
 
         webhookEnabled = ui.isWebhookEnabled();
         webhookUrl = ui.getWebhookUrl();
@@ -568,12 +583,12 @@ public class dCamTorumMiner extends Script {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dCamTorumMiner/src/main/java/main/dCamTorumMiner.java");
 
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
+            log("VERSION", "Could not fetch latest version info.");
             return;
         }
 
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
+            log("VERSION", "New version v" + latest + " found! Updating...");
             try {
                 File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
 
@@ -588,14 +603,14 @@ public class dCamTorumMiner extends Script {
                     while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
                 }
 
-                log("UPDATE", "✅ Downloaded: " + out.getName());
+                log("UPDATE", "Downloaded: " + out.getName());
                 stop();
 
             } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+                log("UPDATE", "Error downloading new version: " + e.getMessage());
             }
         } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+            log("SCRIPTVERSION", "You are running the latest version (v" + scriptVersion + ").");
         }
     }
 

@@ -11,7 +11,7 @@ import javafx.stage.Stage;
 import java.util.prefs.Preferences;
 
 public class KarambwanUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(KarambwanUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_BANKING_OPTION = "dkarambwanfisher_banking_option";
     private static final String PREF_FAIRY_RING_OPTION = "dkarambwanfisher_fairy_ring_option";
 

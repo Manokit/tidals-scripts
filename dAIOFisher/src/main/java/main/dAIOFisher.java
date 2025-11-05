@@ -43,11 +43,11 @@ import javax.imageio.ImageIO;
         name = "dAIOFisher",
         description = "AIO Fisher that fishes, banks and/or drops to get those gains!",
         skillCategory = SkillCategory.FISHING,
-        version = 3.6,
+        version = 3.7,
         author = "JustDavyy"
 )
 public class dAIOFisher extends Script {
-    public static String scriptVersion = "3.6";
+    public static String scriptVersion = "3.7";
     private final String scriptName = "AIOFisher";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

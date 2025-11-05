@@ -23,7 +23,7 @@ import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_SELECTED_SPELL = "dpublicalcher_selected_alch_spell";
     private static final String PREF_SELECTED_ITEM_ID = "dpublicalcher_selected_item_id";
     private static final String PREF_SELECTED_MULTIPLE_ITEMS = "dpublicalcher_selected_multiple_item_ids";

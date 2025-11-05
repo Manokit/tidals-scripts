@@ -10,7 +10,7 @@ import javafx.stage.Stage;
 import java.util.prefs.Preferences;
 
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userNodeForPackage(ScriptUI.class);
+    private final Preferences prefs = Preferences.userRoot().node("main");
 
     private static final String PREF_SELECTED_ITEM = "dspookycollector_selected_item";
 

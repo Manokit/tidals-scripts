@@ -36,11 +36,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dFossilWCer",
         description = "Cuts and drops/banks Teak or Mahogany logs on Fossil Island",
         skillCategory = SkillCategory.WOODCUTTING,
-        version = 2.0,
+        version = 2.1,
         author = "JustDavyy"
 )
 public class dFossilWCer extends Script {
-    public static final String scriptVersion = "2.0";
+    public static final String scriptVersion = "2.1";
     private final String scriptName = "FossilWCer";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

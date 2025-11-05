@@ -16,6 +16,7 @@ import com.osmb.api.ui.tabs.Tab;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.ocr.fonts.Font;
+import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
 import java.awt.*;
@@ -52,7 +53,22 @@ public class MineTask extends Task {
         if (!miningArea.contains(myPos)) {
             task = "Walk to mining area";
             script.log(getClass().getSimpleName(), "Walk to mining area");
-            return script.getWalker().walkTo(miningArea.getRandomPosition());
+
+            WalkConfig.Builder walkConfig = new WalkConfig.Builder();
+            walkConfig.breakCondition(() -> {
+                WorldPosition currentPos = script.getWorldPosition();
+                return currentPos != null && miningArea.contains(currentPos);
+            });
+
+            return script.getWalker().walkTo(miningArea.getRandomPosition(), walkConfig.build());
+        }
+
+        if (useWDH) {
+            if (checkAndDoWDHAction()) {
+                script.log("WDH", "Player(s) detected in " + miningLocation + " mining area! Hopping world.");
+                script.getProfileManager().forceHop();
+                return false;
+            }
         }
 
         task = "Clear skipped object list";
@@ -220,6 +236,7 @@ public class MineTask extends Task {
 
         Timer animationTimer = new Timer();
         Timer debounceTimer = new Timer();
+        Timer veinRefreshTimer = new Timer();
 
         long start = System.currentTimeMillis();
 
@@ -227,6 +244,21 @@ public class MineTask extends Task {
         final long maxNoAnimTime = script.random(6000, 8000);
 
         script.pollFramesHuman(() -> {
+            // === Every ~5 seconds, refresh veins and redraw overlays ===
+            if (veinRefreshTimer.timeElapsed() > 5000) {
+                try {
+                    WorldPosition myPos = script.getWorldPosition();
+                    if (myPos != null) {
+                        List<RSObject> veins = getVeins();
+                        List<RSObject> activeVeins = getActiveVeinsOnScreen(veins, myPos);
+                        drawActiveVeins(activeVeins, vein);
+                        script.log(getClass(), "Refreshed and redrew veins (" + activeVeins.size() + " active).");
+                    }
+                } catch (Exception ex) {
+                    script.log(getClass(), "Error during vein refresh: " + ex.getMessage());
+                }
+                veinRefreshTimer.reset();
+            }
 
             ItemGroupResult currentInv = script.getWidgetManager().getInventory()
                     .search(Set.of(ItemID.BLESSED_BONE_SHARDS));
@@ -298,5 +330,28 @@ public class MineTask extends Task {
         }, maxMiningDuration);
 
         script.pollFramesHuman(() -> false, script.random(300, 800));
+    }
+
+    private boolean checkAndDoWDHAction() {
+        UIResultList<WorldPosition> playerPositions =
+                script.getWidgetManager().getMinimap().getPlayerPositions();
+
+        if (playerPositions.isNotVisible() || playerPositions.isNotFound()) {
+            return false;
+        }
+
+        // Count players inside the wdh area
+        long playersInside = playerPositions.asList().stream()
+                .filter(wdhArea::contains)
+                .count();
+
+        if (playersInside >= theWDHThreshold) {
+            script.log(getClass(), "WDH → " + playersInside +
+                    " players detected (threshold=" + theWDHThreshold + "). Hopping world...");
+            script.getProfileManager().forceHop();
+            return true;
+        }
+
+        return false;
     }
 }
