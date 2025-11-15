@@ -1254,7 +1254,8 @@ public class Fight extends Task {
     private boolean needToEat() {
         if (useFood) {
             Integer hpPerc = script.getWidgetManager().getMinimapOrbs().getHitpointsPercentage();
-            if (hpPerc == null || !(hpPerc == -1)) {
+            if (hpPerc == null || hpPerc == -1) {
+                script.log(getClass(), "Failed to read HP / HP is null. Make sure your orb regeneration timers are OFF.");
                 return false; // Can't see HP orb -> don't try to eat
             }
 

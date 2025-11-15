@@ -44,12 +44,12 @@ import java.util.concurrent.atomic.AtomicReference;
 @ScriptDefinition(
         name = "dWyrmAgility",
         author = "JustDavyy",
-        version = 2.2,
+        version = 2.3,
         description = "Does the Wyrm basic or advanced agility course.",
         skillCategory = SkillCategory.AGILITY
 )
 public class dWyrmAgility extends Script {
-    public static final String scriptVersion = "2.2";
+    public static final String scriptVersion = "2.3";
     private final String scriptName = "WyrmAgility";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -217,6 +217,12 @@ public class dWyrmAgility extends Script {
 
     @Override
     public void onStart() {
+
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
+
         UI ui = new UI();
         Scene scene = ui.buildScene(this);
         getStageController().show(scene, "dWyrmAgility Settings", false);
@@ -234,8 +240,6 @@ public class dWyrmAgility extends Script {
             log("WEBHOOK", "✅ Webhook enabled. Interval: " + webhookIntervalMinutes + "min. Username: " + user);
             queueSendWebhook();
         }
-
-        checkForUpdates();
     }
 
     @Override
@@ -663,37 +667,28 @@ public class dWyrmAgility extends Script {
         }
     }
 
-    private void checkForUpdates() {
-        try {
-            String urlRaw = "https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dWyrmAgility/src/main/java/main/dWyrmAgility.java";
-            String latest = getLatestVersion(urlRaw);
-            if (latest == null) {
-                log("UPDATE", "⚠ Could not fetch latest version info.");
-                return;
-            }
-            if (compareVersions(scriptVersion, latest) < 0) {
-                log("UPDATE", "⏬ New version v" + latest + " found! Updating...");
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
+    private boolean checkForUpdates() {
+        String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dWyrmAgility/src/main/java/main/dWyrmAgility.java");
 
-                for (File f : dir.listFiles((d, n) -> n.startsWith("dWyrmAgility"))) {
-                    if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-                }
-
-                File out = new File(dir, "dWyrmAgility-" + latest + ".jar");
-                URL jarUrl = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dWyrmAgility/jar/dWyrmAgility.jar");
-                try (InputStream in = jarUrl.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-            } else {
-                log("SCRIPTVERSION", "✅ You are on the latest version (v" + scriptVersion + ").");
-            }
-        } catch (Exception e) {
-            log("UPDATE", "❌ Error updating: " + e.getMessage());
+        if (latest == null) {
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
+
+        // Compare versions
+        if (compareVersions(scriptVersion, latest) < 0) {
+
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
+            }
+
+            return true; // Outdated
+        }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     private String getLatestVersion(String url) {

@@ -43,11 +43,11 @@ import javax.imageio.ImageIO;
         name = "dAIOFisher",
         description = "AIO Fisher that fishes, banks and/or drops to get those gains!",
         skillCategory = SkillCategory.FISHING,
-        version = 3.8,
+        version = 3.9,
         author = "JustDavyy"
 )
 public class dAIOFisher extends Script {
-    public static String scriptVersion = "3.8";
+    public static String scriptVersion = "3.9";
     private final String scriptName = "AIOFisher";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -624,7 +624,10 @@ public class dAIOFisher extends Script {
             queueSendWebhook();
         }
 
-        checkForUpdates();
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         List<Task> taskList = new ArrayList<>();
 
@@ -682,38 +685,28 @@ public class dAIOFisher extends Script {
         return 0;
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dAIOFisher/src/main/java/main/dAIOFisher.java");
 
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
 
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
-            try {
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
-                File[] old = dir.listFiles((d, n) -> n.equals("dAIOFisher.jar") || n.startsWith("dAIOFisher-"));
-                if (old != null) for (File f : old) if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
 
-                File out = new File(dir, "dAIOFisher-" + latest + ".jar");
-                URL url = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dAIOFisher/jar/dAIOFisher.jar");
-                try (InputStream in = url.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-
-            } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     public String getLatestVersion(String urlString) {

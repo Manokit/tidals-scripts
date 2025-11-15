@@ -35,11 +35,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dTeleporter",
         description = "Trains magic by continuously casting teleportation spells.",
         skillCategory = SkillCategory.MAGIC,
-        version = 1.9,
+        version = 2.0,
         author = "JustDavyy"
 )
 public class dTeleporter extends Script {
-    public static final String scriptVersion = "1.9";
+    public static final String scriptVersion = "2.0";
     private final String scriptName = "Teleporter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -93,7 +93,11 @@ public class dTeleporter extends Script {
     @Override
     public void onStart() {
         log("INFO", "Starting dTeleporter v" + scriptVersion);
-        checkForUpdates();
+
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         ScriptUI ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
@@ -510,37 +514,28 @@ public class dTeleporter extends Script {
         };
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dTeleporter/src/main/java/main/dTeleporter.java");
+
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
+
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
-            try {
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
 
-                File[] old = dir.listFiles((d, n) -> n.equals("dTeleporter.jar") || n.startsWith("dTeleporter-"));
-                if (old != null) for (File f : old) if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-
-                File out = new File(dir, "dTeleporter-" + latest + ".jar");
-                URL url = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dTeleporter/jar/dTeleporter.jar");
-
-                try (InputStream in = url.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-            } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     public static int compareVersions(String v1, String v2) {

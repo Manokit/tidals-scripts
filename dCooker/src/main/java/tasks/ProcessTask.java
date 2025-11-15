@@ -88,21 +88,7 @@ public class ProcessTask extends Task {
         }
 
         task = "Interact with object";
-        if (script.getWorldPosition() != null && script.getWorldPosition().getRegionID() == 12588) {
-            script.log(getClass(), "Interacting with Ruins of Unkah fire, custom logic...");
-            if (!inventorySnapshot.getItem(cookingItemID).interact()) {
-                script.log(getClass(), "Failed to interact with cooking item. Retrying...");
-                if (!inventorySnapshot.getItem(cookingItemID).interact()) {
-                    return false;
-                }
-            }
-            if (!cookObject.interact(getFireMenuHook())) {
-                script.log(getClass(), "Failed to interact with cooking object. Retrying...");
-                if (!cookObject.interact(getFireMenuHook())) {
-                    return false;
-                }
-            }
-        } else if (!cookObject.interact(COOKING_ACTIONS)) {
+        if (!cookObject.interact(COOKING_ACTIONS)) {
             script.log(getClass(), "Failed to interact with cooking object. Retrying...");
             if (!cookObject.interact(COOKING_ACTIONS)) {
                 return false;
@@ -165,23 +151,6 @@ public class ProcessTask extends Task {
     }
 
     private RSObject getClosestCookObject() {
-        if (script.getWorldPosition() != null && script.getWorldPosition().getRegionID() == 12588) {
-            // Special case: Inside region 12588, use the action less fire at (3159, 2842, 0)
-            List<RSObject> fires = script.getObjectManager().getObjects(gameObject ->
-                    "Fire".equals(gameObject.getName())
-                            && (gameObject.getActions() == null || Arrays.stream(gameObject.getActions()).allMatch(Objects::isNull))
-                            && gameObject.getWorldPosition() != null
-                            && gameObject.getWorldPosition().equals(new WorldPosition(3159, 2842, 0))
-            );
-
-            if (!fires.isEmpty()) {
-                return fires.get(0);
-            } else {
-                script.log(ProcessTask.class, "No matching Fire object found at 3159, 2842, 0 with no actions.");
-                return null;
-            }
-        }
-
         List<RSObject> objects = script.getObjectManager().getObjects(gameObject -> {
             if (gameObject.getName() == null || gameObject.getActions() == null) {
                 return false;

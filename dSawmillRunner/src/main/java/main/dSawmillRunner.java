@@ -33,11 +33,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dSawmillRunner",
         description = "Creates planks of your choice at multiple sawmills",
         skillCategory = SkillCategory.CONSTRUCTION,
-        version = 1.6,
+        version = 1.7,
         author = "JustDavyy"
 )
 public class dSawmillRunner extends Script {
-    public static final String scriptVersion = "1.6";
+    public static final String scriptVersion = "1.7";
     private final String scriptName = "SawmillRunner";
     public static boolean setupDone = false;
 
@@ -82,7 +82,11 @@ public class dSawmillRunner extends Script {
     @Override
     public void onStart() {
         log("INFO", "Starting dSawmillRunner v" + scriptVersion);
-        checkForUpdates();
+
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
@@ -495,37 +499,28 @@ public class dSawmillRunner extends Script {
         }
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dSawmillRunner/src/main/java/main/dSawmillRunner.java");
+
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
+
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
-            try {
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
 
-                File[] old = dir.listFiles((d, n) -> n.equals("dSawmillRunner.jar") || n.startsWith("dSawmillRunner-"));
-                if (old != null) for (File f : old) if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-
-                File out = new File(dir, "dSawmillRunner-" + latest + ".jar");
-                URL url = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dSawmillRunner/jar/dSawmillRunner.jar");
-
-                try (InputStream in = url.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-            } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     public static int compareVersions(String v1, String v2) {

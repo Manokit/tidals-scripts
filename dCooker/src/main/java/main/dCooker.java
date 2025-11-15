@@ -40,11 +40,11 @@ import java.util.function.Predicate;
         name = "dCooker",
         description = "Cooks a wide variety of fish and other items at cookable objects.",
         skillCategory = SkillCategory.COOKING,
-        version = 3.2,
+        version = 3.4,
         author = "JustDavyy"
 )
 public class dCooker extends Script {
-    public static String scriptVersion = "3.2";
+    public static String scriptVersion = "3.4";
     private final String scriptName = "Cooker";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -404,6 +404,11 @@ public class dCooker extends Script {
     public void onStart() {
         log(getClass().getSimpleName(), "Starting dCooker v" + scriptVersion);
 
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
+
         ScriptUI ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
         getStageController().show(scene, "Cooking Options", false);
@@ -437,51 +442,6 @@ public class dCooker extends Script {
 
         log(getClass().getSimpleName(), "We're cooking: " + getItemManager().getItemName(cookingItemID));
         log(getClass().getSimpleName(), "Banking method: " + bankMethod);
-
-        String version = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dCooker/src/main/java/main/dCooker.java");
-
-        if (version == null) {
-            log("SCRIPTVERSION", "⚠ Could not fetch the latest version from GitHub. Proceeding with local version: v" + scriptVersion);
-        } else {
-            int comparison = compareVersions(scriptVersion, version);
-            if (comparison == 0) {
-                log("SCRIPTVERSION", "✅ You are running the latest script version: v" + scriptVersion);
-            } else if (comparison < 0) {
-                log("VERSIONERROR", "❌ You are NOT running the latest version of this script!\nYour version: v" + scriptVersion + "\nLatest version: v" + version);
-
-                try {
-                    String userHome = System.getProperty("user.home");
-                    File scriptsDir = new File(userHome + File.separator + ".osmb" + File.separator + "Scripts");
-
-                    // Delete old versions
-                    File[] oldFiles = scriptsDir.listFiles((dir, name) ->
-                            name.equals("dCooker.jar") || name.matches("dCooker-\\d+(\\.\\d+)+\\.jar"));
-                    if (oldFiles != null) {
-                        for (File f : oldFiles) f.delete();
-                    }
-
-                    String downloadUrl = "https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dCooker/jar/dCooker.jar";
-                    File newFile = new File(scriptsDir, "dCooker-" + version + ".jar");
-
-                    try (InputStream in = new URL(downloadUrl).openStream();
-                         FileOutputStream out = new FileOutputStream(newFile)) {
-                        byte[] buf = new byte[4096];
-                        int len;
-                        while ((len = in.read(buf)) != -1) out.write(buf, 0, len);
-                    }
-
-                    log("SCRIPTDOWNLOAD", "✅ Downloaded new version to: " + newFile.getAbsolutePath());
-                    stop();
-                    return;
-
-                } catch (Exception e) {
-                    log("SCRIPTDOWNLOAD", "❌ Failed to update script: " + e.getMessage());
-                }
-
-            } else {
-                log("SCRIPTVERSION", "✅ You are running a newer version than GitHub: v" + scriptVersion);
-            }
-        }
 
         tasks = Arrays.asList(
                 new Setup(this),
@@ -742,5 +702,29 @@ public class dCooker extends Script {
         } catch (Exception e) {
             log("STATS", "❌ Error sending stats: " + e.getMessage());
         }
+    }
+
+    private boolean checkForUpdates() {
+        String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dCooker/src/main/java/main/dCooker.java");
+
+        if (latest == null) {
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
+        }
+
+        // Compare versions
+        if (compareVersions(scriptVersion, latest) < 0) {
+
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
+            }
+
+            return true; // Outdated
+        }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 }

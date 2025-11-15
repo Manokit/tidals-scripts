@@ -39,11 +39,11 @@ import java.util.function.Predicate;
         name = "dWinemaker",
         description = "Turns your grapes into Jug of Wines or Wine of Zamorak for hefty cooking experience.",
         skillCategory = SkillCategory.COOKING,
-        version = 2.2,
+        version = 2.3,
         author = "JustDavyy"
 )
 public class dWinemaker extends Script {
-    public static final String scriptVersion = "2.2";
+    public static final String scriptVersion = "2.3";
     private final String scriptName = "Winemaker";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -108,6 +108,11 @@ public class dWinemaker extends Script {
     public void onStart() {
         log("INFO", "Starting dWinemaker v" + scriptVersion);
 
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
+
         ScriptUI ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
         getStageController().show(scene, "Winemaker Options", false);
@@ -132,8 +137,6 @@ public class dWinemaker extends Script {
             user = getWidgetManager().getChatbox().getUsername();
             queueSendWebhook();
         }
-
-        checkForUpdates();
 
         tasks = Arrays.asList(
                 new Setup(this),
@@ -558,39 +561,28 @@ public class dWinemaker extends Script {
         }
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dWinemaker/src/main/java/main/dWinemaker.java");
 
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
 
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
-            try {
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
 
-                File[] old = dir.listFiles((d, n) -> n.equals("dWinemaker.jar") || n.startsWith("dWinemaker-"));
-                if (old != null) for (File f : old) if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-
-                File out = new File(dir, "dWinemaker-" + latest + ".jar");
-                URL url = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dWinemaker/jar/dWinemaker.jar");
-                try (InputStream in = url.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-
-            } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     private String getLatestVersion(String url) {

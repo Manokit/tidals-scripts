@@ -39,11 +39,11 @@ import javax.imageio.ImageIO;
         name = "dBoltEnchanter",
         description = "Casts the enchant crossbow bolt spell to enchant gem tipped bolts.",
         skillCategory = SkillCategory.MAGIC,
-        version = 1.4,
+        version = 1.5,
         author = "JustDavyy"
 )
 public class dBoltEnchanter extends Script {
-    public static final String scriptVersion = "1.4";
+    public static final String scriptVersion = "1.5";
     private final String scriptName = "BoltEnchanter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -410,7 +410,10 @@ public class dBoltEnchanter extends Script {
     public void onStart() {
         log(getClass(), "Starting dBoltEnchanter v" + scriptVersion);
 
-        checkForUpdates();
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         ScriptUI ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
@@ -638,44 +641,28 @@ public class dBoltEnchanter extends Script {
         return 0;
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dBoltEnchanter/src/main/java/main/dBoltEnchanter.java");
 
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
 
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
 
-            try {
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
-
-                File[] old = dir.listFiles((d, n) -> n.equals("dBoltEnchanter.jar") || n.startsWith("dBoltEnchanter-"));
-                if (old != null) {
-                    for (File f : old) {
-                        if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-                    }
-                }
-
-                File out = new File(dir, "dBoltEnchanter-" + latest + ".jar");
-                URL url = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dBoltEnchanter/jar/dBoltEnchanter.jar");
-
-                try (InputStream in = url.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-            } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     private void sendStats(long gpEarned, long xpGained, long runtimeMs) {

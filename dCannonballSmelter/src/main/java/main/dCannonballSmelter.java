@@ -39,11 +39,11 @@ import java.util.function.Predicate;
         name = "dCannonballSmelter",
         description = "Turns steel bars into cannonballs",
         skillCategory = SkillCategory.SMITHING,
-        version = 3.4,
+        version = 3.5,
         author = "JustDavyy"
 )
 public class dCannonballSmelter extends Script implements WebhookSender {
-    public static final String scriptVersion = "3.4";
+    public static final String scriptVersion = "3.5";
     private final String scriptName = "CannonballSmelter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -130,7 +130,10 @@ public class dCannonballSmelter extends Script implements WebhookSender {
             queueSendWebhook();
         }
 
-        checkForUpdates();
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         tasks = Arrays.asList(
                 new Setup(this),
@@ -549,44 +552,28 @@ public class dCannonballSmelter extends Script implements WebhookSender {
         t.start();
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dCannonballSmelter/src/main/java/main/dCannonballSmelter.java");
+
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
 
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " available. Updating...");
 
-            try {
-                File dir = new File(System.getProperty("user.home") + "/.osmb/Scripts");
-
-                File[] oldFiles = dir.listFiles((d, name) -> name.startsWith("dCannonballSmelter"));
-                if (oldFiles != null) {
-                    for (File f : oldFiles) {
-                        if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-                    }
-                }
-
-                File newJar = new File(dir, "dCannonballSmelter-" + latest + ".jar");
-                URL dl = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dCannonballSmelter/jar/dCannonballSmelter.jar");
-
-                try (InputStream in = dl.openStream(); FileOutputStream out = new FileOutputStream(newJar)) {
-                    byte[] buf = new byte[4096];
-                    int read;
-                    while ((read = in.read(buf)) != -1) out.write(buf, 0, read);
-                }
-
-                log("UPDATE", "✅ Downloaded new version: " + newJar.getName());
-                stop();
-
-            } catch (Exception e) {
-                log("UPDATE", "❌ Failed to download new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("VERSION", "✅ You are running the latest version (v" + scriptVersion + ")");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     private String getLatestVersion(String url) {

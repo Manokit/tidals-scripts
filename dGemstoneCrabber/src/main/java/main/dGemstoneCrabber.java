@@ -38,11 +38,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dGemstoneCrabber",
         description = "Trains combat by hunting the gem stone crab",
         skillCategory = SkillCategory.COMBAT,
-        version = 2.4,
+        version = 2.6,
         author = "JustDavyy"
 )
 public class dGemstoneCrabber extends Script implements WebhookSender {
-    public static final String scriptVersion = "2.4";
+    public static final String scriptVersion = "2.6";
     private final String scriptName = "GemstoneCrabber";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -137,7 +137,11 @@ public class dGemstoneCrabber extends Script implements WebhookSender {
     @Override
     public void onStart() {
         log("INFO", "Starting dGemstoneCrabber v" + scriptVersion);
-        checkForUpdates();
+
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
@@ -565,37 +569,28 @@ public class dGemstoneCrabber extends Script implements WebhookSender {
         }
     }
 
-    private void checkForUpdates() {
+    private boolean checkForUpdates() {
         String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dGemstoneCrabber/src/main/java/main/dGemstoneCrabber.java");
+
         if (latest == null) {
-            log("VERSION", "⚠ Could not fetch latest version info.");
-            return;
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
         }
+
+        // Compare versions
         if (compareVersions(scriptVersion, latest) < 0) {
-            log("VERSION", "⏬ New version v" + latest + " found! Updating...");
-            try {
-                File dir = new File(System.getProperty("user.home") + File.separator + ".osmb" + File.separator + "Scripts");
 
-                File[] old = dir.listFiles((d, n) -> n.equals("dGemstoneCrabber.jar") || n.startsWith("dGemstoneCrabber-"));
-                if (old != null) for (File f : old) if (f.delete()) log("UPDATE", "🗑 Deleted old: " + f.getName());
-
-                File out = new File(dir, "dGemstoneCrabber-" + latest + ".jar");
-                URL url = new URL("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dGemstoneCrabber/jar/dGemstoneCrabber.jar");
-
-                try (InputStream in = url.openStream(); FileOutputStream fos = new FileOutputStream(out)) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-                }
-
-                log("UPDATE", "✅ Downloaded: " + out.getName());
-                stop();
-            } catch (Exception e) {
-                log("UPDATE", "❌ Error downloading new version: " + e.getMessage());
+            // Spam 10 log lines
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
             }
-        } else {
-            log("SCRIPTVERSION", "✅ You are running the latest version (v" + scriptVersion + ").");
+
+            return true; // Outdated
         }
+
+        // Up to date
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 
     public static int compareVersions(String v1, String v2) {
