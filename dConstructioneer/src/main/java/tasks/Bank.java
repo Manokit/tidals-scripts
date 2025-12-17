@@ -52,11 +52,15 @@ public class Bank extends Task {
 
         int withdrawAmount = inventorySnapshot.getFreeSlots();
 
-        if (!script.getWidgetManager().getBank().withdraw(selectedPlank, withdrawAmount)) {
-            script.log(getClass(), "Withdraw failed for " + withdrawAmount + "x " + selectedPlank);
+        if (selectedType.equalsIgnoreCase("large hull parts")) {
+            withdrawAmount = 25;
+        }
+
+        if (!script.getWidgetManager().getBank().withdraw(selectedBaseMaterialId, withdrawAmount)) {
+            script.log(getClass(), "Withdraw failed for " + withdrawAmount + "x " + selectedBaseMaterialId);
             return false;
         }
-        script.log(getClass(), "Withdraw succeeded for " + withdrawAmount + "x " + selectedPlank);
+        script.log(getClass(), "Withdraw succeeded for " + withdrawAmount + "x " + selectedBaseMaterialId);
 
         script.getWidgetManager().getBank().close();
         return script.pollFramesHuman(() -> !script.getWidgetManager().getBank().isVisible(), script.random(4000, 6000));

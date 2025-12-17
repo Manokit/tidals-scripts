@@ -26,7 +26,7 @@ public class ScriptUI {
     // Construction Item Data
     // =========================
 
-    private static final String[] ITEM_TYPES = {"Hull parts", "Repair kits"};
+    private static final String[] ITEM_TYPES = {"Hull parts", "Repair kits", "Large hull parts"};
     private static final String DEFAULT_ITEM_TYPE = "Repair kits";
 
     private static final String[] TIERS = {
@@ -41,6 +41,11 @@ public class ScriptUI {
     // Repair kits (Normal → Rosewood)
     private static final int[] REPAIR_KIT_IDS = {
             31964, 31967, 31970, 31973, 31976, 31979, 31982
+    };
+
+    // Large hull parts (Normal → Rosewood)
+    private static final int[] LARGE_HULL_PART_IDS = {
+            32062, 32065, 32068, 32071, 32074, 32077, 32080
     };
 
     private final Script script;
@@ -100,7 +105,7 @@ public class ScriptUI {
                 }
 
                 int tierIndex = itemTierComboBox.getSelectionModel().getSelectedIndex();
-                int itemId = getPreviewIconId(type, tierIndex);
+                int itemId = getPreviewIconId(tierIndex);
 
                 var img = JavaFXUtils.getItemImageView(core, itemId);
                 if (img != null) {
@@ -129,9 +134,7 @@ public class ScriptUI {
                 }
 
                 int tierIndex = getIndex();
-                String type = itemTypeComboBox.getSelectionModel().getSelectedItem();
-
-                int itemId = getPreviewIconId(type, tierIndex);
+                int itemId = getPreviewIconId(tierIndex);
 
                 var img = JavaFXUtils.getItemImageView(core, itemId);
                 if (img != null) {
@@ -236,13 +239,17 @@ public class ScriptUI {
         ((Stage) itemTypeComboBox.getScene().getWindow()).close();
     }
 
-    private int getPreviewIconId(String type, int tierIndex) {
+    private int getPreviewIconId(int tierIndex) {
         if (tierIndex < 0 || tierIndex >= TIERS.length) return -1;
 
-        if (type.equalsIgnoreCase("Hull parts")) {
+        String type = getSelectedType();
+
+        if ("Hull parts".equals(type)) {
             return HULL_PART_IDS[tierIndex];
-        } else {
+        } else if ("Repair kits".equals(type)) {
             return REPAIR_KIT_IDS[tierIndex];
+        } else {
+            return LARGE_HULL_PART_IDS[tierIndex];
         }
     }
 
@@ -262,10 +269,14 @@ public class ScriptUI {
         int tierIndex = itemTierComboBox.getSelectionModel().getSelectedIndex();
         if (tierIndex < 0 || tierIndex >= TIERS.length) return -1;
 
-        if ("Hull parts".equals(getSelectedType())) {
+        String type = getSelectedType();
+
+        if ("Hull parts".equals(type)) {
             return HULL_PART_IDS[tierIndex];
-        } else {
+        } else if ("Repair kits".equals(type)) {
             return REPAIR_KIT_IDS[tierIndex];
+        } else {
+            return LARGE_HULL_PART_IDS[tierIndex];
         }
     }
 
@@ -291,6 +302,19 @@ public class ScriptUI {
             default:
                 return -1;
         }
+    }
+
+    public int getSelectedBaseMaterialId() {
+        int tierIndex = itemTierComboBox.getSelectionModel().getSelectedIndex();
+        if (tierIndex < 0 || tierIndex >= TIERS.length) return -1;
+
+        String type = getSelectedType();
+
+        if ("Large hull parts".equalsIgnoreCase(type)) {
+            return HULL_PART_IDS[tierIndex];
+        }
+
+        return getSelectedPlankId();
     }
 
     public int getSelectedTierNumber() {

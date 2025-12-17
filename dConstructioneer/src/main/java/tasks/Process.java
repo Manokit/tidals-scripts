@@ -27,7 +27,7 @@ public class Process extends Task {
 
     @Override
     public boolean activate() {
-        ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedPlank));
+        ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedBaseMaterialId));
         if (inventorySnapshot == null) {
             script.log(getClass().getSimpleName(), "Inventory not visible.");
             script.log(getClass().getSimpleName(), "Opening inventory tab");
@@ -36,11 +36,18 @@ public class Process extends Task {
         }
 
         int amount = 0;
-        if (inventorySnapshot.contains(selectedPlank)) {
-            amount = inventorySnapshot.getAmount(selectedPlank);
+        if (inventorySnapshot.contains(selectedBaseMaterialId)) {
+            amount = inventorySnapshot.getAmount(selectedBaseMaterialId);
         }
 
-        return amount >= 2;
+        int needed = 0;
+        if (selectedType.equalsIgnoreCase("repair kits")) {
+            needed = 2;
+        } else {
+            needed = 5;
+        }
+
+        return amount >= needed;
     }
 
     @Override
@@ -54,7 +61,7 @@ public class Process extends Task {
             return script.getWidgetManager().getBank().close();
         }
 
-        ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedPlank, ItemID.HAMMER, ItemID.IMCANDO_HAMMER, ItemID.IMCANDO_HAMMER_OFFHAND, ItemID.SAW, ItemID.AMYS_SAW, ItemID.AMYS_SAW_OFFHAND, ItemID.CRYSTAL_SAW, ItemID.SWAMP_PASTE, ItemID.SWAMP_PASTE_22095, ItemID.LAMP, ItemID.BOOK_OF_KNOWLEDGE, ItemID.BRONZE_NAILS, ItemID.IRON_NAILS, ItemID.STEEL_NAILS, ItemID.MITHRIL_NAILS, ItemID.ADAMANTITE_NAILS, ItemID.RUNE_NAILS, 31406));
+        ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedBaseMaterialId, ItemID.HAMMER, ItemID.IMCANDO_HAMMER, ItemID.IMCANDO_HAMMER_OFFHAND, ItemID.SAW, ItemID.AMYS_SAW, ItemID.AMYS_SAW_OFFHAND, ItemID.CRYSTAL_SAW, ItemID.SWAMP_PASTE, ItemID.SWAMP_PASTE_22095, ItemID.LAMP, ItemID.BOOK_OF_KNOWLEDGE, ItemID.BRONZE_NAILS, ItemID.IRON_NAILS, ItemID.STEEL_NAILS, ItemID.MITHRIL_NAILS, ItemID.ADAMANTITE_NAILS, ItemID.RUNE_NAILS, 31406));
         if (inventorySnapshot == null) {
             script.log(getClass(), "Inventory not visible.");
             return false;
@@ -65,7 +72,7 @@ public class Process extends Task {
         }
 
         if (selectedType.equalsIgnoreCase("repair kits")) {
-            if (!inventorySnapshot.containsAll(Set.of(selectedPlank, selectedNail))) {
+            if (!inventorySnapshot.containsAll(Set.of(selectedBaseMaterialId, selectedNail))) {
                 if (failCount >= 8) {
                     script.log(getClass(), "We don't have the required planks, paste and nails to continue for 8 times in a row.");
                     script.stop();
@@ -76,7 +83,7 @@ public class Process extends Task {
                 return false;
             }
         } else {
-            if (!inventorySnapshot.contains(selectedPlank)) {
+            if (!inventorySnapshot.contains(selectedBaseMaterialId)) {
                 if (failCount >= 8) {
                     script.log(getClass(), "We don't have the required planks");
                     script.stop();
@@ -203,11 +210,11 @@ public class Process extends Task {
                 return true;
             }
 
-            ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedPlank));
+            ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedBaseMaterialId));
             if (inventorySnapshot == null) {return false;}
 
-            if (inventorySnapshot.contains(selectedPlank)) {
-                int amount = inventorySnapshot.getAmount(selectedPlank);
+            if (inventorySnapshot.contains(selectedBaseMaterialId)) {
+                int amount = inventorySnapshot.getAmount(selectedBaseMaterialId);
                 return amount < 2;
             } else {
                 return true;

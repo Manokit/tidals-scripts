@@ -39,11 +39,11 @@ import java.util.function.Predicate;
         name = "dConstructioneer",
         description = "Trains construction quickly by making hull parts or repair kits for the Sailing skill",
         skillCategory = SkillCategory.CONSTRUCTION,
-        version = 1.0,
+        version = 1.1,
         author = "JustDavyy"
 )
 public class dConstructioneer extends Script {
-    public static String scriptVersion = "1.0";
+    public static String scriptVersion = "1.1";
     private final String scriptName = "Constructioneer";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -63,6 +63,7 @@ public class dConstructioneer extends Script {
     public static String selectedType;
     public static String selectedTier;
     public static int selectedPlank = 0;
+    public static int selectedBaseMaterialId = 0;
     public static int selectedNail = 0;
     public static int selectedIndex = 1;
     public static int selectedItemId = 0;
@@ -368,6 +369,7 @@ public class dConstructioneer extends Script {
         selectedNail = ui.getSelectedNailId();
         selectedIndex = ui.getSelectedTierNumber();
         selectedItemId = ui.getSelectedItemId();
+        selectedBaseMaterialId = ui.getSelectedBaseMaterialId();
 
         tasks = Arrays.asList(
                 new Setup(this),
