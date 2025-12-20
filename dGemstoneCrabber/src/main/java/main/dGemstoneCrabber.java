@@ -38,11 +38,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dGemstoneCrabber",
         description = "Trains combat by hunting the gem stone crab",
         skillCategory = SkillCategory.COMBAT,
-        version = 2.6,
+        version = 2.7,
         author = "JustDavyy"
 )
 public class dGemstoneCrabber extends Script implements WebhookSender {
-    public static final String scriptVersion = "2.6";
+    public static final String scriptVersion = "2.7";
     private final String scriptName = "GemstoneCrabber";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -58,6 +58,7 @@ public class dGemstoneCrabber extends Script implements WebhookSender {
     public static boolean needToAttack = false;
     public static boolean onlyHopAfterKill = false;
     public static boolean shouldEat = false;
+    public static boolean shouldPot = false;
     public static boolean useFood = false;
     public static boolean usePot = false;
     public static boolean useDBAXE = false;
@@ -703,6 +704,13 @@ public class dGemstoneCrabber extends Script implements WebhookSender {
             case ItemID.DIVINE_SUPER_COMBAT_POTION2:
             case ItemID.DIVINE_SUPER_COMBAT_POTION1:
                 return List.of(ItemID.DIVINE_SUPER_COMBAT_POTION1, ItemID.DIVINE_SUPER_COMBAT_POTION2, ItemID.DIVINE_SUPER_COMBAT_POTION3, ItemID.DIVINE_SUPER_COMBAT_POTION4);
+
+            // Forgotten Brew
+            case ItemID.FORGOTTEN_BREW4:
+            case ItemID.FORGOTTEN_BREW3:
+            case ItemID.FORGOTTEN_BREW2:
+            case ItemID.FORGOTTEN_BREW1:
+                return List.of(ItemID.FORGOTTEN_BREW1, ItemID.FORGOTTEN_BREW2, ItemID.FORGOTTEN_BREW3, ItemID.FORGOTTEN_BREW4);
 
             default:
                 // If it’s a single ID or unknown, just return the given one

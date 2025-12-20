@@ -347,6 +347,7 @@ public class Fight extends Task {
                 if (!initiateAttack()) {
                     initiateAttack();
                 }
+                shouldPot = false;
 
                 BooleanSupplier waitCon = () -> {
                     ItemGroupResult inv2 = script.getWidgetManager().getInventory().search(idSet);
@@ -1324,19 +1325,40 @@ public class Fight extends Task {
 
     private boolean needToPot() {
         long now = System.currentTimeMillis();
-        boolean isDivine = script.getItemManager().getItemName(potID).toLowerCase().contains("divine");
+        boolean isDivine = script.getItemManager()
+                .getItemName(potID)
+                .toLowerCase()
+                .contains("divine");
 
+        // -------------------------------------------------
+        // FORCED POT (high priority, one-time)
+        // -------------------------------------------------
+        if (shouldPot) {
+            shouldPot = false;
+
+            nextPotAt = isDivine
+                    ? now + script.random((long) (5.2 * 60_000), 6 * 60_000)
+                    : now + script.random(6 * 60_000, 8 * 60_000);
+
+            return true;
+        }
+
+        // -------------------------------------------------
         // First run → schedule initial pot 1 minute from now
+        // -------------------------------------------------
         if (nextPotAt == 0L) {
             nextPotAt = now + 60_000;
             return false;
         }
 
-        // If we're at/after the time → trigger and reschedule
+        // -------------------------------------------------
+        // Normal timed pot logic
+        // -------------------------------------------------
         if (now >= nextPotAt) {
             nextPotAt = isDivine
-                    ? now + script.random((long)(5.2 * 60_000), 6 * 60_000) // 5.2-6 minutes
-                    : now + script.random(6 * 60_000, 8 * 60_000); // 6 - 8 minutes
+                    ? now + script.random((long) (5.2 * 60_000), 6 * 60_000)
+                    : now + script.random(6 * 60_000, 8 * 60_000);
+
             return true;
         }
 
@@ -1483,13 +1505,21 @@ public class Fight extends Task {
                 return;
             }
 
-            // 5) We dedded
+            // 4) We dedded
             if (msg.contains("you are dead")) {
                 script.log(getClass(), "Chat: we are dedded -> " + msg);
                 script.log(getClass(), "Stopping scrip... fuck me man");
                 script.pollFramesHuman(() -> false, script.random(10000, 12500));
                 script.getWidgetManager().getLogoutTab().logout();
                 script.stop();
+                return;
+            }
+
+            // 5) We dedded
+            if (msg.contains("need a magic level of")) {
+                script.log(getClass(), "Chat: need higher magic level -> " + msg);
+                script.log(getClass(), "Marking force drink pot as TRUE");
+                shouldPot = true;
                 return;
             }
         }
