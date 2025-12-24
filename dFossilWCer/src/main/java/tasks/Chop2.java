@@ -11,7 +11,6 @@ import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.shape.Rectangle;
-import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 import com.osmb.api.ui.component.ComponentSearchResult;
 import com.osmb.api.ui.component.minimap.xpcounter.XPDropsComponent;
@@ -25,19 +24,17 @@ import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
 import java.awt.*;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static main.dFossilWCer.*;
 
-public class Chop extends Task {
+public class Chop2 extends Task {
     private int clusterFailCount = 0;
     private RSObject targetTree;
-    private int baselinePixelCount = -1;
-    private static final double DEPLETION_DROP_RATIO = 0.25; // 25% drop
-    private static final long animCheckMs = 1000;
 
     private static final SearchablePixel[] MAHOGANY_PIXEL_CLUSTER = new SearchablePixel[]{
             new SearchablePixel(-11443436, new SingleThresholdComparator(2), ColorModel.RGB),
@@ -67,63 +64,16 @@ public class Chop extends Task {
             new SearchablePixel(-8679345, new SingleThresholdComparator(2), ColorModel.HSL)
     };
 
-    private static final SearchablePixel[] CAMPHOR_PIXEL_CLUSTER = new SearchablePixel[] {
-            new SearchablePixel(-12701654, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-11321288, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-11781325, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-10532032, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-10729410, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-10926277, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-12241361, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-11518411, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-11123655, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-11978448, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-10334912, new SingleThresholdComparator(2), ColorModel.RGB),
-    };
-
-    private static final SearchablePixel[] CAMPHOR_DEPLETED_PIXEL_CLUSTER = new SearchablePixel[] {
-            new SearchablePixel(-9150132, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-9018290, new SingleThresholdComparator(2), ColorModel.RGB),
-    };
-
-    private static final SearchablePixel[] IRONWOOD_PIXEL_CLUSTER = new SearchablePixel[] {
-            new SearchablePixel(-14868969, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-6645622, new SingleThresholdComparator(5), ColorModel.RGB),
-    };
-
-    private static final SearchablePixel[] ROSEWOOD_PIXEL_CLUSTER = new SearchablePixel[] {
-            new SearchablePixel(-12306890, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-11057852, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-11846853, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-13687258, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-11452352, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-12701136, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-13227221, new SingleThresholdComparator(5), ColorModel.RGB),
-            new SearchablePixel(-14278131, new SingleThresholdComparator(5), ColorModel.RGB),
-    };
-
-    private static final SearchablePixel[] ROSEWOOD_DEPLETED_PIXEL_CLUSTER = new SearchablePixel[] {
-            new SearchablePixel(-8696765, new SingleThresholdComparator(2), ColorModel.RGB),
-            new SearchablePixel(-10733261, new SingleThresholdComparator(2), ColorModel.RGB),
-    };
-
     private static final Area choppingArea = new RectangleArea(3699, 3830, 20, 10, 0);
     private static final Area bankingArea = new RectangleArea(3708, 3797, 42, 21, 0);
 
-    private final Map<WorldPosition, Long> depletedTrees = new HashMap<>();
-    private static final int TEAK_RESPAWN_MS      = 9_000;
-    private static final int MAHOGANY_RESPAWN_MS  = 8_400;
-    private static final int CAMPHOR_RESPAWN_MS  = 92_000;
-    private static final int IRONWOOD_RESPAWN_MS = 122_000;
-    private static final int ROSEWOOD_RESPAWN_MS = 152_000;
-
-    public Chop(Script script) {
+    public Chop2(Script script) {
         super(script);
     }
 
     @Override
     public boolean activate() {
-        return true;
+        return logsId == ItemID.TEAK_LOGS || logsId == ItemID.MAHOGANY_LOGS;
     }
 
     @Override
@@ -138,11 +88,6 @@ public class Chop extends Task {
             }
         }
 
-        SearchablePixel[] depletedCluster = null;
-
-        if (logsId == 32904) depletedCluster = CAMPHOR_DEPLETED_PIXEL_CLUSTER;
-        if (logsId == 32910) depletedCluster = ROSEWOOD_DEPLETED_PIXEL_CLUSTER;
-
         usedBasketAlready = false;
 
         // === Pick correct pixel cluster ===
@@ -151,12 +96,6 @@ public class Chop extends Task {
             clusterToUse = TEAK_PIXEL_CLUSTER;
         } else if (logsId == ItemID.MAHOGANY_LOGS) {
             clusterToUse = MAHOGANY_PIXEL_CLUSTER;
-        } else if (logsId == 32904) {
-            clusterToUse = CAMPHOR_PIXEL_CLUSTER;
-        } else if (logsId == 32907) {
-            clusterToUse = IRONWOOD_PIXEL_CLUSTER;
-        } else if (logsId == 32910) {
-            clusterToUse = ROSEWOOD_PIXEL_CLUSTER;
         } else {
             script.log(getClass(), "Invalid tree ID selected: " + logsId);
             return false;
@@ -164,12 +103,9 @@ public class Chop extends Task {
 
         // === New tree detection via RSObject + convex hull color check ===
         task = "Find tree";
-        RSObject treePatch = findTree(clusterToUse, depletedCluster);
+        RSObject treePatch = findTree(clusterToUse);
 
         if (treePatch == null) {
-            if (handleAllTreesDepleted()) {
-                return false; // let task repoll after wait
-            }
             clusterFailCount++;
             script.log(getClass(), "No valid tree patch found. Fail count = " + clusterFailCount);
 
@@ -199,11 +135,8 @@ public class Chop extends Task {
             return false;
         } else {
             targetTree = treePatch;
-            baselinePixelCount = -1;
         }
 
-        waitTillStopped();
-        baselinePixelCount = measureClusterSize(targetTree, clusterToUse);
         waitUntilFinishedChopping(clusterToUse);
 
         // === Small chance for additional delay ===
@@ -212,18 +145,6 @@ public class Chop extends Task {
         }
 
         return true;
-    }
-
-    private int measureClusterSize(RSObject tree, SearchablePixel[] cluster) {
-        if (tree == null) return 0;
-
-        Polygon hull = tree.getConvexHull();
-        if (hull == null) return 0;
-
-        List<Point> matches = script.getPixelAnalyzer()
-                .findPixelsOnGameScreen(hull, cluster);
-
-        return matches == null ? 0 : matches.size();
     }
 
     private void waitUntilFinishedChopping(SearchablePixel[] cluster) {
@@ -240,13 +161,8 @@ public class Chop extends Task {
 
         long start = System.currentTimeMillis();
 
-        // === Start XP idle timer ===
-        lastXpGain.reset();
-
         // === INITIAL: wait to let user start chopping ===
         script.pollFramesHuman(() -> false, script.random(2750, 4000));
-
-        long[] animClearSince = { -1 };
 
         // === Main monitoring loop ===
         script.pollFramesHuman(() -> {
@@ -284,43 +200,15 @@ public class Chop extends Task {
                 script.log(getClass(), "Detected log count drop (from " + lastCount + " to " + currentCount + "). Syncing.");
                 previousCount.set(currentCount);
             }
-
-            // ---- animation check ----
-            long nowMs = System.currentTimeMillis();
-
-            boolean animating =
-                    script.getPixelAnalyzer().isPlayerAnimating(0.5);
-
-            if (animating) {
-                // Reset animation-clear timer while animating
-                animClearSince[0] = -1;
-                return false;
-            }
-
-            // Animation just stopped → start grace timer
-            if (animClearSince[0] == -1) {
-                animClearSince[0] = nowMs;
-                return false;
-            }
-
-            // Animation has been clear long enough → stop chopping
-            boolean animClearLongEnough =
-                    nowMs - animClearSince[0] >= animCheckMs;
-
-            if (animClearLongEnough) {
-                script.log(getClass(),
-                        "Chop stopped: no animation for " +
-                                (nowMs - animClearSince[0]) + "ms.");
-                markTreeDepleted(
-                        targetTree,
-                        "Chop stopped: no animation for " +
-                                (nowMs - animClearSince[0]) + "ms.");
+            // === Tree presence check ===
+            if (!isTreeStillPresent(targetTree, cluster)) {
+                script.log(getClass(), "Chop stopped: tree despawned.");
                 return true;
             }
 
             // === Duration / XP timeout check ===
             long elapsed = System.currentTimeMillis() - start;
-            boolean noXpTooLong = lastXpGain.timeElapsed() > 90_000;
+            boolean noXpTooLong = lastXpGain.timeElapsed() > 30_000;
 
             if (elapsed > maxChopDuration) {
                 script.log(getClass(), "Chop stopped: exceeded max chop duration.");
@@ -394,10 +282,7 @@ public class Chop extends Task {
         return true;
     }
 
-    private RSObject findTree(
-            SearchablePixel[] aliveCluster,
-            SearchablePixel[] depletedCluster
-    ){
+    private RSObject findTree(SearchablePixel[] cluster) {
         List<RSObject> patches = script.getObjectManager().getObjects(obj -> {
             if (obj.getName() == null || obj.getActions() == null) return false;
             return obj.getName().equalsIgnoreCase("Tree patch")
@@ -415,12 +300,6 @@ public class Chop extends Task {
         ).reversed());
 
         for (RSObject patch : patches) {
-            // Skip depleted trees
-            WorldPosition pos = patch.getWorldPosition();
-            if (depletedTrees.containsKey(pos)) {
-                continue;
-            }
-
             // Ensure on screen before hull access
             if (!patch.isInteractableOnScreen()) {
                 continue;
@@ -430,7 +309,7 @@ public class Chop extends Task {
             if (hull == null) continue;
 
             List<Point> matches = script.getPixelAnalyzer()
-                    .findPixelsOnGameScreen(hull, aliveCluster);
+                    .findPixelsOnGameScreen(hull, cluster);
 
             if (matches != null && !matches.isEmpty()) {
                 script.log(getClass(),
@@ -458,27 +337,6 @@ public class Chop extends Task {
         return matches != null && !matches.isEmpty();
     }
 
-    private boolean isTreeDepleted(RSObject tree, SearchablePixel[] depletedCluster) {
-        Polygon hull = tree.getConvexHull();
-        if (hull == null) return false;
-
-        List<Point> matches = script.getPixelAnalyzer()
-                .findPixelsOnGameScreen(hull, depletedCluster);
-
-        return matches != null && !matches.isEmpty();
-    }
-
-    private void markTreeDepleted(RSObject tree, String reason) {
-        WorldPosition pos = tree.getWorldPosition();
-
-        if (!depletedTrees.containsKey(pos)) {
-            depletedTrees.put(pos, System.currentTimeMillis());
-            script.log(getClass(),
-                    "Tree depleted (" + reason + ") at " + pos
-            );
-        }
-    }
-
     private MenuHook getMenuHook() {
         return menuEntries -> {
             for (MenuEntry entry : menuEntries) {
@@ -489,110 +347,5 @@ public class Chop extends Task {
             }
             return null;
         };
-    }
-
-    private int getRespawnTimeMs() {
-        if (logsId == ItemID.TEAK_LOGS) return TEAK_RESPAWN_MS;
-        if (logsId == ItemID.MAHOGANY_LOGS) return MAHOGANY_RESPAWN_MS;
-        if (logsId == 32904) return CAMPHOR_RESPAWN_MS;
-        if (logsId == 32907) return IRONWOOD_RESPAWN_MS;
-        if (logsId == 32910) return ROSEWOOD_RESPAWN_MS;
-        return 0;
-    }
-
-    private boolean handleAllTreesDepleted() {
-        if (depletedTrees.size() < treeAmount) {
-            return false;
-        }
-
-        int respawnMs = getRespawnTimeMs();
-
-        long now = System.currentTimeMillis();
-
-        WorldPosition soonestTree = null;
-        long soonestReadyTime = Long.MAX_VALUE;
-
-        for (var entry : depletedTrees.entrySet()) {
-            long readyAt = entry.getValue() + respawnMs;
-            if (readyAt < soonestReadyTime) {
-                soonestReadyTime = readyAt;
-                soonestTree = entry.getKey();
-            }
-        }
-
-        long baseWaitMs = soonestReadyTime - now;
-        long randomExtraMs = script.random(0, 5_000);
-        long waitMs = baseWaitMs + randomExtraMs;
-        if (waitMs <= 0) {
-            depletedTrees.clear(); // safety
-            return false;
-        }
-
-        task = "Waiting for tree respawn (" + (waitMs / 1000) + "s)";
-        script.log(getClass(),
-                "All trees depleted (" + depletedTrees.size() + "/" + treeAmount +
-                        "). Waiting " + waitMs + "ms"
-        );
-
-        // === Move closer ONLY if multiple trees exist ===
-        if (treeAmount > 1 && soonestTree != null) {
-            script.getWalker().walkTo(soonestTree);
-        }
-
-        // === Human wait ===
-        script.pollFramesHuman(() -> false, (int) waitMs);
-
-        // Clear expired entries
-        depletedTrees.entrySet().removeIf(e ->
-                now - e.getValue() > respawnMs
-        );
-
-        return true;
-    }
-
-    private boolean waitTillStopped() {
-        task = "Wait till stopped";
-        script.log(getClass(), "Waiting until player stops moving...");
-
-        AtomicReference<WorldPosition> lastPos =
-                new AtomicReference<>(script.getWorldPosition());
-
-        long[] stillStart = { System.currentTimeMillis() };
-        long[] animClearSince = { -1 };
-
-        int delay = script.random(750, 1050);
-
-        java.util.function.BooleanSupplier stopCondition = () -> {
-
-            WorldPosition now = script.getWorldPosition();
-            WorldPosition prev = lastPos.get();
-
-            if (now == null || prev == null) {
-                stillStart[0] = System.currentTimeMillis();
-                animClearSince[0] = -1;
-                lastPos.set(now);
-                return false;
-            }
-
-            boolean sameTile =
-                    now.getX() == prev.getX() &&
-                            now.getY() == prev.getY() &&
-                            now.getPlane() == prev.getPlane();
-
-            if (!sameTile) {
-                stillStart[0] = System.currentTimeMillis();
-                animClearSince[0] = -1;
-                lastPos.set(now);
-                return false;
-            }
-
-            long nowMs = System.currentTimeMillis();
-
-            return nowMs - stillStart[0] >= delay;
-        };
-
-        return script.pollFramesUntil(
-                stopCondition,
-                script.random(4000, 7500));
     }
 }

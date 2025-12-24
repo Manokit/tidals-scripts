@@ -8,10 +8,7 @@ import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
 import javafx.scene.Scene;
-import tasks.Bank;
-import tasks.Chop;
-import tasks.Drop;
-import tasks.Setup;
+import tasks.*;
 import utils.Task;
 import utils.XPTracking;
 
@@ -34,13 +31,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @ScriptDefinition(
         name = "dFossilWCer",
-        description = "Cuts and drops/banks Teak or Mahogany logs on Fossil Island",
+        description = "Cuts and drops/banks hardwood trees on Fossil Island",
         skillCategory = SkillCategory.WOODCUTTING,
-        version = 2.3,
+        version = 2.4,
         author = "JustDavyy"
 )
 public class dFossilWCer extends Script {
-    public static final String scriptVersion = "2.3";
+    public static final String scriptVersion = "2.4";
     private final String scriptName = "FossilWCer";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -130,6 +127,7 @@ public class dFossilWCer extends Script {
                 new Setup(this),
                 new Bank(this),
                 new Drop(this),
+                new Chop2(this),
                 new Chop(this)
         );
     }

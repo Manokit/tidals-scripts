@@ -178,33 +178,27 @@ public class Bank extends Task {
             return false;
         }
 
-        // Get full convex hull and compute inside-factor
-        Polygon hull = chest.getConvexHull();
-        if (hull == null) {
-            script.log(getClass(), "Chest convex hull is null, re-polling.");
-            return false;
-        }
+        if (!chest.isInteractableOnScreen()) {
+            script.log(getClass(), "Chest not fully on screen, walking closer...");
 
-        double insideFactor = script.getWidgetManager().insideGameScreenFactor(
-                hull, List.of(ChatboxComponent.class));
-
-        // Walk closer if not fully visible (factor < 1.0)
-        if (insideFactor < 1.0) {
-            script.log(getClass(), String.format(
-                    "Bank chest not fully on screen (factor=%.2f). Walking closer...",
-                    insideFactor));
-
-            WalkConfig config = new WalkConfig.Builder()
+            WalkConfig cfg = new WalkConfig.Builder()
                     .breakCondition(() -> {
                         Polygon h = chest.getConvexHull();
                         return h != null &&
-                                script.getWidgetManager().insideGameScreenFactor(
-                                        h, List.of(ChatboxComponent.class)) >= 1.0;
+                                script.getWidgetManager()
+                                        .insideGameScreenFactor(h, List.of(ChatboxComponent.class)) >= 1.0;
                     })
                     .enableRun(true)
                     .build();
 
-            script.getWalker().walkTo(chest.getWorldPosition(), config);
+            script.getWalker().walkTo(bankWalkArea.getRandomPosition(), cfg);
+            return false;
+        }
+
+        // Get full convex hull
+        Polygon hull = chest.getConvexHull();
+        if (hull == null) {
+            script.log(getClass(), "Chest convex hull is null, re-polling.");
             return false;
         }
 
