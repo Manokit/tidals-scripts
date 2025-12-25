@@ -164,6 +164,9 @@ public class Chop2 extends Task {
         // === INITIAL: wait to let user start chopping ===
         script.pollFramesHuman(() -> false, script.random(2750, 4000));
 
+        long[] animClearSince = { -1 };
+        long animCheckMs = script.random(800, 1500);
+
         // === Main monitoring loop ===
         script.pollFramesHuman(() -> {
             boolean gainedXP = false;
@@ -200,6 +203,36 @@ public class Chop2 extends Task {
                 script.log(getClass(), "Detected log count drop (from " + lastCount + " to " + currentCount + "). Syncing.");
                 previousCount.set(currentCount);
             }
+
+            // ---- animation check ----
+            long nowMs = System.currentTimeMillis();
+
+            boolean animating =
+                    script.getPixelAnalyzer().isPlayerAnimating(0.5);
+
+            if (animating) {
+                // Reset animation-clear timer while animating
+                animClearSince[0] = -1;
+                return false;
+            }
+
+            // Animation just stopped → start grace timer
+            if (animClearSince[0] == -1) {
+                animClearSince[0] = nowMs;
+                return false;
+            }
+
+            // Animation has been clear long enough → stop chopping
+            boolean animClearLongEnough =
+                    nowMs - animClearSince[0] >= animCheckMs;
+
+            if (animClearLongEnough) {
+                script.log(getClass(),
+                        "Chop stopped: no animation for " +
+                                (nowMs - animClearSince[0]) + "ms.");
+                return true;
+            }
+
             // === Tree presence check ===
             if (!isTreeStillPresent(targetTree, cluster)) {
                 script.log(getClass(), "Chop stopped: tree despawned.");

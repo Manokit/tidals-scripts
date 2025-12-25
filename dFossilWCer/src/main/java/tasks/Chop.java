@@ -37,7 +37,6 @@ public class Chop extends Task {
     private RSObject targetTree;
     private int baselinePixelCount = -1;
     private static final double DEPLETION_DROP_RATIO = 0.25; // 25% drop
-    private static final long animCheckMs = 1000;
 
     private static final SearchablePixel[] MAHOGANY_PIXEL_CLUSTER = new SearchablePixel[]{
             new SearchablePixel(-11443436, new SingleThresholdComparator(2), ColorModel.RGB),
@@ -247,6 +246,7 @@ public class Chop extends Task {
         script.pollFramesHuman(() -> false, script.random(2750, 4000));
 
         long[] animClearSince = { -1 };
+        long animCheckMs = script.random(800, 1500);
 
         // === Main monitoring loop ===
         script.pollFramesHuman(() -> {
