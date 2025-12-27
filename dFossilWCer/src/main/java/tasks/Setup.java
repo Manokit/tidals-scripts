@@ -60,6 +60,9 @@ public class Setup extends Task {
         if (inv.containsAny(Set.of(ItemID.LOG_BASKET, ItemID.OPEN_LOG_BASKET))) {
             script.log(getClass(), "Log basket detected in inventory. Marking usage as true.");
             useLogBasket = true;
+        } else {
+            script.log(getClass(), "No log basket detected, not using basket logic...");
+            useLogBasket = false;
         }
 
         // Check zoom level and set if needed

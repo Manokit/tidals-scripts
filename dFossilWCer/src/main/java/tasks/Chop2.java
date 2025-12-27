@@ -10,25 +10,17 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
-import com.osmb.api.shape.Rectangle;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
-import com.osmb.api.ui.component.ComponentSearchResult;
-import com.osmb.api.ui.component.minimap.xpcounter.XPDropsComponent;
-import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.SearchablePixel;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
-import com.osmb.api.visual.PixelCluster;
-import com.osmb.api.visual.ocr.fonts.Font;
-import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
 import java.awt.*;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.util.*;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static main.dFossilWCer.*;
 
@@ -66,6 +58,13 @@ public class Chop2 extends Task {
 
     private static final Area choppingArea = new RectangleArea(3699, 3830, 20, 10, 0);
     private static final Area bankingArea = new RectangleArea(3708, 3797, 42, 21, 0);
+
+    private static final Area eastArea = new RectangleArea(3710, 3831, 3, 5, 0);
+
+    private final Map<WorldPosition, Long> depletedTrees = new HashMap<>();
+
+    private static final int TEAK_RESPAWN_MS = 9_000;
+    private static final int MAHOGANY_RESPAWN_MS = 15_000;
 
     public Chop2(Script script) {
         super(script);
@@ -106,21 +105,17 @@ public class Chop2 extends Task {
         RSObject treePatch = findTree(clusterToUse);
 
         if (treePatch == null) {
-            clusterFailCount++;
-            script.log(getClass(), "No valid tree patch found. Fail count = " + clusterFailCount);
-
-            if (clusterFailCount >= 3) {
-                script.log(getClass(), "No patches found 3 times in a row, closing inventory and retrying.");
-
-                if (script.getWidgetManager().getInventory().isVisible()) {
-                    if (script.getWidgetManager().getInventory().close()) {
-                        script.log(getClass(), "Inventory closed to refresh view.");
-                    } else {
-                        script.log(getClass(), "Failed to close inventory.");
-                    }
-                }
-                clusterFailCount = 0;
+            // Check if all trees are depleted already
+            if (handleAllTreesDepleted()) {
+                return false;
             }
+
+            // Reposition to east area if not already there
+            if (walkToEastAreaIfNeeded()) {
+                return false;
+            }
+
+            script.log(getClass(), "No valid tree patch found. Fail count = " + clusterFailCount);
 
             script.pollFramesHuman(() -> false, script.random(400, 800));
             return false;
@@ -137,7 +132,10 @@ public class Chop2 extends Task {
             targetTree = treePatch;
         }
 
-        waitUntilFinishedChopping(clusterToUse);
+        ItemGroupResult startSnapshot = script.getWidgetManager().getInventory().search(Set.of(logsId));
+
+        waitTillStopped();
+        waitUntilFinishedChopping(clusterToUse, startSnapshot);
 
         // === Small chance for additional delay ===
         if (script.random(1, 100) <= 15) {
@@ -147,11 +145,98 @@ public class Chop2 extends Task {
         return true;
     }
 
-    private void waitUntilFinishedChopping(SearchablePixel[] cluster) {
+    private boolean handleAllTreesDepleted() {
+
+        if (depletedTrees.size() < treeAmount) {
+            return false;
+        }
+
+        int respawnMs = getRespawnTimeMs();
+        long now = System.currentTimeMillis();
+
+        WorldPosition soonestTree = null;
+        long soonestReady = Long.MAX_VALUE;
+
+        for (var e : depletedTrees.entrySet()) {
+            long readyAt = e.getValue() + respawnMs;
+            if (readyAt < soonestReady) {
+                soonestReady = readyAt;
+                soonestTree = e.getKey();
+            }
+        }
+
+        long waitMs = soonestReady - now + script.random(0, 5_000);
+        if (waitMs <= 0) {
+            depletedTrees.clear();
+            return false;
+        }
+
+        task = "Wait for respawn (" + (waitMs / 1000) + "s)";
+        script.log(getClass(), "All trees depleted, waiting " + waitMs + "ms");
+
+        if (treeAmount > 1 && soonestTree != null) {
+            script.getWalker().walkTo(soonestTree);
+        }
+
+        script.pollFramesHuman(() -> false, (int) waitMs);
+
+        depletedTrees.entrySet().removeIf(e ->
+                now - e.getValue() > respawnMs
+        );
+
+        return true;
+    }
+
+    private void waitTillStopped() {
+        task = "Wait till stopped";
+        script.log(getClass(), "Waiting until player stops moving...");
+
+        AtomicReference<WorldPosition> lastPos =
+                new AtomicReference<>(script.getWorldPosition());
+
+        long[] stillStart = { System.currentTimeMillis() };
+        long[] animClearSince = { -1 };
+
+        int delay = script.random(750, 1050);
+
+        java.util.function.BooleanSupplier stopCondition = () -> {
+
+            WorldPosition now = script.getWorldPosition();
+            WorldPosition prev = lastPos.get();
+
+            if (now == null || prev == null) {
+                stillStart[0] = System.currentTimeMillis();
+                animClearSince[0] = -1;
+                lastPos.set(now);
+                return false;
+            }
+
+            boolean sameTile =
+                    now.getX() == prev.getX() &&
+                            now.getY() == prev.getY() &&
+                            now.getPlane() == prev.getPlane();
+
+            if (!sameTile) {
+                stillStart[0] = System.currentTimeMillis();
+                animClearSince[0] = -1;
+                lastPos.set(now);
+                return false;
+            }
+
+            long nowMs = System.currentTimeMillis();
+
+            return nowMs - stillStart[0] >= delay;
+        };
+
+        script.pollFramesUntil(
+                stopCondition,
+                script.random(4000, 7500));
+    }
+
+    private void waitUntilFinishedChopping(SearchablePixel[] cluster, ItemGroupResult startSnapshot) {
 
         int maxChopDuration = script.random(240_000, 270_000);
 
-        ItemGroupResult startSnapshot = script.getWidgetManager().getInventory().search(Set.of(logsId));
         if (startSnapshot == null) {
             script.log(getClass(), "Aborting chop check: could not read starting inventory.");
             return;
@@ -208,7 +293,7 @@ public class Chop2 extends Task {
             long nowMs = System.currentTimeMillis();
 
             boolean animating =
-                    script.getPixelAnalyzer().isPlayerAnimating(0.5);
+                    script.getPixelAnalyzer().isPlayerAnimating(0.35);
 
             if (animating) {
                 // Reset animation-clear timer while animating
@@ -230,12 +315,14 @@ public class Chop2 extends Task {
                 script.log(getClass(),
                         "Chop stopped: no animation for " +
                                 (nowMs - animClearSince[0]) + "ms.");
+                markTreeDepleted(targetTree);
                 return true;
             }
 
             // === Tree presence check ===
             if (!isTreeStillPresent(targetTree, cluster)) {
                 script.log(getClass(), "Chop stopped: tree despawned.");
+                markTreeDepleted(targetTree);
                 return true;
             }
 
@@ -255,6 +342,42 @@ public class Chop2 extends Task {
 
             return false;
         }, maxChopDuration);
+    }
+
+    private void markTreeDepleted(RSObject tree) {
+        if (tree == null) return;
+
+        WorldPosition pos = tree.getWorldPosition();
+        if (!depletedTrees.containsKey(pos)) {
+            depletedTrees.put(pos, System.currentTimeMillis());
+            script.log(getClass(), "Tree depleted at " + pos);
+        }
+    }
+
+    private int getRespawnTimeMs() {
+        if (logsId == ItemID.TEAK_LOGS) return TEAK_RESPAWN_MS;
+        if (logsId == ItemID.MAHOGANY_LOGS) return MAHOGANY_RESPAWN_MS;
+        return 0;
+    }
+
+    private boolean walkToEastAreaIfNeeded() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos != null && eastArea.contains(pos)) {
+            return false;
+        }
+
+        task = "Walk to east tree area";
+        script.log(getClass(), "No tree found, repositioning to east area.");
+
+        script.getWalker().walkTo(eastArea.getRandomPosition());
+
+        script.pollFramesHuman(() -> {
+            WorldPosition p = script.getWorldPosition();
+            return p != null && eastArea.contains(p);
+        }, script.random(6000, 9000));
+
+        waitTillStopped();
+        return true;
     }
 
     private boolean walkWithShortcut() {
@@ -327,13 +450,17 @@ public class Chop2 extends Task {
             return null;
         }
 
-        // === Sort EAST → WEST (highest X first) ===
         patches.sort(Comparator.comparingInt(
                 (RSObject o) -> o.getWorldPosition().getX()
         ).reversed());
 
         for (RSObject patch : patches) {
-            // Ensure on screen before hull access
+
+            WorldPosition pos = patch.getWorldPosition();
+            if (depletedTrees.containsKey(pos)) {
+                continue;
+            }
+
             if (!patch.isInteractableOnScreen()) {
                 continue;
             }
@@ -341,13 +468,16 @@ public class Chop2 extends Task {
             Polygon hull = patch.getConvexHull();
             if (hull == null) continue;
 
+            hull = hull.getResized(1.9);
+
+            if (hull == null) continue;
+
             List<Point> matches = script.getPixelAnalyzer()
                     .findPixelsOnGameScreen(hull, cluster);
 
             if (matches != null && !matches.isEmpty()) {
                 script.log(getClass(),
-                        "Tree selected at " + patch.getWorldPosition()
-                                + " (matches=" + matches.size() + ")");
+                        "Tree selected at " + pos + " (matches=" + matches.size() + ")");
                 return patch;
             }
         }

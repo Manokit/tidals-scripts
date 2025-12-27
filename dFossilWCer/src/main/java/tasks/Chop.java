@@ -10,18 +10,10 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
-import com.osmb.api.shape.Rectangle;
-import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
-import com.osmb.api.ui.component.ComponentSearchResult;
-import com.osmb.api.ui.component.minimap.xpcounter.XPDropsComponent;
-import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.SearchablePixel;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
-import com.osmb.api.visual.PixelCluster;
-import com.osmb.api.visual.ocr.fonts.Font;
-import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
 import java.awt.*;
@@ -108,6 +100,7 @@ public class Chop extends Task {
 
     private static final Area choppingArea = new RectangleArea(3699, 3830, 20, 10, 0);
     private static final Area bankingArea = new RectangleArea(3708, 3797, 42, 21, 0);
+    private static final Area eastArea = new RectangleArea(3710, 3831, 3, 5, 0);
 
     private final Map<WorldPosition, Long> depletedTrees = new HashMap<>();
     private static final int TEAK_RESPAWN_MS      = 9_000;
@@ -166,9 +159,16 @@ public class Chop extends Task {
         RSObject treePatch = findTree(clusterToUse, depletedCluster);
 
         if (treePatch == null) {
+            // Check if all trees are depleted
             if (handleAllTreesDepleted()) {
-                return false; // let task repoll after wait
+                return false;
             }
+
+            // Reposition to east area if not already there
+            if (walkToEastAreaIfNeeded()) {
+                return false;
+            }
+
             clusterFailCount++;
             script.log(getClass(), "No valid tree patch found. Fail count = " + clusterFailCount);
 
@@ -201,9 +201,11 @@ public class Chop extends Task {
             baselinePixelCount = -1;
         }
 
+        ItemGroupResult startSnapshot = script.getWidgetManager().getInventory().search(Set.of(logsId));
+
         waitTillStopped();
         baselinePixelCount = measureClusterSize(targetTree, clusterToUse);
-        waitUntilFinishedChopping(clusterToUse);
+        waitUntilFinishedChopping(startSnapshot);
 
         // === Small chance for additional delay ===
         if (script.random(1, 100) <= 15) {
@@ -213,10 +215,34 @@ public class Chop extends Task {
         return true;
     }
 
+    private boolean walkToEastAreaIfNeeded() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos != null && eastArea.contains(pos)) {
+            return false;
+        }
+
+        task = "Walk to east tree area";
+        script.log(getClass(), "No tree found, repositioning to east area.");
+
+        script.getWalker().walkTo(eastArea.getRandomPosition());
+
+        script.pollFramesHuman(() -> {
+            WorldPosition p = script.getWorldPosition();
+            return p != null && eastArea.contains(p);
+        }, script.random(6000, 9000));
+
+        waitTillStopped();
+        return true;
+    }
+
     private int measureClusterSize(RSObject tree, SearchablePixel[] cluster) {
         if (tree == null) return 0;
 
         Polygon hull = tree.getConvexHull();
+        if (hull == null) return 0;
+
+        hull = hull.getResized(1.9);
+
         if (hull == null) return 0;
 
         List<Point> matches = script.getPixelAnalyzer()
@@ -225,11 +251,10 @@ public class Chop extends Task {
         return matches == null ? 0 : matches.size();
     }
 
-    private void waitUntilFinishedChopping(SearchablePixel[] cluster) {
+    private void waitUntilFinishedChopping(ItemGroupResult startSnapshot) {
 
         int maxChopDuration = script.random(240_000, 270_000);
 
-        ItemGroupResult startSnapshot = script.getWidgetManager().getInventory().search(Set.of(logsId));
         if (startSnapshot == null) {
             script.log(getClass(), "Aborting chop check: could not read starting inventory.");
             return;
@@ -289,7 +314,7 @@ public class Chop extends Task {
             long nowMs = System.currentTimeMillis();
 
             boolean animating =
-                    script.getPixelAnalyzer().isPlayerAnimating(0.5);
+                    script.getPixelAnalyzer().isPlayerAnimating(0.35);
 
             if (animating) {
                 // Reset animation-clear timer while animating
@@ -550,7 +575,7 @@ public class Chop extends Task {
         return true;
     }
 
-    private boolean waitTillStopped() {
+    private void waitTillStopped() {
         task = "Wait till stopped";
         script.log(getClass(), "Waiting until player stops moving...");
 
@@ -591,7 +616,7 @@ public class Chop extends Task {
             return nowMs - stillStart[0] >= delay;
         };
 
-        return script.pollFramesUntil(
+        script.pollFramesUntil(
                 stopCondition,
                 script.random(4000, 7500));
     }
