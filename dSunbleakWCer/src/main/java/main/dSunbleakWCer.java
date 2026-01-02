@@ -34,15 +34,18 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dSunbleakWCer",
         description = "Chops and optionally banks Ironwood logs on Sunbleak island",
         skillCategory = SkillCategory.WOODCUTTING,
-        version = 1.1,
+        version = 1.2,
         author = "JustDavyy"
 )
 public class dSunbleakWCer extends Script {
-    public static final String scriptVersion = "1.1";
+    public static final String scriptVersion = "1.2";
     private final String scriptName = "SunbleakWCer";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
     private static final long STATS_INTERVAL_MS = 600_000L;
+
+    public static int screenWidth = 0;
+    public static int screenHeight = 0;
 
     public static boolean dropMode = false;
     public static boolean bankMode = false;

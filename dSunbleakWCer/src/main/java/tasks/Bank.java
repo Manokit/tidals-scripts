@@ -119,12 +119,25 @@ public class Bank extends Task {
                     insideFactor));
 
             WalkConfig config = new WalkConfig.Builder()
+                    .disableWalkScreen(true)
                     .breakCondition(() -> {
                         Polygon h = chest.getConvexHull();
                         return h != null &&
                                 script.getWidgetManager().insideGameScreenFactor(
                                         h, List.of(ChatboxComponent.class)) >= 1.0;
                     })
+                    .enableRun(true)
+                    .build();
+
+            script.getWalker().walkTo(chest.getWorldPosition(), config);
+            return false;
+        }
+
+        // Check if tap is within our screen
+        if (!isPolygonTapSafe(hull)) {
+            script.log("BANK", "Bank chest hull goes outside our screen resolution, moving closer!");
+            WalkConfig config = new WalkConfig.Builder()
+                    .disableWalkScreen(true)
                     .enableRun(true)
                     .build();
 
@@ -184,6 +197,25 @@ public class Bank extends Task {
 
         script.getWidgetManager().getBank().close();
         script.log("BANK", "Banked items and closed bank.");
+        return true;
+    }
+
+    private boolean isPolygonTapSafe(Polygon poly) {
+        if (poly == null || poly.numVertices() == 0) {
+            return false;
+        }
+
+        int[] xs = poly.getXPoints();
+        int[] ys = poly.getYPoints();
+
+        for (int i = 0; i < xs.length; i++) {
+            int x = xs[i];
+            int y = ys[i];
+
+            if (x < 0 || y < 0 || x >= screenWidth || y >= screenHeight) {
+                return false;
+            }
+        }
         return true;
     }
 }

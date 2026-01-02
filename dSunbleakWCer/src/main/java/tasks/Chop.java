@@ -3,22 +3,15 @@ package tasks;
 import com.osmb.api.input.MenuEntry;
 import com.osmb.api.input.MenuHook;
 import com.osmb.api.item.ItemGroupResult;
-import com.osmb.api.item.ItemID;
-import com.osmb.api.location.area.Area;
-import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 import com.osmb.api.ui.component.chatbox.ChatboxComponent;
-import com.osmb.api.visual.SearchablePixel;
-import com.osmb.api.visual.color.ColorModel;
-import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
-import java.awt.*;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -359,6 +352,7 @@ public class Chop extends Task {
                             tree.getWorldPosition());
 
             WalkConfig cfg = new WalkConfig.Builder()
+                    .disableWalkScreen(true)
                     .breakCondition(() -> {
                         Polygon h = tree.getConvexHull();
                         return h != null &&
@@ -378,6 +372,19 @@ public class Chop extends Task {
         Polygon poly = tree.getConvexHull();
         if (poly == null) {
             script.log("CHOP", "Ironwood convex hull is null, retrying...");
+            return false;
+        }
+
+        if (!isPolygonTapSafe(poly)) {
+            script.log("CHOP",
+                    "Ironwood hull outside screen bounds → repositioning @ " +
+                            tree.getWorldPosition());
+            WalkConfig cfg = new WalkConfig.Builder()
+                    .disableWalkScreen(true)
+                    .enableRun(true)
+                    .build();
+
+            script.getWalker().walkTo(tree.getWorldPosition(), cfg);
             return false;
         }
 
@@ -417,5 +424,24 @@ public class Chop extends Task {
         }
 
         return false;
+    }
+
+    private boolean isPolygonTapSafe(Polygon poly) {
+        if (poly == null || poly.numVertices() == 0) {
+            return false;
+        }
+
+        int[] xs = poly.getXPoints();
+        int[] ys = poly.getYPoints();
+
+        for (int i = 0; i < xs.length; i++) {
+            int x = xs[i];
+            int y = ys[i];
+
+            if (x < 0 || y < 0 || x >= screenWidth || y >= screenHeight) {
+                return false;
+            }
+        }
+        return true;
     }
 }

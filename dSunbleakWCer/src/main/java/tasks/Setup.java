@@ -2,6 +2,7 @@ package tasks;
 
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
+import com.osmb.api.shape.Rectangle;
 import com.osmb.api.ui.component.tabs.SettingsTabComponent;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
 import com.osmb.api.ui.component.tabs.skill.SkillsTabComponent;
@@ -98,6 +99,21 @@ public class Setup extends Task {
             }
 
             script.log("SETUP", "Zoom successfully set to: " + zoomSet);
+        }
+
+        // Check screen resolution
+        Rectangle screenRect = script.getScreen().getBounds();
+        screenWidth = screenRect.width;
+        screenHeight = screenRect.height;
+
+        script.log("SETUP", "Detected screen rectangle is: " + screenRect);
+        script.log("SETUP", "Detected screen width is: " + screenWidth);
+        script.log("SETUP", "Detected screen height is: " + screenHeight);
+
+        if (screenWidth == 0 || screenHeight == 0) {
+            script.log("SETUP", "Detected screen width or height is invalid, stopping script!");
+            script.stop();
+            return false;
         }
 
         task = "Update flags";
