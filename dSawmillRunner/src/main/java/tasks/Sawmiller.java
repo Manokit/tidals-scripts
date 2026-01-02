@@ -75,48 +75,6 @@ public class Sawmiller extends Task {
 
         // 1. Check logs and coins in inventory
         if (hasLogs() && hasCoins() && !atOperator()) {
-            if (useRingOfElements && !atRingArrival()) {
-                task = "Teleporting with Ring of Elements";
-                script.log(getClass(), "Using Ring of Elements to teleport to Earth Altar...");
-
-                Equipment equipment = script.getWidgetManager().getEquipment();
-                boolean teleported = false;
-
-                if (equipment.interact(ItemID.RING_OF_THE_ELEMENTS_26818, "")) {
-                    script.log(getClass(), "Teleporting using Ring of Elements.");
-
-                    // Wait for arrival at ring arrival area after teleport
-                    script.pollFramesHuman(this::atRingArrival, script.random(4000, 6000));
-
-                    if (atRingArrival()) {
-                        script.log(getClass(), "Teleport successful. Arrived at ring arrival area.");
-                        teleported = true;
-                        ringTeleportFailCount = 0; // Reset fail counter on success
-                    } else {
-                        script.log(getClass(), "Teleport used but arrival area not detected. Incrementing fail count.");
-                        ringTeleportFailCount++;
-                        return false;
-                    }
-                } else {
-                    script.log(getClass(), "Failed to interact with Ring of Elements, incrementing fail count.");
-                    ringTeleportFailCount++;
-                }
-
-                // Disable ring usage after 3 consecutive fails
-                if (ringTeleportFailCount >= 3) {
-                    script.log(getClass(), "Ring teleport failed 3 times, disabling usage for remainder of script.");
-                    useRingOfElements = false;
-                    return false;
-                }
-
-                if (!teleported) {
-                    script.log(getClass(), "Teleport attempt unsuccessful or disabled, proceeding with walking.");
-                    return false;
-                }
-            } else if (useRingOfElements && atRingArrival()) {
-                script.log(getClass(), "Already at Ring of Elements arrival area, skipping teleport.");
-            }
-
             // Default walking if not using ring or after teleport
             task = "Walking to operator";
             script.log(getClass(), "Walking to operator...");

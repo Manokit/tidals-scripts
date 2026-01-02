@@ -24,22 +24,6 @@ public class Setup extends Task {
         task = getClass().getSimpleName();
         script.log(getClass(), "We are now inside the Setup task logic");
 
-        if (useRingOfElements) {
-            task = "Open equipment tab";
-            script.log(getClass().getSimpleName(), "Opening equipment tab");
-            script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-
-            // Check if Ring of Elements is equipped
-            Equipment equipment = script.getWidgetManager().getEquipment();
-            boolean equipped = equipment.isEquipped(ItemID.RING_OF_THE_ELEMENTS_26818).isFound();
-
-            if (!equipped) {
-                script.log(getClass(), "Ring of Elements not equipped, while marked as use = TRUE. Stopping script.");
-                script.stop();
-                return false;
-            }
-        }
-
         task = "Open inventory tab";
         script.log(getClass().getSimpleName(), "Opening inventory tab");
         script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);

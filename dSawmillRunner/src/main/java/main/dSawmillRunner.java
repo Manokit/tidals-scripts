@@ -33,16 +33,15 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dSawmillRunner",
         description = "Creates planks of your choice at multiple sawmills",
         skillCategory = SkillCategory.CONSTRUCTION,
-        version = 1.7,
+        version = 1.8,
         author = "JustDavyy"
 )
 public class dSawmillRunner extends Script {
-    public static final String scriptVersion = "1.7";
+    public static final String scriptVersion = "1.8";
     private final String scriptName = "SawmillRunner";
     public static boolean setupDone = false;
 
     public static boolean useVouchers = false;
-    public static boolean useRingOfElements = false;
     public static int neededLogs;
     public static int selectedPlank;
     public static String location = "N/A";
@@ -106,7 +105,6 @@ public class dSawmillRunner extends Script {
         selectedPlank = ui.getSelectedPlank();
         location = ui.getSelectedLocation().name();
         neededLogs = ui.getLogs();
-        useRingOfElements = ui.isRingOfElementsEnabled();
 
         tasks = new ArrayList<>();
         tasks.add(new Setup(this));
@@ -221,23 +219,37 @@ public class dSawmillRunner extends Script {
                 "Planks/hr", intFmt.format(planksPerHour), labelGray, valueBlue,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
+        boolean shipPlank = isShipPlank(selectedPlank);
+
+        String labelRegularXp = shipPlank
+                ? "Hull parts XP banked"
+                : "Regular XP banked";
+
+        String labelMhXp = shipPlank
+                ? "Repair kits XP banked"
+                : "MH XP banked";
+
+        String labelMhOutfitXp = shipPlank
+                ? "Repair kits with outfit"
+                : "MH with outfit";
+
         // 4) Regular XP banked
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Regular XP banked", intFmt.format((int) Math.round(regularXp)), labelGray, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+                labelRegularXp, intFmt.format((int) Math.round(regularXp)),
+                labelGray, valueWhite, FONT_VALUE_BOLD, FONT_LABEL);
 
         // 5) MH XP banked
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "MH XP banked", intFmt.format((int) Math.round(mhXp)), labelGray, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+                labelMhXp, intFmt.format((int) Math.round(mhXp)),
+                labelGray, valueWhite, FONT_VALUE_BOLD, FONT_LABEL);
 
         // 6) MH with outfit
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "MH with outfit", intFmt.format((int) Math.round(mhXpOutfit)), labelGray, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+                labelMhOutfitXp, intFmt.format((int) Math.round(mhXpOutfit)),
+                labelGray, valueWhite, FONT_VALUE_BOLD, FONT_LABEL);
 
         // 7) Location
         curY += lineGap;
@@ -332,6 +344,9 @@ public class dSawmillRunner extends Script {
             case ItemID.OAK_PLANK -> 60;
             case ItemID.TEAK_PLANK -> 90;
             case ItemID.MAHOGANY_PLANK -> 140;
+            case 31432 -> 80;// Camphor plank
+            case 31435 -> 87.5;// Ironwood plank
+            case 31438 -> 95;// Rosewood plank
             default -> 0;
         };
     }
@@ -342,6 +357,9 @@ public class dSawmillRunner extends Script {
             case ItemID.OAK_PLANK -> 200.0;
             case ItemID.TEAK_PLANK -> 287.9;
             case ItemID.MAHOGANY_PLANK -> 346.1;
+            case 31432 -> 127.5;// Camphor plank
+            case 31435 -> 300;// Ironwood plank
+            case 31438 -> 330;// Rosewood plank
             default -> 0;
         };
     }
@@ -352,6 +370,9 @@ public class dSawmillRunner extends Script {
             case ItemID.OAK_PLANK -> 205.0;
             case ItemID.TEAK_PLANK -> 295.1;
             case ItemID.MAHOGANY_PLANK -> 354.8;
+            case 31432 -> 130.7;// Camphor plank
+            case 31435 -> 307.5;// Ironwood plank
+            case 31438 -> 338.3;// Rosewood plank
             default -> 0;
         };
     }
@@ -553,5 +574,11 @@ public class dSawmillRunner extends Script {
             }
         } catch (Exception ignored) {}
         return null;
+    }
+
+    private static boolean isShipPlank(int plankId) {
+        return plankId == 31438 // Rosewood plank
+                || plankId == 31435 // Ironwood plank
+                || plankId == 31432; // Camphor plank
     }
 }

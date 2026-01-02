@@ -18,7 +18,6 @@ public class ScriptUI {
 
     private static final String PREF_SELECTED_LOCATION = "dteleporter_selected_location";
     private static final String PREF_SELECTED_PLANK = "dteleporter_selected_plank";
-    private static final String PREF_USE_RING_OF_ELEMENTS = "dteleporter_use_ring_of_elements";
 
     private static final String PREF_WEBHOOK_ENABLED = "dteleporter_webhook_enabled";
     private static final String PREF_WEBHOOK_URL = "dteleporter_webhook_url";
@@ -29,7 +28,6 @@ public class ScriptUI {
 
     private ComboBox<Location> locationComboBox;
     private ComboBox<Integer> plankComboBox;
-    private CheckBox ringOfElementsCheckBox;
 
     private CheckBox webhookEnabledCheckBox;
     private TextField webhookUrlField;
@@ -59,20 +57,9 @@ public class ScriptUI {
         Label locationLabel = new Label("Select Location");
         locationComboBox = new ComboBox<>();
         locationComboBox.getItems().addAll(Location.values());
-        String savedLocation = prefs.get(PREF_SELECTED_LOCATION, Location.WOODCUTTING_GUILD.name());
+        String savedLocation = prefs.get(PREF_SELECTED_LOCATION, Location.AUBURNVALE.name());
         locationComboBox.getSelectionModel().select(Location.valueOf(savedLocation));
         script.log("SAVESETTINGS", "Loaded saved location: " + savedLocation);
-
-        // Ring of Elements checkbox (initially created, visibility handled below)
-        ringOfElementsCheckBox = new CheckBox("Use Ring of Elements for teleport");
-        ringOfElementsCheckBox.setSelected(prefs.getBoolean(PREF_USE_RING_OF_ELEMENTS, false));
-        ringOfElementsCheckBox.setVisible(locationComboBox.getValue() == Location.VARROCK);
-
-        // Listener to show/hide ring checkbox based on location
-        locationComboBox.setOnAction(e -> {
-            boolean isVarrock = locationComboBox.getValue() == Location.VARROCK;
-            ringOfElementsCheckBox.setVisible(isVarrock);
-        });
 
         // Plank dropdown
         Label plankLabel = new Label("Select Plank Type");
@@ -87,7 +74,7 @@ public class ScriptUI {
         }
         script.log("SAVESETTINGS", "Loaded saved plank ID: " + savedPlank);
 
-        mainBox.getChildren().addAll(locationLabel, locationComboBox, ringOfElementsCheckBox, plankLabel, plankComboBox);
+        mainBox.getChildren().addAll(locationLabel, locationComboBox, plankLabel, plankComboBox);
         Tab mainTab = new Tab("Main", mainBox);
         mainTab.setClosable(false);
 
@@ -147,7 +134,6 @@ public class ScriptUI {
     private void saveSettings() {
         prefs.put(PREF_SELECTED_LOCATION, getSelectedLocation().name());
         prefs.putInt(PREF_SELECTED_PLANK, getSelectedPlank());
-        prefs.putBoolean(PREF_USE_RING_OF_ELEMENTS, isRingOfElementsEnabled());
 
         prefs.putBoolean(PREF_WEBHOOK_ENABLED, isWebhookEnabled());
         prefs.put(PREF_WEBHOOK_URL, getWebhookUrl());
@@ -176,6 +162,9 @@ public class ScriptUI {
         comboBox.setButtonCell(createItemCell(core));
 
         comboBox.getItems().addAll(
+                31438, // Rosewood plank
+                31435, // Ironwood plank
+                31432, // Camphor plank
                 ItemID.MAHOGANY_PLANK,
                 ItemID.TEAK_PLANK,
                 ItemID.OAK_PLANK,
@@ -215,13 +204,12 @@ public class ScriptUI {
         return plankComboBox.getSelectionModel().getSelectedItem();
     }
 
-    public boolean isRingOfElementsEnabled() {
-        return ringOfElementsCheckBox != null && ringOfElementsCheckBox.isVisible() && ringOfElementsCheckBox.isSelected();
-    }
-
     public int getLogs() {
         int plank = getSelectedPlank();
         return switch (plank) {
+            case 31438 -> 32910; // Rosewood plank > logs
+            case 31435 -> 32907; // Ironwood plank > logs
+            case 31432 -> 32904; // Camphor plank > logs
             case ItemID.MAHOGANY_PLANK -> ItemID.MAHOGANY_LOGS;
             case ItemID.TEAK_PLANK -> ItemID.TEAK_LOGS;
             case ItemID.OAK_PLANK -> ItemID.OAK_LOGS;
