@@ -35,11 +35,11 @@ import java.util.concurrent.atomic.AtomicReference;
         name = "dHarambeHunter",
         description = "Hunts maniacal monkeys for great lazy hunter experience and the odd monkey tail.",
         skillCategory = SkillCategory.HUNTER,
-        version = 2.1,
+        version = 2.2,
         author = "JustDavyy"
 )
 public class dHarambeHunter extends Script {
-    public static final String scriptVersion = "2.1";
+    public static final String scriptVersion = "2.2";
     private final String scriptName = "HarambeHunter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -191,6 +191,7 @@ public class dHarambeHunter extends Script {
             }
         }
 
+        xpGained = xpGainedLive;
         double xpPerHour = xpGainedLive / hours;
         int catchesFromXp = (int) Math.ceil(xpGainedLive / 1000.0);
         int caughtPerHour = (int) Math.round(catchesFromXp / hours);
