@@ -344,12 +344,15 @@ public class TidalsGemCutter extends Script {
         int innerY = baseY;
         int innerWidth = width;
 
-        int totalLines = 10;  // Added one more line for gem type
-        int y = innerY + topGap;
-        y += totalLines * lineGap + 10;
-        int innerHeight = Math.max(230, y - innerY);
+        // load logo first so we can account for its height
+        ensureLogoLoaded();
+        int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        // Clean ocean panel
+        int totalLines = 10;
+        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 10;
+        int innerHeight = Math.max(230, contentHeight);
+
+        // clean ocean panel
         c.fillRect(innerX - borderThickness, innerY - borderThickness,
                 innerWidth + (borderThickness * 2),
                 innerHeight + (borderThickness * 2),
@@ -359,8 +362,7 @@ public class TidalsGemCutter extends Script {
 
         int curY = innerY + topGap;
 
-        // Logo at top (centered)
-        ensureLogoLoaded();
+        // logo at top (centered)
         if (logoImage != null) {
             int logoX = innerX + (innerWidth - logoImage.width) / 2;
             c.drawAtOn(logoImage, logoX, curY);
