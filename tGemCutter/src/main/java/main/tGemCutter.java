@@ -40,7 +40,7 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class tGemCutter extends Script {
-    public static final String scriptVersion = "0.3";
+    public static final String scriptVersion = "1.0";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
