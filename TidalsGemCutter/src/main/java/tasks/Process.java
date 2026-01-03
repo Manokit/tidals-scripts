@@ -112,8 +112,11 @@ public class Process extends Task {
         task = "Wait till done processing";
         Timer amountChangeTimer = new Timer();
 
+        // track cut gems to count individual cuts
+        final int[] lastCutCount = {getCutGemCount()};
+
         BooleanSupplier condition = () -> {
-            // This is the level level up check
+            // level up check
             DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
             if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
                 script.log(getClass().getSimpleName(), "Dialogue detected, leveled up?");
@@ -122,24 +125,35 @@ public class Process extends Task {
                 return true;
             }
 
-            // A timer to timeout
+            // timeout
             if (amountChangeTimer.timeElapsed() > script.random(70000, 78000)) {
                 return true;
             }
 
-            // Check if we ran out of uncut gems
+            // track individual gems cut by monitoring cut gem count
+            int currentCutCount = getCutGemCount();
+            if (currentCutCount > lastCutCount[0]) {
+                int newlyCut = currentCutCount - lastCutCount[0];
+                craftCount += newlyCut;
+                lastCutCount[0] = currentCutCount;
+            }
+
+            // check if we ran out of uncut gems
             ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedUncutGemID));
             if (inventorySnapshot == null) {return false;}
 
-            boolean hasGems = inventorySnapshot.contains(selectedUncutGemID);
-            if (!hasGems) {
-                // Increment craft count when we finish processing
-                craftCount++;
-            }
-            return !hasGems;
+            return !inventorySnapshot.contains(selectedUncutGemID);
         };
 
         script.log(getClass(), "Using human task to wait until crafting finishes.");
         script.pollFramesHuman(condition, script.random(70000, 78000));
+    }
+
+    private int getCutGemCount() {
+        ItemGroupResult snapshot = script.getWidgetManager().getInventory().search(Set.of(selectedCutGemID));
+        if (snapshot == null || !snapshot.contains(selectedCutGemID)) {
+            return 0;
+        }
+        return snapshot.getAmount(selectedCutGemID);
     }
 }

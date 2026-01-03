@@ -47,18 +47,9 @@ public class Bank extends Task {
 
         task = "Get bank snapshot";
 
-        // Debug: Log what we're searching for
+        // debug: log what we're searching for
         String gemName = script.getItemManager().getItemName(selectedUncutGemID);
         script.log(getClass(), "Searching for " + gemName + " (ID: " + selectedUncutGemID + ") in bank");
-
-        // Search for ALL items in bank first to debug
-        ItemGroupResult allBankItems = script.getWidgetManager().getBank().search(Collections.emptySet());
-        if (allBankItems != null) {
-            script.log(getClass(), "Bank has items, checking for gem...");
-        } else {
-            script.log(getClass(), "Bank search returned null! Bank might not be ready.");
-            return false;
-        }
 
         ItemGroupResult bankSnapshot = script.getWidgetManager().getBank().search(Set.of(selectedUncutGemID));
         ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Collections.emptySet());

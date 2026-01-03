@@ -40,7 +40,7 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class TidalsGemCutter extends Script {
-    public static final String scriptVersion = "1.0";
+    public static final String scriptVersion = "1.1";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -348,7 +348,7 @@ public class TidalsGemCutter extends Script {
         ensureLogoLoaded();
         int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        int totalLines = 10;
+        int totalLines = 11;  // added gems cut line
         int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 10;
         int innerHeight = Math.max(230, contentHeight);
 
@@ -419,13 +419,21 @@ public class TidalsGemCutter extends Script {
                 "Gem type", gemName, labelColor, valueBlue,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 9) Task
+        // 9) Gems cut
+        curY += lineGap;
+        int gemsPerHour = (int) Math.round(craftCount / hours);
+        String gemsCutText = intFmt.format(craftCount) + " (" + intFmt.format(gemsPerHour) + "/hr)";
+        drawStatLine(c, innerX, innerWidth, paddingX, curY,
+                "Gems cut", gemsCutText, labelColor, valueGreen,
+                FONT_VALUE_BOLD, FONT_LABEL);
+
+        // 10) Task
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Task", String.valueOf(task), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 10) Version
+        // 11) Version
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Version", scriptVersion, labelColor, valueWhite,
