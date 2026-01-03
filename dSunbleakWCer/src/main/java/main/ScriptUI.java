@@ -36,7 +36,7 @@ public class ScriptUI {
         TabPane tabPane = new TabPane();
 
         // === Main Tab ===
-        VBox mainBox = new VBox(10);
+        VBox mainBox = new VBox(10);    
         mainBox.setStyle("-fx-background-color: #636E72; -fx-padding: 15; -fx-alignment: center");
 
         // Mode dropdown

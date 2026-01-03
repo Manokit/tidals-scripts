@@ -1,14 +1,17 @@
 package main;
 
+import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.script.ScriptDefinition;
 import com.osmb.api.script.SkillCategory;
-import com.osmb.api.trackers.experience.XPTracker;
-import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.drawing.Canvas;
+import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.visual.image.Image;
+import com.osmb.api.item.ItemID;
 import javafx.scene.Scene;
-import tasks.*;
+import tasks.Bank;
+import tasks.Process;
+import tasks.Setup;
 import utils.Task;
 import utils.XPTracking;
 
@@ -23,45 +26,36 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
 @ScriptDefinition(
-        name = "dSunbleakWCer",
-        description = "Chops and optionally banks Ironwood logs on Sunbleak island",
-        skillCategory = SkillCategory.WOODCUTTING,
-        version = 1.2,
-        author = "JustDavyy"
+        name = "tGemCutter",
+        description = "Cuts gems using a chisel",
+        skillCategory = SkillCategory.CRAFTING,
+        version = 1.0,
+        author = "Tidaleus"
 )
-public class dSunbleakWCer extends Script {
-    public static final String scriptVersion = "1.2";
-    private final String scriptName = "SunbleakWCer";
+public class tGemCutter extends Script {
+    public static final String scriptVersion = "0.3";
+    private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
     private static final long STATS_INTERVAL_MS = 600_000L;
-
-    public static int screenWidth = 0;
-    public static int screenHeight = 0;
-
-    public static boolean dropMode = false;
-    public static boolean bankMode = false;
     public static boolean setupDone = false;
-    public static boolean useLogBasket = false;
-    public static boolean usedBasketAlready = false;
-    public static int logsChopped = 0;
-    public static Timer lastXpGain = new Timer();
+    public static boolean hasReqs;
+    public static int selectedUncutGemID;  // Set from UI
+    public static int selectedCutGemID;    // Calculated from uncut ID
+    public static boolean shouldBank = false;
 
-    public static String task = "Initializing...";
+    public static int craftCount = 0;
+    public static String task = "Initialize";
     public static long startTime = System.currentTimeMillis();
 
     private List<Task> tasks;
-    private static final Font FONT_LABEL       = new Font("Arial", Font.PLAIN, 12);
-    private static final Font FONT_VALUE_BOLD  = new Font("Arial", Font.BOLD, 12);
-    private static final Font FONT_VALUE_ITALIC= new Font("Arial", Font.ITALIC, 12);
 
     // Webhook
     private static boolean webhookEnabled = false;
@@ -77,35 +71,129 @@ public class dSunbleakWCer extends Script {
 
     public static double levelProgressFraction = 0.0;
     public static int currentLevel = 1;
-    public static int startLevel = 1;
+    public static int startLevel = 0;  // Initialize to 0 so it gets set correctly in onPaint()
+
+    // Clean, modern fonts
+    private static final Font FONT_LABEL       = new Font("Arial", Font.PLAIN, 12);
+    private static final Font FONT_VALUE_BOLD  = new Font("Arial", Font.BOLD, 12);
 
     private final XPTracking xpTracking;
     private int xpGained = 0;
 
-    // Logo image
+    // Logo image (optional)
     private com.osmb.api.visual.image.Image logoImage = null;
 
-    public dSunbleakWCer(Object scriptCore) {
+    // Map uncut gems to cut gems
+    private static final Map<Integer, Integer> UNCUT_TO_CUT = Map.of(
+            ItemID.UNCUT_SAPPHIRE, ItemID.SAPPHIRE,
+            ItemID.UNCUT_EMERALD, ItemID.EMERALD,
+            ItemID.UNCUT_RUBY, ItemID.RUBY,
+            ItemID.UNCUT_DIAMOND, ItemID.DIAMOND
+    );
+
+    public static final String[] BANK_NAMES = {"Bank", "Chest", "Bank booth", "Bank chest", "Grand Exchange booth", "Bank counter", "Bank table"};
+    public static final String[] BANK_ACTIONS = {"bank", "open", "use"};
+    public static final Predicate<RSObject> bankQuery = obj ->
+            obj.getName() != null && obj.getActions() != null &&
+                    Arrays.stream(BANK_NAMES).anyMatch(name -> name.equalsIgnoreCase(obj.getName())) &&
+                    Arrays.stream(obj.getActions()).anyMatch(action -> Arrays.stream(BANK_ACTIONS).anyMatch(bankAction -> bankAction.equalsIgnoreCase(action))) &&
+                    obj.canReach();
+
+    public tGemCutter(Object scriptCore) {
         super(scriptCore);
         this.xpTracking = new XPTracking(this);
     }
 
     @Override
     public int[] regionsToPrioritise() {
-        return new int[]{8740};
+        return new int[]{
+                13104, // Shantay Pass
+                13105, // Al Kharid
+                13363, // Duel Arena / PvP Arena
+                12850, // Lumbridge Castle
+                12338, // Draynor
+                12853, // Varrock East
+                12597, // Varrock West + Cooks Guild
+                12598, // Grand Exchange
+                12342, // Edgeville
+                12084, // Falador East + Mining Guild
+                11828, // Falador West
+                11571, // Crafting Guild
+                11319, // Warriors Guild
+                11061, // Catherby
+                10806, // Seers
+                11310, // Shilo
+                10284, // Corsair Cove
+                9772,  // Myths Guild
+                10288, // Yanille
+                10545, // Port Khazard
+                10547, // Ardougne East/South
+                10292, // Ardougne East/North
+                10293, // Fishing Guild
+                10039, // Barbarian Assault
+                9782,  // Grand Tree
+                9781,  // Tree Gnome Stronghold
+                9776,  // Castle Wars
+                9265,  // Lletya
+                8748,  // Soul Wars
+                8253,  // Lunar Isle
+                9275,  // Neitiznot
+                9531,  // Jatiszo
+                6461,  // Wintertodt
+                7227,  // Port Piscarilius
+                6458,  // Arceeus
+                6457,  // Kourend Castle
+                6968,  // Hosidius
+                7223,  // Vinery
+                6710,  // Sand Crabs Chest
+                6198,  // Woodcutting Guild
+                5941,  // Land's End
+                5944,  // Shayzien
+                5946,  // Lovakengj South
+                5691,  // Lovekengj North
+                4922,  // Farming Guild
+                4919,  // Chambers of Xeric
+                5938,  // Quetzacalli
+                6448,  // Varlamore West
+                6960,  // Varlamore East
+                6191,  // Hunter Guild
+                5421,  // Aldarin
+                5420,  // Mistrock
+                14638, // Mos'le Harmless
+                14642, // TOB
+                14646, // Port Phasmatys
+                12344, // Ferox Enclave
+                12895, // Priff North
+                13150, // Priff South
+                13907, // Museum Camp
+                14908, // Fossil Bank Chest island
+        };
     }
 
     @Override
     public void onStart() {
-        log("INFO", "Starting dSunbleakWCer v" + scriptVersion);
+        log("INFO", "Starting tGemCutter v" + scriptVersion);
 
         ScriptUI ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);
-        getStageController().show(scene, "Script Options", false);
+        getStageController().show(scene, "Gem Cutter Options", false);
 
-        String mode = ui.getMode();
-        bankMode = mode.equals("Bank");
-        dropMode = mode.equals("Drop");
+        selectedUncutGemID = ui.getSelectedUncutGemId();
+        selectedCutGemID = UNCUT_TO_CUT.getOrDefault(selectedUncutGemID, 0);
+
+        // Debug logging
+        log("INFO", "Selected UNCUT gem ID: " + selectedUncutGemID);
+        log("INFO", "Selected CUT gem ID: " + selectedCutGemID);
+
+        if (selectedCutGemID == 0) {
+            log("ERROR", "Invalid gem selection! Stopping script.");
+            stop();
+            return;
+        }
+
+        String uncutName = getItemManager().getItemName(selectedUncutGemID);
+        String cutName = getItemManager().getItemName(selectedCutGemID);
+        log("INFO", "We're cutting " + uncutName + " into " + cutName + " this run.");
 
         webhookEnabled = ui.isWebhookEnabled();
         webhookUrl = ui.getWebhookUrl();
@@ -117,23 +205,23 @@ public class dSunbleakWCer extends Script {
             queueSendWebhook();
         }
 
-        if (checkForUpdates()) {
-            stop();
-            return;
-        }
-
         tasks = Arrays.asList(
                 new Setup(this),
-                new Bank(this),
-                new Drop(this),
-                new Chop(this)
+                new Process(this),
+                new Bank(this)
         );
     }
 
     @Override
-    public void onRelog() {
-        log("onRelog", "Resetting depleted tree hashmap.");
-        Chop.depletedTrees = new HashMap<>();
+    public boolean promptBankTabDialogue() {
+        return true;
+    }
+
+    @Override
+    public void onNewFrame() {
+        if (xpTracking != null) {
+            xpTracking.checkXP();
+        }
     }
 
     @Override
@@ -164,19 +252,21 @@ public class dSunbleakWCer extends Script {
         double hours = Math.max(1e-9, elapsed / 3_600_000.0);
         String runtime = formatRuntime(elapsed);
 
-        // === Live XP via tracker (Woodcutting) ===
+        // ==== Live XP via built-in Crafting tracker ====
         String ttlText = "-";
-        double etl = 0.0;                  // XP to next level
-        double xpGainedLive = 0.0;         // XP gained since start (live)
-        double currentXp = 0.0;            // absolute XP (live)
+        double etl = 0.0;
+        double xpGainedLive = 0.0;
+        double currentXp = 0.0;
+        double levelProgressFraction = 0.0;
 
         if (xpTracking != null) {
-            XPTracker tracker = xpTracking.getWoodcuttingTracker();
+            XPTracker tracker = xpTracking.getCraftingTracker();
             if (tracker != null) {
                 xpGainedLive = tracker.getXpGained();
                 currentXp = tracker.getXp();
+                ttlText = tracker.timeToNextLevelString();
+                etl = tracker.getXpForNextLevel();
 
-                // Level sync (only increases)
                 final int MAX_LEVEL = 99;
                 int guard = 0;
                 while (currentLevel < MAX_LEVEL
@@ -185,25 +275,25 @@ public class dSunbleakWCer extends Script {
                     currentLevel++;
                 }
 
-                ttlText = tracker.timeToNextLevelString();
+                // Handle level 99 specially
+                if (currentLevel >= MAX_LEVEL) {
+                    ttlText = "MAXED";
+                    etl = 0;
+                    levelProgressFraction = 1.0;
+                } else {
+                    int curLevelXpStart = tracker.getExperienceForLevel(currentLevel);
+                    int nextLevelXpTarget = tracker.getExperienceForLevel(currentLevel + 1);
+                    int span = Math.max(1, nextLevelXpTarget - curLevelXpStart);
 
-                int curLevelXpStart = tracker.getExperienceForLevel(currentLevel);
-                int nextLevelXpTarget = tracker.getExperienceForLevel(Math.min(MAX_LEVEL, currentLevel + 1));
-                int span = Math.max(1, nextLevelXpTarget - curLevelXpStart);
-
-                etl = Math.max(0, nextLevelXpTarget - currentXp);
-
-                levelProgressFraction = Math.max(0.0, Math.min(1.0,
-                        (currentXp - curLevelXpStart) / (double) span));
+                    levelProgressFraction = Math.max(0.0, Math.min(1.0,
+                            (currentXp - curLevelXpStart) / (double) span));
+                }
             }
         }
 
-        int xpPerHourLive = (int) Math.round(xpGainedLive / hours);
+        int xpPerHour = (int) Math.round(xpGainedLive / hours);
         int xpGainedInt = (int) Math.round(xpGainedLive);
         xpGained = xpGainedInt;
-
-        // Totals & rates
-        int logsHr = (int) Math.round(logsChopped / hours);
 
         // Current level text with (+N)
         if (startLevel <= 0) startLevel = currentLevel;
@@ -212,152 +302,134 @@ public class dSunbleakWCer extends Script {
                 ? (currentLevel + " (+" + levelsGained + ")")
                 : String.valueOf(currentLevel);
 
-        // Percent text
+        // Percent text (dot decimal)
         double pct = Math.max(0, Math.min(100, levelProgressFraction * 100.0));
-        String levelProgressText = (Math.abs(pct - Math.rint(pct)) < 1e-9)
-                ? String.format(java.util.Locale.US, "%.0f%%", pct)
-                : String.format(java.util.Locale.US, "%.1f%%", pct);
+        String levelProgressText;
+        if (currentLevel >= 99) {
+            levelProgressText = "MAXED";
+        } else {
+            levelProgressText = (Math.abs(pct - Math.rint(pct)) < 1e-9)
+                    ? String.format(java.util.Locale.US, "%.0f%%", pct)
+                    : String.format(java.util.Locale.US, "%.1f%%", pct);
+        }
 
-        // Formatting with dots
+        // === Formatting with dots ===
         java.text.DecimalFormat intFmt = new java.text.DecimalFormat("#,###");
         java.text.DecimalFormatSymbols sym = new java.text.DecimalFormatSymbols();
         sym.setGroupingSeparator('.');
         intFmt.setDecimalFormatSymbols(sym);
 
-        // === Panel + layout (standardized) ===
+        // === Ocean Theme Colors (Clean & Modern) ===
+        final Color oceanDeep = new Color(15, 52, 96);           // Deep ocean blue background
+        final Color turquoise = new Color(64, 224, 208);         // Turquoise for labels
+        final Color seafoamGreen = new Color(152, 251, 152);     // Seafoam green for progress
+        final Color oceanAccent = new Color(100, 149, 237);      // Cornflower blue for highlights
+
+        // === Panel + layout ===
         final int x = 5;
         final int baseY = 40;
-        final int width = 225;
+        final int width = 260;
         final int borderThickness = 2;
         final int paddingX = 10;
         final int topGap = 6;
         final int lineGap = 16;
-        final int smallGap = 6;
         final int logoBottomGap = 8;
 
-        final int labelGray = new Color(180, 180, 180).getRGB();
+        final int labelColor = turquoise.getRGB();
         final int valueWhite = Color.WHITE.getRGB();
-        final int valueGreen = new Color(80, 220, 120).getRGB(); // progress
-        final int valueBlue = new Color(70, 130, 180).getRGB();  // highlights
-
-        ensureLogoLoaded();
-        com.osmb.api.visual.image.Image scaledLogo = (logoImage != null) ? logoImage : null;
+        final int valueGreen = seafoamGreen.getRGB();
+        final int valueBlue = oceanAccent.getRGB();
 
         int innerX = x;
         int innerY = baseY;
         int innerWidth = width;
 
-        int totalLines = 12;
-
+        int totalLines = 10;  // Added one more line for gem type
         int y = innerY + topGap;
-        if (scaledLogo != null) y += scaledLogo.height + logoBottomGap;
-        y += totalLines * lineGap + smallGap + 10;
+        y += totalLines * lineGap + 10;
+        int innerHeight = Math.max(230, y - innerY);
 
-        int innerHeight = Math.max(240, y - innerY);
-
-        // Panel
+        // Clean ocean panel
         c.fillRect(innerX - borderThickness, innerY - borderThickness,
                 innerWidth + (borderThickness * 2),
                 innerHeight + (borderThickness * 2),
                 Color.WHITE.getRGB(), 1);
-        c.fillRect(innerX, innerY, innerWidth, innerHeight, Color.decode("#01031C").getRGB(), 1);
+        c.fillRect(innerX, innerY, innerWidth, innerHeight, oceanDeep.getRGB(), 1);
         c.drawRect(innerX, innerY, innerWidth, innerHeight, Color.WHITE.getRGB());
 
         int curY = innerY + topGap;
 
-        // Logo (optional)
-        if (scaledLogo != null) {
-            int imgX = innerX + (innerWidth - scaledLogo.width) / 2;
-            c.drawAtOn(scaledLogo, imgX, curY);
-            curY += scaledLogo.height + logoBottomGap;
+        // Logo at top (centered)
+        ensureLogoLoaded();
+        if (logoImage != null) {
+            int logoX = innerX + (innerWidth - logoImage.width) / 2;
+            c.drawAtOn(logoImage, logoX, curY);
+            curY += logoImage.height + logoBottomGap;
         }
-
-        // === Stat Lines ===
 
         // 1) Runtime
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Runtime", runtime, labelGray, valueWhite,
+                "Runtime", runtime, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 2) Logs chopped
+        // 2) XP gained (live)
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Logs chopped", intFmt.format(logsChopped), labelGray, valueBlue,
+                "XP gained", intFmt.format(xpGainedInt), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 3) Logs/hr
+        // 3) XP/hr (live)
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Logs/hr", intFmt.format(logsHr), labelGray, valueBlue,
+                "XP/hr", intFmt.format(xpPerHour), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 4) XP gained
+        // 4) ETL
+        curY += lineGap;
+        String etlText = (currentLevel >= 99) ? "MAXED" : intFmt.format(Math.round(etl));
+        drawStatLine(c, innerX, innerWidth, paddingX, curY,
+                "ETL", etlText, labelColor, valueWhite,
+                FONT_VALUE_BOLD, FONT_LABEL);
+
+        // 5) TTL
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "XP gained", intFmt.format(xpGainedInt), labelGray, valueWhite,
+                "TTL", ttlText, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 5) XP/hr
+        // 6) Level progress
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "XP/hr", intFmt.format(xpPerHourLive), labelGray, valueWhite,
+                "Level progress", levelProgressText, labelColor, valueGreen,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 6) ETL
+        // 7) Current level
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "ETL", intFmt.format(Math.round(etl)), labelGray, valueWhite,
+                "Current level", currentLevelText, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 7) TTL
+        // 8) Gem type (with ocean blue accent)
+        curY += lineGap;
+        String gemName = getItemManager().getItemName(selectedUncutGemID).replace("Uncut ", "");
+        drawStatLine(c, innerX, innerWidth, paddingX, curY,
+                "Gem type", gemName, labelColor, valueBlue,
+                FONT_VALUE_BOLD, FONT_LABEL);
+
+        // 9) Task
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "TTL", ttlText, labelGray, valueWhite,
+                "Task", String.valueOf(task), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 8) Level progress
+        // 10) Version
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Level progress", levelProgressText, labelGray, valueGreen,
+                "Version", scriptVersion, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 9) Current level
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Current level", currentLevelText, labelGray, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
-
-        // 10) Mode
-        String modeText;
-        if (bankMode) {
-            modeText = "Bank";
-        } else if (dropMode) {
-            modeText = "Drop";
-        } else {
-            modeText = "Unknown";
-        }
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Mode", modeText, labelGray, valueBlue,
-                FONT_VALUE_BOLD, FONT_LABEL);
-
-        // 11) Task
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Task", String.valueOf(task), labelGray, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
-
-        // 12) Version
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Version", scriptVersion, labelGray, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
-
-        // Store canvas for webhook usage
-        try {
-            lastCanvasFrame.set(c.toImageCopy());
-        } catch (Exception ignored) {}
+        try { lastCanvasFrame.set(c.toImageCopy()); } catch (Exception ignored) {}
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
@@ -374,7 +446,7 @@ public class dSunbleakWCer extends Script {
 
         try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
             if (in == null) {
-                log(getClass(), "Logo '/logo.png' not found on classpath.");
+                log(getClass(), "Logo '/logo.png' not found in resources.");
                 return;
             }
 
@@ -384,9 +456,10 @@ public class dSunbleakWCer extends Script {
                 return;
             }
 
+            // Convert to ARGB with premultiplied alpha
             BufferedImage argb = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = argb.createGraphics();
-            g.setComposite(AlphaComposite.Src); // copy pixels as-is
+            g.setComposite(AlphaComposite.Src);
             g.drawImage(src, 0, 0, null);
             g.dispose();
 
@@ -395,42 +468,26 @@ public class dSunbleakWCer extends Script {
             int[] px = new int[w * h];
             argb.getRGB(0, 0, w, h, px, 0, w);
 
+            // Premultiply alpha
             for (int i = 0; i < px.length; i++) {
                 int p = px[i];
                 int a = (p >>> 24) & 0xFF;
-                if (a == 0) {
-                    px[i] = 0x00000000; // fully transparent black
-                }
-            }
-
-            boolean PREMULTIPLY = true;
-            if (PREMULTIPLY) {
-                for (int i = 0; i < px.length; i++) {
-                    int p = px[i];
-                    int a = (p >>> 24) & 0xFF;
-                    if (a == 0) { px[i] = 0; continue; }
-                    int r = (p >>> 16) & 0xFF;
-                    int gch = (p >>> 8) & 0xFF;
-                    int b = p & 0xFF;
-                    // premultiply
-                    r = (r * a + 127) / 255;
-                    gch = (gch * a + 127) / 255;
-                    b = (b * a + 127) / 255;
-                    px[i] = (a << 24) | (r << 16) | (gch << 8) | b;
-                }
+                if (a == 0) { px[i] = 0; continue; }
+                int r = (p >>> 16) & 0xFF;
+                int gch = (p >>> 8) & 0xFF;
+                int b = p & 0xFF;
+                r = (r * a + 127) / 255;
+                gch = (gch * a + 127) / 255;
+                b = (b * a + 127) / 255;
+                px[i] = (a << 24) | (r << 16) | (gch << 8) | b;
             }
 
             logoImage = new Image(px, w, h);
-            log(getClass(), "Logo loaded: " + w + "x" + h + " premultiplied=" + PREMULTIPLY);
+            log(getClass(), "Logo loaded: " + w + "x" + h);
 
         } catch (Exception e) {
             log(getClass(), "Error loading logo: " + e.getMessage());
         }
-    }
-
-    @Override
-    public void onNewFrame() {
-        xpTracking.checkXP();
     }
 
     private void sendWebhookInternal() {
@@ -455,7 +512,7 @@ public class dSunbleakWCer extends Script {
             // Username (or anonymous)
             String displayUser = (webhookShowUser && user != null) ? user : "anonymous";
 
-            // Next webhook local time (Europe/Amsterdam)
+            // Next webhook local time
             long nextMillis = System.currentTimeMillis() + (webhookIntervalMinutes * 60_000L);
             ZonedDateTime nextLocal = ZonedDateTime.ofInstant(
                     Instant.ofEpochMilli(nextMillis),
@@ -576,67 +633,7 @@ public class dSunbleakWCer extends Script {
         }
     }
 
-    private boolean checkForUpdates() {
-        String latest = getLatestVersion("https://raw.githubusercontent.com/JustDavyy/osmb-scripts/main/dSunbleakWCer/src/main/java/main/dSunbleakWCer.java");
-
-        if (latest == null) {
-            log("VERSION", "Could not fetch latest version info.");
-            return false;
-        }
-
-        // Compare versions
-        if (compareVersions(scriptVersion, latest) < 0) {
-
-            // Spam 10 log lines
-            for (int i = 0; i < 10; i++) {
-                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
-            }
-
-            return true; // Outdated
-        }
-
-        // Up to date
-        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
-        return false;
-    }
-
-    private String getLatestVersion(String url) {
-        try {
-            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-            c.setRequestMethod("GET");
-            c.setConnectTimeout(3000);
-            c.setReadTimeout(3000);
-            if (c.getResponseCode() != 200) return null;
-
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
-                String l;
-                while ((l = r.readLine()) != null) {
-                    if (l.trim().startsWith("version")) {
-                        return l.split("=")[1].replace(",", "").trim();
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    public static int compareVersions(String v1, String v2) {
-        String[] a = v1.split("\\.");
-        String[] b = v2.split("\\.");
-        int len = Math.max(a.length, b.length);
-        for (int i = 0; i < len; i++) {
-            int n1 = i < a.length ? Integer.parseInt(a[i]) : 0;
-            int n2 = i < b.length ? Integer.parseInt(b[i]) : 0;
-            if (n1 != n2) return Integer.compare(n1, n2);
-        }
-        return 0;
-    }
-
     private void sendStats(long gpEarned, long xpGained, long runtimeMs) {
-        // stats tracking disabled - missing obf.Secrets dependency
-        // to enable: add obf.Secrets class with STATS_URL and STATS_API fields
-        /*
         try {
             String json = String.format(
                     "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":%d,\"xp\":%d,\"runtime\":%d}",
@@ -646,6 +643,11 @@ public class dSunbleakWCer extends Script {
                     xpGained,
                     runtimeMs / 1000
             );
+
+            // Only send if Secrets are configured
+            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
+                return;
+            }
 
             URL url = new URL(obf.Secrets.STATS_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -660,13 +662,12 @@ public class dSunbleakWCer extends Script {
 
             int code = conn.getResponseCode();
             if (code == 200) {
-                log("STATS", "✅ Stats reported: xp=" + xpGained + ", runtime=" + (runtimeMs/1000) + "s");
+                log("STATS", "Stats reported: xp=" + xpGained + ", runtime=" + (runtimeMs/1000) + "s");
             } else {
-                log("STATS", "⚠ Failed to report stats, HTTP " + code);
+                log("STATS", "Failed to report stats, HTTP " + code);
             }
         } catch (Exception e) {
-            log("STATS", "❌ Error sending stats: " + e.getMessage());
+            // Silently ignore if stats URL not configured
         }
-        */
     }
 }
