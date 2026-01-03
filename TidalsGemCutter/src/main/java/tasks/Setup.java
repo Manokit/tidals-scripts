@@ -26,19 +26,22 @@ public class Setup extends Task {
 
     public boolean execute() {
 
-        // Check required crafting level
-        task = "Get crafting level";
-        SkillsTabComponent.SkillLevel craftingSkillLevel = script.getWidgetManager().getSkillTab().getSkillLevel(SkillType.CRAFTING);
-        if (craftingSkillLevel == null) {
+        // Check required skill level (Crafting for gems, Fletching for bolt tips)
+        task = "Get skill level";
+        SkillType skillToCheck = makeBoltTips ? SkillType.FLETCHING : SkillType.CRAFTING;
+        SkillsTabComponent.SkillLevel skillLevel = script.getWidgetManager().getSkillTab().getSkillLevel(skillToCheck);
+        if (skillLevel == null) {
             script.log(getClass(), "Failed to get skill levels.");
             return false;
         }
-        startLevel = craftingSkillLevel.getLevel();
-        currentLevel = craftingSkillLevel.getLevel();
+        startLevel = skillLevel.getLevel();
+        currentLevel = skillLevel.getLevel();
 
-        // Check minimum level (Sapphire requires 20, but we'll check for 20 minimum)
-        if (currentLevel < 20) {
-            script.log(getClass(), "Crafting level too low! Minimum level 20 required.");
+        // Check minimum level (Sapphire requires 20 crafting, bolt tips require 11 fletching)
+        int minLevel = makeBoltTips ? 11 : 20;
+        String skillName = makeBoltTips ? "Fletching" : "Crafting";
+        if (currentLevel < minLevel) {
+            script.log(getClass(), skillName + " level too low! Minimum level " + minLevel + " required.");
             script.stop();
             return false;
         }
@@ -46,6 +49,17 @@ public class Setup extends Task {
         task = "Open inventory";
         script.log(getClass(), "Opening inventory tab");
         script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+
+        // Wait for inventory to open
+        boolean inventoryOpened = script.pollFramesUntil(() ->
+            script.getWidgetManager().getInventory().search(Set.of()) != null,
+            3000
+        );
+
+        if (!inventoryOpened) {
+            script.log(getClass(), "Inventory did not open, retrying...");
+            return false;
+        }
 
         task = "Take invent snapshot";
         ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(ItemID.CHISEL));

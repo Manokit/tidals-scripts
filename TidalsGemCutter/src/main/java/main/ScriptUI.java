@@ -16,6 +16,8 @@ import java.util.prefs.Preferences;
 public class ScriptUI {
     private final Preferences prefs = Preferences.userRoot().node("main");
     private static final String PREF_SELECTED_GEM = "tgemcutter_selected_gem";
+    private static final String PREF_MAKE_BOLT_TIPS = "tgemcutter_make_bolt_tips";
+    private static final String PREF_USE_BANKED_GEMS = "tgemcutter_use_banked_gems";
 
     private static final String PREF_WEBHOOK_ENABLED = "tgemcutter_webhook_enabled";
     private static final String PREF_WEBHOOK_URL = "tgemcutter_webhook_url";
@@ -24,6 +26,8 @@ public class ScriptUI {
 
     private final Script script;
     private ComboBox<Integer> gemComboBox;
+    private CheckBox makeBoltTipsCheckBox;
+    private CheckBox useBankedGemsCheckBox;
 
     private CheckBox webhookEnabledCheckBox;
     private TextField webhookUrlField;
@@ -63,7 +67,33 @@ public class ScriptUI {
         }
 
         script.log("SAVESETTINGS", "Loaded selected gem from preferences: " + savedGemId);
-        mainBox.getChildren().addAll(gemLabel, gemComboBox);
+
+        // Bolt tips checkbox
+        makeBoltTipsCheckBox = new CheckBox("Make bolt tips");
+        makeBoltTipsCheckBox.setStyle("-fx-text-fill: #40E0D0; -fx-font-size: 13px; -fx-padding: 10 0 0 0;");
+        makeBoltTipsCheckBox.setSelected(prefs.getBoolean(PREF_MAKE_BOLT_TIPS, false));
+
+        // Use banked gems checkbox (indented, only enabled when making bolt tips)
+        useBankedGemsCheckBox = new CheckBox("Use banked cut gems");
+        useBankedGemsCheckBox.setStyle("-fx-text-fill: #98FB98; -fx-font-size: 12px; -fx-padding: 0 0 0 20;");
+        useBankedGemsCheckBox.setSelected(prefs.getBoolean(PREF_USE_BANKED_GEMS, false));
+        useBankedGemsCheckBox.setDisable(!makeBoltTipsCheckBox.isSelected());
+
+        // Add tooltip for clarity
+        Tooltip useBankedTip = new Tooltip("Skip cutting phase - withdraw cut gems from bank and make bolt tips directly");
+        useBankedTip.setStyle("-fx-font-size: 11px;");
+        useBankedGemsCheckBox.setTooltip(useBankedTip);
+
+        // Enable/disable use banked gems based on make bolt tips checkbox
+        makeBoltTipsCheckBox.setOnAction(e -> {
+            boolean enabled = makeBoltTipsCheckBox.isSelected();
+            useBankedGemsCheckBox.setDisable(!enabled);
+            if (!enabled) {
+                useBankedGemsCheckBox.setSelected(false);
+            }
+        });
+
+        mainBox.getChildren().addAll(gemLabel, gemComboBox, makeBoltTipsCheckBox, useBankedGemsCheckBox);
         Tab mainTab = new Tab("Main", mainBox);
         mainTab.setClosable(false);
 
@@ -179,6 +209,9 @@ public class ScriptUI {
             script.log("SAVESETTINGS", "Saved selected gem to preferences: " + selected);
         }
 
+        prefs.putBoolean(PREF_MAKE_BOLT_TIPS, isMakeBoltTips());
+        prefs.putBoolean(PREF_USE_BANKED_GEMS, isUseBankedGems());
+
         prefs.putBoolean(PREF_WEBHOOK_ENABLED, isWebhookEnabled());
         prefs.put(PREF_WEBHOOK_URL, getWebhookUrl());
         prefs.putInt(PREF_WEBHOOK_INTERVAL, getWebhookInterval());
@@ -208,5 +241,13 @@ public class ScriptUI {
 
     public boolean isUsernameIncluded() {
         return includeUsernameCheckBox != null && includeUsernameCheckBox.isSelected();
+    }
+
+    public boolean isMakeBoltTips() {
+        return makeBoltTipsCheckBox != null && makeBoltTipsCheckBox.isSelected();
+    }
+
+    public boolean isUseBankedGems() {
+        return useBankedGemsCheckBox != null && useBankedGemsCheckBox.isSelected();
     }
 }

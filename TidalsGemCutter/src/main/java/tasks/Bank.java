@@ -25,12 +25,30 @@ public class Bank extends Task {
 
     @Override
     public boolean activate() {
-        ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedUncutGemID));
-        if (inventorySnapshot == null) {
-            // Inventory not visible
-            return false;
+        ItemGroupResult inventorySnapshot;
+
+        // If using banked cut gems mode, activate when we don't have cut gems
+        if (useBankedGems && makeBoltTips) {
+            inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedCutGemID, selectedBoltTipID));
+            if (inventorySnapshot == null) return false;
+            // Bank when we don't have cut gems (either we have bolt tips to deposit, or we're starting fresh)
+            return !inventorySnapshot.contains(selectedCutGemID);
         }
 
+        // If making bolt tips (not from banked), activate when we have bolt tips and no uncut gems
+        if (makeBoltTips) {
+            inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedUncutGemID, selectedCutGemID, selectedBoltTipID));
+            if (inventorySnapshot == null) return false;
+            // Bank when we have bolt tips and no uncut/cut gems, OR we're starting fresh with nothing
+            boolean hasBoltTips = inventorySnapshot.contains(selectedBoltTipID);
+            boolean hasUncut = inventorySnapshot.contains(selectedUncutGemID);
+            boolean hasCut = inventorySnapshot.contains(selectedCutGemID);
+            return (hasBoltTips && !hasUncut && !hasCut) || (!hasUncut && !hasCut && !hasBoltTips);
+        }
+
+        // Normal mode: activate when we don't have uncut gems
+        inventorySnapshot = script.getWidgetManager().getInventory().search(Set.of(selectedUncutGemID));
+        if (inventorySnapshot == null) return false;
         return !inventorySnapshot.contains(selectedUncutGemID);
     }
 
@@ -47,33 +65,43 @@ public class Bank extends Task {
 
         task = "Get bank snapshot";
 
-        // debug: log what we're searching for
-        String gemName = script.getItemManager().getItemName(selectedUncutGemID);
-        script.log(getClass(), "Searching for " + gemName + " (ID: " + selectedUncutGemID + ") in bank");
+        // Determine what item we need to withdraw based on mode
+        int itemToWithdraw;
+        String itemName;
 
-        ItemGroupResult bankSnapshot = script.getWidgetManager().getBank().search(Set.of(selectedUncutGemID));
+        if (useBankedGems && makeBoltTips) {
+            // Using banked cut gems mode - withdraw cut gems
+            itemToWithdraw = selectedCutGemID;
+            itemName = script.getItemManager().getItemName(selectedCutGemID);
+        } else {
+            // Normal mode or making bolt tips from uncut - withdraw uncut gems
+            itemToWithdraw = selectedUncutGemID;
+            itemName = script.getItemManager().getItemName(selectedUncutGemID);
+        }
+
+        script.log(getClass(), "Searching for " + itemName + " (ID: " + itemToWithdraw + ") in bank");
+
+        ItemGroupResult bankSnapshot = script.getWidgetManager().getBank().search(Set.of(itemToWithdraw));
         ItemGroupResult inventorySnapshot = script.getWidgetManager().getInventory().search(Collections.emptySet());
 
         if (inventorySnapshot == null) {
-            // Inventory not visible
             script.log(getClass(), "Inventory not visible");
             return false;
         }
         if (bankSnapshot == null) {
-            // Bank not visible or search failed
             script.log(getClass(), "Bank snapshot is null - bank might not be ready");
             return false;
         }
 
         task = "Check bank items";
 
-        // Debug: Check if we found any of the gem
-        if (bankSnapshot.contains(selectedUncutGemID)) {
-            int gemCount = bankSnapshot.getAmount(selectedUncutGemID);
-            script.log(getClass(), "Found " + gemCount + " " + gemName + " in bank");
+        // Check if we found the item we need
+        if (bankSnapshot.contains(itemToWithdraw)) {
+            int itemCount = bankSnapshot.getAmount(itemToWithdraw);
+            script.log(getClass(), "Found " + itemCount + " " + itemName + " in bank");
         } else {
-            script.log(getClass(), "bankSnapshot.contains() returned false for ID " + selectedUncutGemID);
-            script.log(getClass(), "Ran out of " + gemName + ". Stopping script.");
+            script.log(getClass(), "bankSnapshot.contains() returned false for ID " + itemToWithdraw);
+            script.log(getClass(), "Ran out of " + itemName + ". Stopping script.");
             script.stop();
             return false;
         }
@@ -96,8 +124,8 @@ public class Bank extends Task {
         script.log(getClass(), "Empty inventory slots after deposit: " + emptySlots);
 
         task = "Withdraw items";
-        if (!script.getWidgetManager().getBank().withdraw(selectedUncutGemID, emptySlots)) {
-            script.log(getClass(), "Withdraw failed for " + gemName + ", re-polling.");
+        if (!script.getWidgetManager().getBank().withdraw(itemToWithdraw, emptySlots)) {
+            script.log(getClass(), "Withdraw failed for " + itemName + ", re-polling.");
             return false;
         }
 

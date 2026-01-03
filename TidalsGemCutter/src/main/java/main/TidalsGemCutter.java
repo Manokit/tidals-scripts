@@ -40,7 +40,7 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class TidalsGemCutter extends Script {
-    public static final String scriptVersion = "1.1";
+    public static final String scriptVersion = "1.2";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -49,6 +49,9 @@ public class TidalsGemCutter extends Script {
     public static boolean hasReqs;
     public static int selectedUncutGemID;  // Set from UI
     public static int selectedCutGemID;    // Calculated from uncut ID
+    public static int selectedBoltTipID;   // Calculated from cut ID (if making bolt tips)
+    public static boolean makeBoltTips = false;      // Set from UI
+    public static boolean useBankedGems = false;     // Set from UI
     public static boolean shouldBank = false;
 
     public static int craftCount = 0;
@@ -89,6 +92,14 @@ public class TidalsGemCutter extends Script {
             ItemID.UNCUT_EMERALD, ItemID.EMERALD,
             ItemID.UNCUT_RUBY, ItemID.RUBY,
             ItemID.UNCUT_DIAMOND, ItemID.DIAMOND
+    );
+
+    // Map cut gems to bolt tips
+    private static final Map<Integer, Integer> CUT_TO_BOLT_TIPS = Map.of(
+            ItemID.SAPPHIRE, ItemID.SAPPHIRE_BOLT_TIPS,
+            ItemID.EMERALD, ItemID.EMERALD_BOLT_TIPS,
+            ItemID.RUBY, ItemID.RUBY_BOLT_TIPS,
+            ItemID.DIAMOND, ItemID.DIAMOND_BOLT_TIPS
     );
 
     public static final String[] BANK_NAMES = {"Bank", "Chest", "Bank booth", "Bank chest", "Grand Exchange booth", "Bank counter", "Bank table"};
@@ -180,10 +191,22 @@ public class TidalsGemCutter extends Script {
 
         selectedUncutGemID = ui.getSelectedUncutGemId();
         selectedCutGemID = UNCUT_TO_CUT.getOrDefault(selectedUncutGemID, 0);
+        makeBoltTips = ui.isMakeBoltTips();
+        useBankedGems = ui.isUseBankedGems();
+
+        // Calculate bolt tip ID if making bolt tips
+        if (makeBoltTips) {
+            selectedBoltTipID = CUT_TO_BOLT_TIPS.getOrDefault(selectedCutGemID, 0);
+        }
 
         // Debug logging
         log("INFO", "Selected UNCUT gem ID: " + selectedUncutGemID);
         log("INFO", "Selected CUT gem ID: " + selectedCutGemID);
+        log("INFO", "Make bolt tips: " + makeBoltTips);
+        log("INFO", "Use banked gems: " + useBankedGems);
+        if (makeBoltTips) {
+            log("INFO", "Selected BOLT TIP ID: " + selectedBoltTipID);
+        }
 
         if (selectedCutGemID == 0) {
             log("ERROR", "Invalid gem selection! Stopping script.");
@@ -191,9 +214,25 @@ public class TidalsGemCutter extends Script {
             return;
         }
 
+        if (makeBoltTips && selectedBoltTipID == 0) {
+            log("ERROR", "Invalid bolt tip ID! Stopping script.");
+            stop();
+            return;
+        }
+
         String uncutName = getItemManager().getItemName(selectedUncutGemID);
         String cutName = getItemManager().getItemName(selectedCutGemID);
-        log("INFO", "We're cutting " + uncutName + " into " + cutName + " this run.");
+
+        if (makeBoltTips) {
+            String boltTipName = getItemManager().getItemName(selectedBoltTipID);
+            if (useBankedGems) {
+                log("INFO", "Making " + boltTipName + " from banked " + cutName + " this run.");
+            } else {
+                log("INFO", "Cutting " + uncutName + " and making " + boltTipName + " this run.");
+            }
+        } else {
+            log("INFO", "We're cutting " + uncutName + " into " + cutName + " this run.");
+        }
 
         webhookEnabled = ui.isWebhookEnabled();
         webhookUrl = ui.getWebhookUrl();
@@ -252,7 +291,7 @@ public class TidalsGemCutter extends Script {
         double hours = Math.max(1e-9, elapsed / 3_600_000.0);
         String runtime = formatRuntime(elapsed);
 
-        // ==== Live XP via built-in Crafting tracker ====
+        // ==== Live XP via built-in tracker (Crafting for gems, Fletching for bolt tips) ====
         String ttlText = "-";
         double etl = 0.0;
         double xpGainedLive = 0.0;
@@ -260,7 +299,8 @@ public class TidalsGemCutter extends Script {
         double levelProgressFraction = 0.0;
 
         if (xpTracking != null) {
-            XPTracker tracker = xpTracking.getCraftingTracker();
+            // Use Fletching tracker for bolt tips, Crafting for normal gem cutting
+            XPTracker tracker = makeBoltTips ? xpTracking.getFletchingTracker() : xpTracking.getCraftingTracker();
             if (tracker != null) {
                 xpGainedLive = tracker.getXpGained();
                 currentXp = tracker.getXp();
@@ -412,19 +452,28 @@ public class TidalsGemCutter extends Script {
                 "Current level", currentLevelText, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 8) Gem type (with ocean blue accent)
+        // 8) Item type (gem or bolt tips)
         curY += lineGap;
-        String gemName = getItemManager().getItemName(selectedUncutGemID).replace("Uncut ", "");
+        String itemName;
+        String itemLabel;
+        if (makeBoltTips) {
+            itemName = getItemManager().getItemName(selectedBoltTipID);
+            itemLabel = "Bolt tips";
+        } else {
+            itemName = getItemManager().getItemName(selectedUncutGemID).replace("Uncut ", "");
+            itemLabel = "Gem type";
+        }
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Gem type", gemName, labelColor, valueBlue,
+                itemLabel, itemName, labelColor, valueBlue,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 9) Gems cut
+        // 9) Items crafted (gems cut or bolt tips made)
         curY += lineGap;
-        int gemsPerHour = (int) Math.round(craftCount / hours);
-        String gemsCutText = intFmt.format(craftCount) + " (" + intFmt.format(gemsPerHour) + "/hr)";
+        int itemsPerHour = (int) Math.round(craftCount / hours);
+        String itemsCraftedText = intFmt.format(craftCount) + " (" + intFmt.format(itemsPerHour) + "/hr)";
+        String craftLabel = makeBoltTips ? "Tips made" : "Gems cut";
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Gems cut", gemsCutText, labelColor, valueGreen,
+                craftLabel, itemsCraftedText, labelColor, valueGreen,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
         // 10) Task
@@ -538,7 +587,7 @@ public class TidalsGemCutter extends Script {
                     .append("\"color\": 5189303,")
 
                     .append("\"author\": {")
-                    .append("\"name\": \"Davyy's ").append(scriptName).append("\",")
+                    .append("\"name\": \"Tidal's ").append(scriptName).append("\",")
                     .append("\"icon_url\": \"").append(authorIconUrl).append("\"")
                     .append("},")
 

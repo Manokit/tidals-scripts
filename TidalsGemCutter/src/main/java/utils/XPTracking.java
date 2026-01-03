@@ -50,6 +50,35 @@ public class XPTracking {
         return tracker.timeToNextLevelString();
     }
 
+    // fletching-specific methods (for bolt tips)
+    public XPTracker getFletchingTracker() {
+        return getTracker(SkillType.FLETCHING);
+    }
+
+    public double getFletchingXpGained() {
+        XPTracker tracker = getFletchingTracker();
+        if (tracker == null) return 0.0;
+        return tracker.getXpGained();
+    }
+
+    public int getFletchingXpPerHour() {
+        XPTracker tracker = getFletchingTracker();
+        if (tracker == null) return 0;
+        return tracker.getXpPerHour();
+    }
+
+    public int getFletchingLevel() {
+        XPTracker tracker = getFletchingTracker();
+        if (tracker == null) return 0;
+        return tracker.getLevel();
+    }
+
+    public String getFletchingTimeToNextLevel() {
+        XPTracker tracker = getFletchingTracker();
+        if (tracker == null) return "-";
+        return tracker.timeToNextLevelString();
+    }
+
     public void checkXP() {
         // called in onNewFrame() - no actual method call needed
         // xp trackers update automatically
