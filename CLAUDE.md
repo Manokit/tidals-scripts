@@ -946,6 +946,750 @@ public class ExampleMiner extends Script {
 
 ---
 
+## ADVANCED PATTERNS FROM DAVY'S SCRIPTS
+
+These battle-tested patterns come from production scripts and demonstrate real-world solutions to common scripting challenges.
+
+### Advanced Banking with Visibility Checks
+
+**Problem**: Objects can be partially off-screen or obstructed by UI elements, leading to failed interactions.
+
+**Solution** (from dSunbleakWCer): Check polygon visibility and walk closer if needed.
+
+```java
+private boolean openBank() {
+    RSObject chest = getObjectManager().getClosestObject(
+        getWorldPosition(), "Bank chest"
+    );
+
+    if (chest == null) return false;
+
+    Polygon hull = chest.getConvexHull();
+    if (hull == null) return false;
+
+    // Check how visible the bank chest is (ignoring chatbox obstruction)
+    double insideFactor = getWidgetManager().insideGameScreenFactor(
+        hull, List.of(ChatboxComponent.class)
+    );
+
+    if (insideFactor < 1.0) {
+        // Walk closer if not fully visible
+        WalkConfig config = new WalkConfig.Builder()
+            .disableWalkScreen(true)
+            .breakCondition(() -> {
+                Polygon h = chest.getConvexHull();
+                return h != null &&
+                    getWidgetManager().insideGameScreenFactor(
+                        h, List.of(ChatboxComponent.class)) >= 1.0;
+            })
+            .enableRun(true)
+            .build();
+        getWalker().walkTo(chest.getWorldPosition(), config);
+        return false;
+    }
+
+    // Verify all polygon points are within screen bounds before tapping
+    if (!isPolygonTapSafe(hull)) {
+        // Move closer
+        return false;
+    }
+
+    // Now safe to tap
+    getFinger().tap(hull, "Bank");
+    return true;
+}
+
+private boolean isPolygonTapSafe(Polygon poly) {
+    int screenWidth = getScreen().getWidth();
+    int screenHeight = getScreen().getHeight();
+
+    for (int i = 0; i < poly.size(); i++) {
+        int x = poly.xpoints[i];
+        int y = poly.ypoints[i];
+
+        if (x < 0 || x > screenWidth || y < 0 || y > screenHeight) {
+            return false;
+        }
+    }
+    return true;
+}
+```
+
+**Idle Detection During Walking**:
+```java
+// Track position changes to detect if player got stuck
+AtomicReference<Timer> positionChangeTimer = new AtomicReference<>(new Timer());
+AtomicReference<WorldPosition> pos = new AtomicReference<>(null);
+
+pollFramesHuman(() -> {
+    WorldPosition current = getWorldPosition();
+    if (current == null) return false;
+
+    if (!current.equals(pos.get())) {
+        pos.set(current);
+        positionChangeTimer.get().reset(); // Reset if moving
+    }
+
+    // Fail if idle for 4+ seconds
+    return getWidgetManager().getBank().isVisible()
+            || positionChangeTimer.get().timeElapsed() > 4000;
+}, 20000);
+```
+
+### Deposit Box (Alternative to Banks)
+
+**Use Case**: Mining areas, certain quests, activities without full bank access.
+
+**Example** (from dAmethystMiner):
+```java
+private boolean handleDepositBox() {
+    DepositBox depositBox = getWidgetManager().getDepositBox();
+
+    if (!depositBox.isVisible()) {
+        RSObject box = getObjectManager().getClosestObject(
+            getWorldPosition(), "Bank deposit box"
+        );
+        if (box != null && box.interact("Deposit")) {
+            submitTask(() -> depositBox.isVisible(), 5000);
+        }
+        return false;
+    }
+
+    // Deposit all items except tools
+    Set<Integer> keepItems = Set.of(ItemID.RUNE_PICKAXE);
+    if (!depositBox.depositAll(keepItems)) {
+        log(getClass(), "Failed to deposit items.");
+        return false;
+    }
+
+    depositBox.close();
+    return true;
+}
+```
+
+### Spellbook Teleportation
+
+**Use Case**: High-frequency teleport scripts, offering training, altar running.
+
+**Example** (from dTeleporter):
+```java
+private static final int TELEPORT_COOLDOWN_MS = 1800; // Base cooldown
+private long lastTeleportTime = 0;
+private int teleportCount = 0;
+
+private boolean castTeleportSpell() {
+    // Wait for cooldown
+    long remaining = getCooldownForSpell() -
+        (System.currentTimeMillis() - lastTeleportTime);
+
+    if (remaining > 0) {
+        pollFramesUntil(
+            () -> (System.currentTimeMillis() - lastTeleportTime) >= getCooldownForSpell(),
+            (int) remaining + 100
+        );
+        return false;
+    }
+
+    // Cast the spell
+    boolean success;
+    try {
+        success = getWidgetManager().getSpellbook().selectSpell(
+            Spell.VARROCK_TELEPORT,  // Or your spell
+            null  // null = auto-cast at current location
+        );
+    } catch (SpellNotFoundException e) {
+        log(getClass(), "Spell sprite not found: " + e.getMessage());
+        stop();
+        return false;
+    }
+
+    if (success) {
+        lastTeleportTime = System.currentTimeMillis();
+        teleportCount++;
+    }
+
+    return success;
+}
+
+// Randomized cooldown (anti-ban)
+private long getCooldownForSpell() {
+    int roll = random(100);
+
+    if (roll < 50) {
+        return random(1800, 1901);  // ~1.8-1.9s
+    } else if (roll < 90) {
+        return random(1850, 2001);  // ~1.85-2.0s
+    } else {
+        return random(1900, 2301);  // ~1.9-2.3s
+    }
+}
+```
+
+### Custom Interface with OCR Detection
+
+**Use Case**: Teleport interfaces, minigame interfaces, custom dialogues.
+
+**Example** (from dBirdhouseRunner - Mushroom Transport):
+```java
+public class MushroomTransportInterface extends CustomInterface {
+    private static final String TITLE_TEXT = "Bittercap Mushrooms";
+    private static final Rectangle TITLE_BOUNDS = new Rectangle(10, 5, 200, 20);
+    private static final SearchablePixel ORANGE_TEXT_COLOR =
+        new SearchablePixel(25, 100, 50, 10, 10, 10); // HSL
+
+    private Map<ButtonType, Rectangle> buttons = null;
+
+    public enum ButtonType {
+        VERDANT_VALLEY("Verdant Valley"),
+        MUSHROOM_MEADOW("Mushroom Meadow"),
+        LUMBER_CLEARING("Lumber Clearing");
+
+        private final String text;
+        ButtonType(String text) { this.text = text; }
+        public String getText() { return text; }
+    }
+
+    @Override
+    public boolean isVisible() {
+        Rectangle bounds = getBounds();
+        if (bounds == null) return false;
+
+        Rectangle titleArea = bounds.getSubRectangle(TITLE_BOUNDS);
+        String text = core.getOCR().getText(
+            Font.STANDARD_FONT_BOLD,
+            titleArea,
+            ORANGE_TEXT_COLOR
+        );
+
+        boolean visible = text.equalsIgnoreCase(TITLE_TEXT);
+
+        // Register buttons dynamically if visible
+        if (visible && buttons == null) {
+            this.buttons = registerButtons(bounds);
+        }
+        return visible;
+    }
+
+    private Map<ButtonType, Rectangle> registerButtons(Rectangle bounds) {
+        Map<ButtonType, Rectangle> buttons = new HashMap<>();
+
+        // Find containers by corner sprite IDs (use debug tool to find these)
+        List<Rectangle> containers = core.getImageAnalyzer()
+            .findContainers(bounds, 913, 914, 915, 916);
+
+        for (Rectangle container : containers) {
+            String rawText = core.getOCR().getText(
+                Font.SMALL_FONT,
+                container,
+                ORANGE_BUTTON_TEXT_COLOR
+            ).trim();
+
+            // Normalize OCR errors (I -> l is common)
+            String normalizedText = rawText.replace('I', 'l').toLowerCase();
+
+            for (ButtonType buttonType : ButtonType.values()) {
+                if (normalizedText.equals(buttonType.getText().toLowerCase())) {
+                    buttons.put(buttonType, new Rectangle(
+                        container.x - bounds.x,
+                        container.y - bounds.y,
+                        container.width,
+                        container.height
+                    ));
+                    break;
+                }
+            }
+        }
+        return buttons;
+    }
+
+    public boolean selectOption(ButtonType buttonType) {
+        Rectangle buttonScreenBounds = getButtonScreenBounds(buttonType);
+        if (buttonScreenBounds == null) return false;
+
+        if (core.getFinger().tap(buttonScreenBounds)) {
+            return core.pollFramesUntil(() -> !isVisible(), 5000);
+        }
+        return false;
+    }
+}
+
+// Usage:
+MushroomTransportInterface transport = new MushroomTransportInterface(this);
+if (transport.isVisible()) {
+    transport.selectOption(ButtonType.VERDANT_VALLEY);
+}
+```
+
+### Multi-Step Travel Sequence
+
+**Use Case**: Complex travel requiring boats, NPCs, dialogue choices.
+
+**Example** (from dBirdhouseRunner):
+```java
+private boolean travelToIsland() {
+    // Step 1: Find and interact with boat
+    List<RSObject> rowboats = getObjectManager().getObjects(obj ->
+        "Rowboat".equalsIgnoreCase(obj.getName()) &&
+        obj.getActions() != null &&
+        Arrays.asList(obj.getActions()).contains("Travel") &&
+        obj.canReach()
+    );
+
+    RSObject rowboat = (RSObject) getUtils().getClosest(rowboats);
+    if (rowboat == null) {
+        log(getClass(), "No rowboat found!");
+        return false;
+    }
+
+    if (!rowboat.interact("Travel")) {
+        return false;
+    }
+
+    // Step 2: Wait for dialogue to appear
+    boolean dialogueAppeared = pollFramesUntil(() -> {
+        DialogueType type = getWidgetManager().getDialogue().getDialogueType();
+        return type == DialogueType.TEXT_OPTION;
+    }, random(6000, 10000));
+
+    if (!dialogueAppeared) {
+        log(getClass(), "Dialogue did not appear!");
+        return false;
+    }
+
+    // Step 3: Select correct travel option
+    boolean selected = getWidgetManager().getDialogue()
+        .selectOption("Row out to sea, north of the island");
+
+    if (!selected) {
+        log(getClass(), "Failed to select dialogue option!");
+        return false;
+    }
+
+    // Step 4: Wait for arrival
+    RectangleArea destinationArea = new RectangleArea(2800, 2700, 2850, 2750, 0);
+    boolean success = pollFramesUntil(() -> {
+        WorldPosition current = getWorldPosition();
+        return current != null && destinationArea.contains(current);
+    }, random(14000, 17500));
+
+    if (!success) {
+        log(getClass(), "Travel timeout - may have failed!");
+    }
+
+    return success;
+}
+```
+
+### Complex Multi-Step Dialogue Chains
+
+**Problem**: Some interfaces require TEXT_OPTION → ITEM_OPTION sequences (Construction, Crafting).
+
+**Example** (from dConstructioneer):
+```java
+private boolean buildItem() {
+    RSObject workbench = getObjectManager().getClosestObject(
+        getWorldPosition(), "Workbench"
+    );
+
+    if (workbench == null) return false;
+
+    // Step 1: Interact with workbench
+    if (!workbench.interact("Build")) {
+        return false;
+    }
+
+    // Step 2: Wait for first dialogue (TEXT_OPTION for category)
+    BooleanSupplier waitForTextOption = () -> {
+        DialogueType type = getWidgetManager().getDialogue().getDialogueType();
+        return type == DialogueType.TEXT_OPTION;
+    };
+
+    if (!pollFramesHuman(waitForTextOption, random(4000, 6000))) {
+        log(getClass(), "TEXT_OPTION dialogue did not appear.");
+        return false;
+    }
+
+    // Step 3: Select category
+    DialogueType dialogueType = getWidgetManager().getDialogue().getDialogueType();
+    if (dialogueType != DialogueType.TEXT_OPTION) {
+        log(getClass(), "Expected TEXT_OPTION but got: " + dialogueType);
+        return false;
+    }
+
+    boolean selectedCategory = getWidgetManager().getDialogue()
+        .selectOption("Repair kits");  // Your category
+
+    if (!selectedCategory) {
+        log(getClass(), "Failed to select construction category.");
+        return false;
+    }
+
+    // Step 4: Wait for second dialogue (ITEM_OPTION for specific item)
+    BooleanSupplier waitForItemOption = () ->
+        getWidgetManager().getDialogue().getDialogueType() == DialogueType.ITEM_OPTION;
+
+    if (!pollFramesHuman(waitForItemOption, random(4000, 6000))) {
+        log(getClass(), "ITEM_OPTION dialogue did not appear.");
+        return false;
+    }
+
+    // Step 5: Select specific item
+    DialogueType afterCategory = getWidgetManager().getDialogue().getDialogueType();
+    if (afterCategory != DialogueType.ITEM_OPTION) {
+        log(getClass(), "Expected ITEM_OPTION, but got: " + afterCategory);
+        return false;
+    }
+
+    boolean selectedItem = getWidgetManager().getDialogue()
+        .selectItem(ItemID.BASIC_REPAIR_KIT);
+
+    if (!selectedItem) {
+        log(getClass(), "Failed to select item.");
+        return false;
+    }
+
+    // Step 6: Wait for crafting to complete (with level-up detection)
+    return waitUntilFinishedCrafting();
+}
+
+private boolean waitUntilFinishedCrafting() {
+    Timer amountChangeTimer = new Timer();
+
+    BooleanSupplier condition = () -> {
+        // Check for level-up dialogue
+        DialogueType type = getWidgetManager().getDialogue().getDialogueType();
+        if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
+            log(getClass(), "Level up detected!");
+            getWidgetManager().getDialogue().continueChatDialogue();
+            pollFramesHuman(() -> false, random(1000, 3000));
+            return true;
+        }
+
+        // Timeout after random duration
+        if (amountChangeTimer.timeElapsed() > random(70000, 78000)) {
+            return true;
+        }
+
+        // Check if we ran out of materials
+        ItemGroupResult inv = getWidgetManager().getInventory()
+            .search(Set.of(ItemID.MAHOGANY_PLANK));
+        if (inv == null) return false;
+        return !inv.contains(ItemID.MAHOGANY_PLANK);
+    };
+
+    return pollFramesHuman(condition, random(70000, 78000));
+}
+```
+
+### Task Manager State Machine Pattern
+
+**Best Practice**: Organize scripts using Task classes for clean separation of concerns.
+
+**Implementation** (from dSunbleakWCer):
+
+```java
+// Base Task class
+public abstract class Task {
+    protected Script script;
+
+    public Task(Script script) {
+        this.script = script;
+    }
+
+    public abstract boolean activate();    // Should this task run?
+    public abstract boolean execute();     // Run the task logic
+}
+
+// Example: BankTask
+public class BankTask extends Task {
+    public BankTask(Script script) {
+        super(script);
+    }
+
+    @Override
+    public boolean activate() {
+        // Activate when inventory is full
+        ItemGroupResult inv = script.getWidgetManager()
+            .getInventory().search(Set.of());
+        return inv != null && inv.isFull();
+    }
+
+    @Override
+    public boolean execute() {
+        Bank bank = script.getWidgetManager().getBank();
+
+        if (!bank.isVisible()) {
+            return openBank();
+        }
+
+        // Deposit all except tools
+        bank.depositAll(Set.of(ItemID.BRONZE_AXE));
+        script.pollFramesHuman(() -> false, script.random(300, 600));
+        bank.close();
+
+        return false; // Return to main loop
+    }
+
+    private boolean openBank() {
+        // Bank opening logic...
+        return false;
+    }
+}
+
+// Main script
+public class MyScript extends Script {
+    private List<Task> tasks;
+
+    @Override
+    public void onStart() {
+        tasks = Arrays.asList(
+            new BankTask(this),
+            new ChopTask(this),
+            new WalkTask(this)
+        );
+    }
+
+    @Override
+    public int poll() {
+        // Execute first activated task
+        for (Task task : tasks) {
+            if (task.activate()) {
+                task.execute();
+                return 0;  // Task handles its own timing
+            }
+        }
+        return 600; // Default sleep
+    }
+}
+```
+
+### Professional Paint Overlay Implementation
+
+**Reference Standard**: dSunbleakWCer style - clean, minimal, professional.
+
+**Complete Implementation**:
+```java
+// Paint fields
+private Image logoImage = null;
+private long startTime;
+private int startLevel = 0;  // IMPORTANT: Initialize to 0, not 1!
+private int currentLevel = 1;
+
+private static final Font FONT_LABEL = new Font("Arial", Font.PLAIN, 12);
+private static final Font FONT_VALUE_BOLD = new Font("Arial", Font.BOLD, 12);
+
+@Override
+public void onStart() {
+    startTime = System.currentTimeMillis();
+    ensureLogoLoaded();  // Load logo from resources
+}
+
+@Override
+public void onPaint(Canvas c) {
+    long elapsed = System.currentTimeMillis() - startTime;
+    double hours = Math.max(1e-9, elapsed / 3_600_000.0);
+    String runtime = formatRuntime(elapsed);
+
+    // Get live XP data (if using XP tracker)
+    String ttlText = "-";
+    double etl = 0.0;
+    double xpGainedLive = 0.0;
+    double currentXp = 0.0;
+    double levelProgressFraction = 0.0;
+
+    if (xpTracking != null) {
+        XPTracker tracker = xpTracking.getWoodcuttingTracker();
+        if (tracker != null) {
+            xpGainedLive = tracker.getXpGained();
+            currentXp = tracker.getXp();
+
+            // Sync level (only increases)
+            final int MAX_LEVEL = 99;
+            int guard = 0;
+            while (currentLevel < MAX_LEVEL
+                    && currentXp >= tracker.getExperienceForLevel(currentLevel + 1)
+                    && guard++ < 10) {
+                currentLevel++;
+            }
+
+            // Handle max level
+            if (currentLevel >= 99) {
+                ttlText = "MAXED";
+                etl = 0;
+                levelProgressFraction = 1.0;
+            } else {
+                ttlText = tracker.timeToNextLevelString();
+
+                // Calculate progress to next level
+                int curLevelXpStart = tracker.getExperienceForLevel(currentLevel);
+                int nextLevelXpTarget = tracker.getExperienceForLevel(
+                    Math.min(MAX_LEVEL, currentLevel + 1));
+                int span = Math.max(1, nextLevelXpTarget - curLevelXpStart);
+
+                etl = Math.max(0, nextLevelXpTarget - currentXp);
+                levelProgressFraction = Math.max(0.0, Math.min(1.0,
+                    (currentXp - curLevelXpStart) / (double) span));
+            }
+        }
+    }
+
+    // Calculate rates
+    int xpPerHour = (int) Math.round(xpGainedLive / hours);
+
+    // Handle level gain display
+    if (startLevel <= 0) startLevel = currentLevel;
+    int levelsGained = Math.max(0, currentLevel - startLevel);
+    String currentLevelText = (levelsGained > 0)
+        ? (currentLevel + " (+" + levelsGained + ")")
+        : String.valueOf(currentLevel);
+
+    // === Panel Layout ===
+    final int x = 5;
+    final int baseY = 40;
+    final int width = 225;
+    final int borderThickness = 2;
+    final int paddingX = 10;
+    final int lineGap = 16;
+
+    // Clean, professional colors
+    final int labelGray = new Color(180, 180, 180).getRGB();
+    final int valueWhite = Color.WHITE.getRGB();
+    final int valueGreen = new Color(80, 220, 120).getRGB();
+    final Color bgColor = Color.decode("#01031C");  // Deep blue/black
+
+    int innerX = x;
+    int innerY = baseY;
+    int innerWidth = width;
+
+    // Calculate panel height
+    int totalLines = 8;
+    int y = innerY + 6;
+    if (logoImage != null) y += logoImage.height + 8;
+    y += totalLines * lineGap + 16;
+    int innerHeight = Math.max(200, y - innerY);
+
+    // Draw panel border and background
+    c.fillRect(innerX - borderThickness, innerY - borderThickness,
+        innerWidth + (borderThickness * 2),
+        innerHeight + (borderThickness * 2),
+        Color.WHITE.getRGB(), 1);
+    c.fillRect(innerX, innerY, innerWidth, innerHeight,
+        bgColor.getRGB(), 1);
+    c.drawRect(innerX, innerY, innerWidth, innerHeight,
+        Color.WHITE.getRGB());
+
+    int curY = innerY + 6;
+
+    // Draw logo if loaded
+    if (logoImage != null) {
+        int imgX = innerX + (innerWidth - logoImage.width) / 2;
+        c.drawAtOn(logoImage, imgX, curY);
+        curY += logoImage.height + 8;
+    }
+
+    // Draw stat lines (clean, no decorations)
+    curY += lineGap;
+    drawStatLine(c, innerX, innerWidth, paddingX, curY,
+        "Runtime", runtime, labelGray, valueWhite,
+        FONT_VALUE_BOLD, FONT_LABEL);
+
+    curY += lineGap;
+    drawStatLine(c, innerX, innerWidth, paddingX, curY,
+        "XP/hr", formatInt(xpPerHour), labelGray, valueWhite,
+        FONT_VALUE_BOLD, FONT_LABEL);
+
+    curY += lineGap;
+    drawStatLine(c, innerX, innerWidth, paddingX, curY,
+        "Level", currentLevelText, labelGray, valueGreen,
+        FONT_VALUE_BOLD, FONT_LABEL);
+
+    curY += lineGap;
+    String etlText = (currentLevel >= 99) ? "MAXED" : formatInt((int) Math.round(etl));
+    drawStatLine(c, innerX, innerWidth, paddingX, curY,
+        "XP to level", etlText, labelGray, valueWhite,
+        FONT_VALUE_BOLD, FONT_LABEL);
+
+    curY += lineGap;
+    drawStatLine(c, innerX, innerWidth, paddingX, curY,
+        "Time to level", ttlText, labelGray, valueWhite,
+        FONT_VALUE_BOLD, FONT_LABEL);
+}
+
+private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
+                          String label, String value, int labelColor, int valueColor,
+                          Font valueFont, Font labelFont) {
+    c.drawText(label, innerX + paddingX, y, labelColor, labelFont);
+    int valW = c.getFontMetrics(valueFont).stringWidth(value);
+    int valX = innerX + innerWidth - paddingX - valW;
+    c.drawText(value, valX, y, valueColor, valueFont);
+}
+
+private void ensureLogoLoaded() {
+    if (logoImage != null) return;
+
+    try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
+        if (in == null) {
+            log(getClass(), "Logo '/logo.png' not found on classpath.");
+            return;
+        }
+
+        BufferedImage src = ImageIO.read(in);
+        if (src == null) return;
+
+        // Convert to ARGB
+        BufferedImage argb = new BufferedImage(
+            src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = argb.createGraphics();
+        g.setComposite(AlphaComposite.Src);
+        g.drawImage(src, 0, 0, null);
+        g.dispose();
+
+        int w = argb.getWidth();
+        int h = argb.getHeight();
+        int[] px = new int[w * h];
+        argb.getRGB(0, 0, w, h, px, 0, w);
+
+        // Premultiply alpha for correct rendering
+        for (int i = 0; i < px.length; i++) {
+            int p = px[i];
+            int a = (p >>> 24) & 0xFF;
+            if (a == 0) {
+                px[i] = 0x00000000;
+            } else {
+                int r = (p >>> 16) & 0xFF;
+                int g_val = (p >>> 8) & 0xFF;
+                int b = p & 0xFF;
+                r = (r * a + 127) / 255;
+                g_val = (g_val * a + 127) / 255;
+                b = (b * a + 127) / 255;
+                px[i] = (a << 24) | (r << 16) | (g_val << 8) | b;
+            }
+        }
+
+        logoImage = new Image(px, w, h);
+    } catch (Exception e) {
+        log(getClass(), "Error loading logo: " + e.getMessage());
+    }
+}
+
+private String formatRuntime(long ms) {
+    long seconds = ms / 1000;
+    long minutes = seconds / 60;
+    long hours = minutes / 60;
+
+    return String.format("%02d:%02d:%02d",
+        hours, minutes % 60, seconds % 60);
+}
+
+private String formatInt(int value) {
+    return String.format("%,d", value);
+}
+```
+
+**IMPORTANT**: Place logo in `src/main/resources/logo.png`, NOT just `resources/logo.png`!
+
+---
+
 ## GEM CUTTING SCRIPTS (Lessons from tGemCutter)
 
 ### Critical Differences from Other Crafting Scripts

@@ -7,7 +7,7 @@
 To build any script JAR (e.g., dSunbleakWCer):
 
 ```bash
-cd /Users/zaffre/Documents/Engineering/Projects/davys-scripts/dSunbleakWCer
+cd /Users/zaffre/Documents/Engineering/Projects/tidals-scripts/dSunbleakWCer
 JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle clean build
 ```
 
@@ -25,7 +25,7 @@ The JAR will be output to: `dSunbleakWCer/jar/dSunbleakWCer.jar`
 
 ### Project Structure
 ```
-davys-scripts/
+tidals-scripts/
 ├── API/
 │   └── API.jar              # OSMB API dependency (Java 17)
 ├── dScriptName/
@@ -110,7 +110,7 @@ clean {
 
 ```bash
 # navigate to script directory
-cd /Users/zaffre/Documents/Engineering/Projects/davys-scripts/dScriptName
+cd /Users/zaffre/Documents/Engineering/Projects/tidals-scripts/dScriptName
 
 # set java 17 and build
 JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle clean build
@@ -125,7 +125,7 @@ gradle clean
 ### One-Liner from Root
 
 ```bash
-cd /Users/zaffre/Documents/Engineering/Projects/davys-scripts/dScriptName && JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle clean build
+cd /Users/zaffre/Documents/Engineering/Projects/tidals-scripts/dScriptName && JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle clean build
 ```
 
 ### Set JAVA_HOME Permanently (Optional)
@@ -162,7 +162,7 @@ Find the main script file (e.g., `dSunbleakWCer.java`):
         description = "Chops and optionally banks Ironwood logs on Sunbleak island",
         skillCategory = SkillCategory.WOODCUTTING,
         version = 1.3,  // <-- update this
-        author = "JustDavyy"
+        author = "Tidal"
 )
 public class dSunbleakWCer extends Script {
     // ...
@@ -250,7 +250,7 @@ gradle clean build
 ### 1. Create Directory Structure
 
 ```bash
-cd /Users/zaffre/Documents/Engineering/Projects/davys-scripts
+cd /Users/zaffre/Documents/Engineering/Projects/tidals-scripts
 mkdir -p dNewScript/src/main/{java,resources}
 mkdir -p dNewScript/jar
 ```
@@ -336,7 +336,7 @@ Create `build-all.sh` in project root:
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
 
 # root directory
-ROOT="/Users/zaffre/Documents/Engineering/Projects/davys-scripts"
+ROOT="/Users/zaffre/Documents/Engineering/Projects/tidals-scripts"
 cd "$ROOT"
 
 # find all directories with build.gradle
