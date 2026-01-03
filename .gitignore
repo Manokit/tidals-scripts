@@ -14,3 +14,6 @@ dSunbleakWCer/gradlew
 dSunbleakWCer/gradlew.bat
 dSunbleakWCer/settings.gradle
 .DS_Store
+
+.claude/
+.vscode/
