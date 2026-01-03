@@ -10,7 +10,7 @@ import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.script.Script;
 import utils.Task;
 
-import static main.tGemCutter.*;
+import static main.TidalsGemCutter.*;
 
 public class Process extends Task {
     private final long startTime;

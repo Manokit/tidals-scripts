@@ -12,7 +12,7 @@ import utils.Task;
 
 import java.util.Set;
 
-import static main.tGemCutter.*;
+import static main.TidalsGemCutter.*;
 
 
 public class Setup extends Task {

@@ -33,13 +33,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 @ScriptDefinition(
-        name = "tGemCutter",
+        name = "TidalsGemCutter",
         description = "Cuts gems using a chisel",
         skillCategory = SkillCategory.CRAFTING,
         version = 1.0,
         author = "Tidaleus"
 )
-public class tGemCutter extends Script {
+public class TidalsGemCutter extends Script {
     public static final String scriptVersion = "1.0";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
@@ -99,7 +99,7 @@ public class tGemCutter extends Script {
                     Arrays.stream(obj.getActions()).anyMatch(action -> Arrays.stream(BANK_ACTIONS).anyMatch(bankAction -> bankAction.equalsIgnoreCase(action))) &&
                     obj.canReach();
 
-    public tGemCutter(Object scriptCore) {
+    public TidalsGemCutter(Object scriptCore) {
         super(scriptCore);
         this.xpTracking = new XPTracking(this);
     }
@@ -172,7 +172,7 @@ public class tGemCutter extends Script {
 
     @Override
     public void onStart() {
-        log("INFO", "Starting tGemCutter v" + scriptVersion);
+        log("INFO", "Starting TidalsGemCutter v" + scriptVersion);
 
         ScriptUI ui = new ScriptUI(this);
         Scene scene = ui.buildScene(this);

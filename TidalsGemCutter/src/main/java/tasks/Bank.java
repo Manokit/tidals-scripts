@@ -6,7 +6,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.utils.timing.Timer;
-import main.tGemCutter;
+import main.TidalsGemCutter;
 import utils.Task;
 
 import java.util.Collections;
@@ -15,7 +15,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static main.tGemCutter.*;
+import static main.TidalsGemCutter.*;
 
 public class Bank extends Task {
 
@@ -120,14 +120,14 @@ public class Bank extends Task {
         task = "Open bank";
         script.log(getClass(), "Searching for a bank...");
 
-        List<RSObject> banksFound = script.getObjectManager().getObjects(tGemCutter.bankQuery);
+        List<RSObject> banksFound = script.getObjectManager().getObjects(TidalsGemCutter.bankQuery);
         if (banksFound.isEmpty()) {
             script.log(getClass(), "No bank objects found.");
             return;
         }
 
         RSObject bank = (RSObject) script.getUtils().getClosest(banksFound);
-        if (!bank.interact(tGemCutter.BANK_ACTIONS)) {
+        if (!bank.interact(TidalsGemCutter.BANK_ACTIONS)) {
             script.log(getClass(), "Failed to interact with bank object.");
             return;
         }
