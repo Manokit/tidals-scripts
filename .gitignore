@@ -10,10 +10,12 @@ build.gradle
 ButterBanner.psd
 /priv-jars/src_com_butterfoundry
 dSunbleakWCer/gradlew
-dSunbleakWCer/gradlew
+dSunbleakWCer/gradlewe
 dSunbleakWCer/gradlew.bat
 dSunbleakWCer/settings.gradle
 .DS_Store
 
 .claude/
 .vscode/
+
+Example Scripts/
