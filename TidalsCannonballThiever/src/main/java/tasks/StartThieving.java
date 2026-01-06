@@ -66,34 +66,13 @@ public class StartThieving extends Task {
             script.log("THIEVE", "Initial positioning complete!");
         }
 
-        // STEP 2: triple check danger zone before stealing
-        script.log("THIEVE", "Checking danger zone...");
-
-        // check 1
+        // STEP 2: instant danger check - NO DELAYS, speed is critical
         if (guardTracker.isAnyGuardInDangerZone()) {
-            script.log("THIEVE", "ABORT - Guard in danger zone (check 1)");
+            script.log("THIEVE", "ABORT - Guard in danger zone");
             return false; // retreat task will handle it
         }
 
-        // small delay between checks
-        script.pollFramesHuman(() -> false, script.random(50, 100));
-
-        // check 2
-        if (guardTracker.isAnyGuardInDangerZone()) {
-            script.log("THIEVE", "ABORT - Guard in danger zone (check 2)");
-            return false;
-        }
-
-        // small delay between checks
-        script.pollFramesHuman(() -> false, script.random(50, 100));
-
-        // check 3
-        if (guardTracker.isAnyGuardInDangerZone()) {
-            script.log("THIEVE", "ABORT - Guard in danger zone (check 3)");
-            return false;
-        }
-
-        script.log("THIEVE", "All clear! Starting to steal...");
+        script.log("THIEVE", "Clear - starting to steal...");
 
         // STEP 3: find and click the stall
         WorldPosition myPos = script.getWorldPosition();

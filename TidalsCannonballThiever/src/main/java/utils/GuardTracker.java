@@ -11,11 +11,17 @@ public class GuardTracker {
 
     private final Script script;
 
-    // danger tiles where guards cause us to retreat
-    // guard patrol: ... -> 1865,3295 (sits here) -> 1866,3295 -> 1867,3295 -> ...
-    // we only retreat when guard moves to 1866 or 1867 (1865 is safe, guard sits there awhile)
-    private static final WorldPosition DANGER_TILE_1 = new WorldPosition(1866, 3295, 0); // guard approaching stall
-    private static final WorldPosition DANGER_TILE_2 = new WorldPosition(1867, 3295, 0); // at the stall
+    // early warning tile - guard sits here for ~3 seconds
+    private static final int EARLY_WARNING_X = 1865;
+    private static final int PATROL_Y = 3295;
+
+    // immediate danger tiles
+    private static final int DANGER_X_1 = 1866;
+    private static final int DANGER_X_2 = 1867;
+
+    // track when we first saw guard at early warning tile
+    private long earlyWarningStartTime = 0;
+    private static final long EARLY_WARNING_DELAY_MS = 2000; // wait 2 seconds before retreating from 1865
 
     // store last known npc positions for paint/debugging
     private List<WorldPosition> lastNpcPositions = new ArrayList<>();
@@ -48,36 +54,56 @@ public class GuardTracker {
 
     /**
      * check if any npc is at a danger tile
+     * - immediate danger (1866, 1867): return true right away
+     * - early warning (1865): return true after 2 seconds delay
      * @return true if danger detected
      */
     public boolean isAnyGuardInDangerZone() {
         List<WorldPosition> npcPositions = findAllNPCPositions();
 
+        boolean guardAtEarlyWarning = false;
+        boolean guardAtImmediateDanger = false;
+
         for (WorldPosition npcPos : npcPositions) {
-            if (isDangerTile(npcPos)) {
-                script.log("GUARD", "DANGER! NPC at danger tile: " + npcPos);
+            if (npcPos == null || npcPos.getPlane() != 0) continue;
+
+            int x = (int) npcPos.getX();
+            int y = (int) npcPos.getY();
+
+            // check patrol row
+            if (y != PATROL_Y) continue;
+
+            // immediate danger - retreat NOW
+            if (x == DANGER_X_1 || x == DANGER_X_2) {
+                script.log("GUARD", "IMMEDIATE DANGER! NPC at x=" + x);
+                earlyWarningStartTime = 0; // reset early warning timer
                 return true;
+            }
+
+            // early warning - guard at 1865
+            if (x == EARLY_WARNING_X) {
+                guardAtEarlyWarning = true;
             }
         }
 
-        return false;
-    }
+        // handle early warning with delay
+        if (guardAtEarlyWarning) {
+            if (earlyWarningStartTime == 0) {
+                // first time seeing guard at 1865
+                earlyWarningStartTime = System.currentTimeMillis();
+                script.log("GUARD", "Early warning - guard at 1865, starting 2s countdown");
+            }
 
-    /**
-     * check if position matches any danger tile exactly
-     */
-    private boolean isDangerTile(WorldPosition pos) {
-        if (pos == null || pos.getPlane() != 0) return false;
-
-        int x = (int) pos.getX();
-        int y = (int) pos.getY();
-
-        // only 1866 and 1867 are danger tiles
-        // 1865 is safe (guard sits there awhile before moving)
-        // 1866,3295 - guard approaching stall - RETREAT
-        if (x == 1866 && y == 3295) return true;
-        // 1867,3295 - at the stall - RETREAT
-        if (x == 1867 && y == 3295) return true;
+            long elapsed = System.currentTimeMillis() - earlyWarningStartTime;
+            if (elapsed >= EARLY_WARNING_DELAY_MS) {
+                script.log("GUARD", "Early warning expired after " + elapsed + "ms - retreating!");
+                return true;
+            }
+            // still waiting, don't retreat yet
+        } else {
+            // guard no longer at 1865, reset timer
+            earlyWarningStartTime = 0;
+        }
 
         return false;
     }
@@ -90,22 +116,26 @@ public class GuardTracker {
     public boolean isSafeToReturn() {
         List<WorldPosition> npcPositions = findAllNPCPositions();
 
-        // check if any npc is still in the danger zone or approaching
+        // check if any npc is in the guard patrol area (x 1864-1867, y 3295)
+        // ignore NPCs outside this range - they're not guards
         for (WorldPosition npcPos : npcPositions) {
             if (npcPos == null || npcPos.getPlane() != 0) continue;
 
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // if npc is on the patrol row (y=3295) and x is 1867 or less, not safe yet
-            // guard walks right, so we wait until x >= 1868
-            if (y == 3295 && x <= 1867) {
-                script.log("GUARD", "Not safe yet - NPC at x=" + x + ", y=" + y + " (waiting for x >= 1868)");
+            // only check NPCs in the guard patrol zone (x 1864-1867 at y=3295)
+            // NPCs outside this range are not the patrolling guard
+            if (y == PATROL_Y && x >= 1864 && x <= DANGER_X_2) {
+                script.log("GUARD", "Not safe yet - NPC at x=" + x + " in patrol zone");
                 return false;
             }
         }
 
-        script.log("GUARD", "Safe to return - no NPCs in danger zone");
+        // reset early warning timer when returning
+        earlyWarningStartTime = 0;
+
+        script.log("GUARD", "Safe to return - patrol zone clear");
         return true;
     }
 
