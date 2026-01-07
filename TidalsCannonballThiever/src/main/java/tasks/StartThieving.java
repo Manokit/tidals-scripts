@@ -34,28 +34,28 @@ public class StartThieving extends Task {
             return false;
         }
 
-        // only activate if at thieving tile
-        return isAtThievingTile();
+        // activate if at thieving tile OR at safety tile when guard has passed
+        return isAtThievingTile() || (isAtSafetyTile() && guardTracker.isSafeToReturn());
     }
 
     @Override
     public boolean execute() {
         task = "Starting thieving";
 
-        // STEP 1: only on first run, walk to EXACT thieving tile
+        // STEP 1: only on first run, walk to EXACT thieving tile via minimap
         if (!initialPositionDone) {
             if (!isAtExactThievingTile()) {
                 task = "Initial positioning";
-                script.log("THIEVE", "First run - walking to exact thieving tile...");
+                script.log("THIEVE", "First run - walking to exact thieving tile via minimap...");
 
-                // use direct tile click for short distance
-                Polygon tilePoly = script.getSceneProjector().getTileCube(THIEVING_TILE, 0);
-                if (tilePoly != null) {
-                    script.getFinger().tap(tilePoly, "Walk here");
-                } else {
-                    script.getWalker().walkTo(THIEVING_TILE);
-                }
+                // use minimap-only to avoid clicking any entities
+                WalkConfig minimapOnly = new WalkConfig.Builder()
+                        .disableWalkScreen(true)
+                        .breakDistance(0)
+                        .tileRandomisationRadius(0)
+                        .build();
 
+                script.getWalker().walkTo(THIEVING_TILE, minimapOnly);
                 script.pollFramesUntil(() -> isAtExactThievingTile(), 5000);
 
                 // small delay after arriving
@@ -202,6 +202,15 @@ public class StartThieving extends Task {
         int x = (int) current.getX();
         int y = (int) current.getY();
         return x == 1867 && y == 3298 && current.getPlane() == 0;
+    }
+
+    private boolean isAtSafetyTile() {
+        WorldPosition current = script.getWorldPosition();
+        if (current == null) return false;
+
+        int x = (int) current.getX();
+        int y = (int) current.getY();
+        return x == 1867 && y == 3299;
     }
 
     private boolean isPolygonTapSafe(Polygon poly) {

@@ -7,7 +7,6 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class WaitAtSafety extends Task {
-    private static final WorldPosition WALKBACK_TILE = new WorldPosition(1867, 3299, 0);
 
     public WaitAtSafety(Script script) {
         super(script);
@@ -15,31 +14,31 @@ public class WaitAtSafety extends Task {
 
     @Override
     public boolean activate() {
-        // activate if at walkback tile AND not safe to return yet (guard still too close)
-        return isAtWalkbackTile() && !guardTracker.isSafeToReturn();
+        // activate if at safety tile and guard hasn't passed yet
+        return isAtSafetyTile() && !guardTracker.isSafeToReturn();
     }
 
     @Override
     public boolean execute() {
-        task = "Waiting for guard to pass...";
+        task = "Waiting for guard...";
 
-        // poll until guard has moved past the stall (x >= 1868)
-        script.pollFramesHuman(() -> {
+        // fast poll until guard has moved past
+        script.pollFramesUntil(() -> {
             boolean safe = guardTracker.isSafeToReturn();
-
             if (safe) {
-                script.log("WAIT", "Guard has passed! Safe to return.");
+                script.log("WAIT", "Guard passed!");
             }
-
             return safe;
-        }, script.random(8000, 12000)); // wait longer for guard to pass
+        }, 10000);
 
         return true;
     }
 
-    private boolean isAtWalkbackTile() {
-        WorldPosition current = script.getWorldPosition();
-        if (current == null) return false;
-        return current.equals(WALKBACK_TILE);
+    private boolean isAtSafetyTile() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) return false;
+        int x = (int) pos.getX();
+        int y = (int) pos.getY();
+        return x == 1867 && y == 3299;
     }
 }

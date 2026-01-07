@@ -1,95 +1,87 @@
 package tasks;
 
-import com.osmb.api.input.MenuEntry;
-import com.osmb.api.input.MenuHook;
 import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
-import com.osmb.api.shape.Polygon;
+import com.osmb.api.walker.WalkConfig;
 import utils.Task;
-
-import java.util.concurrent.atomic.AtomicReference;
 
 import static main.TidalsCannonballThiever.*;
 
 public class ReturnToThieving extends Task {
     private static final WorldPosition THIEVING_TILE = new WorldPosition(1867, 3298, 0);
+    
+    // the general thieving area - if we're in here, normal flow works
     private static final RectangleArea THIEVING_AREA = new RectangleArea(1865, 3296, 1869, 3300, 0);
+
+    // minimap-only config for repositioning
+    private final WalkConfig minimapOnlyConfig;
 
     public ReturnToThieving(Script script) {
         super(script);
+        this.minimapOnlyConfig = new WalkConfig.Builder()
+                .disableWalkScreen(true)
+                .breakDistance(2)
+                .tileRandomisationRadius(0)
+                .build();
     }
 
     @Override
     public boolean activate() {
-        // activate if NOT at thieving tile AND guard has passed (safe to return)
-        return !isAtThievingTile() && guardTracker.isSafeToReturn();
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) return false;
+        if (currentlyThieving) return false;
+        
+        // if we're far from thieving area (e.g. starting near jail), always activate
+        if (!isInThievingArea()) {
+            script.log("RETURN", "Far from stall area, need to walk there");
+            return true;
+        }
+        
+        // if we're in the area but not at exact tiles, activate when safe
+        return !isAtSafetyTile() && !isAtThievingTile() && guardTracker.isSafeToReturn();
     }
 
     @Override
     public boolean execute() {
-        task = "Returning to stall";
-        script.log("RETURN", "Guard has passed, returning to thieving tile");
-
-        // get tile polygon for direct click (more reliable for short distances)
-        // height 0 gives flat tile surface
-        Polygon tilePoly = script.getSceneProjector().getTileCube(THIEVING_TILE, 0);
-
-        if (tilePoly == null) {
-            // fallback to walker if tile not visible
-            script.log("RETURN", "Tile not visible, using walker...");
-            script.getWalker().walkTo(THIEVING_TILE);
-        } else {
-            // use menu hook to click "walk here" on tile
-            AtomicReference<String> selectedAction = new AtomicReference<>(null);
-            MenuHook hook = getWalkHereMenuHook(selectedAction);
-
-            boolean clicked = script.getFinger().tap(tilePoly, hook);
-
-            if (clicked && selectedAction.get() != null) {
-                script.log("RETURN", "Clicked walk here on thieving tile");
-            } else {
-                // fallback to walker
-                script.log("RETURN", "Walk click failed, using walker...");
-                script.getWalker().walkTo(THIEVING_TILE);
-            }
+        task = "Walking to stall";
+        
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) {
+            script.log("RETURN", "Position null, waiting...");
+            return false;
         }
+        
+        script.log("RETURN", "Walking to thieving tile via minimap...");
+        script.getWalker().walkTo(THIEVING_TILE, minimapOnlyConfig);
+        
+        // wait longer if we're far away
+        int timeout = isInThievingArea() ? 3000 : 15000;
+        script.pollFramesUntil(() -> isAtThievingTile() || isAtSafetyTile(), timeout);
 
-        // wait until we reach thieving tile
-        script.pollFramesUntil(() -> isAtThievingTile(), 3000);
-
-        // humanized delay after arriving (not critical)
-        script.pollFramesHuman(() -> false, script.random(300, 600));
-
-        script.log("RETURN", "Back at thieving tile, ready to resume");
+        script.log("RETURN", "Arrived at stall area!");
         return true;
     }
 
-    /**
-     * menu hook that only selects "walk here" action
-     */
-    private static MenuHook getWalkHereMenuHook(AtomicReference<String> selected) {
-        return menuEntries -> {
-            selected.set(null);
+    private boolean isInThievingArea() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) return false;
+        return THIEVING_AREA.contains(pos);
+    }
 
-            if (menuEntries == null) return null;
-
-            for (MenuEntry entry : menuEntries) {
-                String action = entry.getAction().toLowerCase();
-
-                if (action.contains("walk")) {
-                    selected.set(entry.getAction());
-                    return entry;
-                }
-            }
-
-            return null;
-        };
+    private boolean isAtSafetyTile() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) return false;
+        int x = (int) pos.getX();
+        int y = (int) pos.getY();
+        return x == 1867 && y == 3299;
     }
 
     private boolean isAtThievingTile() {
         WorldPosition current = script.getWorldPosition();
         if (current == null) return false;
-        return THIEVING_AREA.contains(current);
+        int x = (int) current.getX();
+        int y = (int) current.getY();
+        return x == 1867 && y == 3298;
     }
 }

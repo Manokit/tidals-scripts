@@ -2,56 +2,54 @@ package tasks;
 
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
-import com.osmb.api.shape.Polygon;
+import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
 import static main.TidalsCannonballThiever.*;
 
 public class Retreat extends Task {
-    private static final WorldPosition WALKBACK_TILE = new WorldPosition(1867, 3299, 0);
+    // safety tile - 1 tile north of thieving spot (away from stall)
+    private static final WorldPosition SAFETY_TILE = new WorldPosition(1867, 3299, 0);
+
+    // minimap-only config to avoid clicking stall
+    private final WalkConfig minimapOnlyConfig;
 
     public Retreat(Script script) {
         super(script);
+        this.minimapOnlyConfig = new WalkConfig.Builder()
+                .disableWalkScreen(true)  // minimap only - won't click stall
+                .breakDistance(0)
+                .tileRandomisationRadius(0)
+                .build();
     }
 
     @Override
     public boolean activate() {
-        // highest priority - activate if any npc in danger zone and we're not already at walkback
-        return !isAtWalkbackTile() && guardTracker.isAnyGuardInDangerZone();
+        // highest priority - activate if any npc in danger zone and we're still thieving
+        return currentlyThieving && guardTracker.isAnyGuardInDangerZone();
     }
 
     @Override
     public boolean execute() {
         task = "RETREATING!";
-        currentlyThieving = false; // stop thieving, we need to retreat
-        script.log("RETREAT", "EMERGENCY - retreating NOW!");
+        currentlyThieving = false;
+        script.log("RETREAT", "Guard danger - stepping back via minimap!");
 
-        // FAST direct click - no menu hook, just click the tile
-        // left-click on ground defaults to "walk here"
-        Polygon tilePoly = script.getSceneProjector().getTileCube(WALKBACK_TILE, 0);
+        // walk 1 tile north via minimap to escape stall interaction
+        script.getWalker().walkTo(SAFETY_TILE, minimapOnlyConfig);
 
-        if (tilePoly != null) {
-            // fast direct tap - no menu hook overhead
-            script.getFinger().tap(tilePoly);
-            script.log("RETREAT", "Fast clicked safety tile");
-        } else {
-            // fallback to walker if tile not visible
-            script.getWalker().walkTo(WALKBACK_TILE);
-        }
+        // wait until we're at safety tile
+        script.pollFramesUntil(() -> isAtSafetyTile(), 3000);
 
-        // wait until we reach walkback tile (no humanization - critical)
-        script.pollFramesUntil(() -> isAtWalkbackTile(), 3000);
-
-        script.log("RETREAT", "Safe!");
+        script.log("RETREAT", "Safe! Waiting for guard to pass...");
         return true;
     }
 
-    private boolean isAtWalkbackTile() {
-        WorldPosition current = script.getWorldPosition();
-        if (current == null) return false;
-        // exact match only
-        int x = (int) current.getX();
-        int y = (int) current.getY();
-        return x == 1867 && y == 3299 && current.getPlane() == 0;
+    private boolean isAtSafetyTile() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) return false;
+        int x = (int) pos.getX();
+        int y = (int) pos.getY();
+        return x == 1867 && y == 3299;
     }
 }

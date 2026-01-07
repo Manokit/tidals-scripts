@@ -19,15 +19,18 @@ public class MonitorThieving extends Task {
 
     @Override
     public boolean execute() {
-        task = "Monitoring guards";
+        task = "Thieving...";
 
-        // FAST danger check - no delays here, speed is critical!
-        if (guardTracker.isAnyGuardInDangerZone()) {
-            script.log("MONITOR", "DANGER! Triggering retreat.");
-            return true; // retreat task will run next poll
+        // poll with danger check as break condition - checks every frame but doesn't spam
+        // breaks immediately if guard enters danger zone
+        boolean dangerDetected = script.pollFramesUntil(() -> {
+            return guardTracker.isAnyGuardInDangerZone();
+        }, 500); // check for 500ms, break early if danger
+
+        if (dangerDetected) {
+            script.log("MONITOR", "DANGER! Guard in zone - retreating!");
         }
 
-        // no delays - we need to check danger as fast as possible
         return true;
     }
 }

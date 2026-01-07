@@ -21,7 +21,7 @@ public class GuardTracker {
 
     // track when we first saw guard at early warning tile
     private long earlyWarningStartTime = 0;
-    private static final long EARLY_WARNING_DELAY_MS = 2000; // wait 2 seconds before retreating from 1865
+    private static final long EARLY_WARNING_DELAY_MS = 3500; // wait 3.5 seconds before retreating from 1865
 
     // store last known npc positions for paint/debugging
     private List<WorldPosition> lastNpcPositions = new ArrayList<>();

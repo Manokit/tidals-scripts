@@ -73,6 +73,7 @@ public class TidalsCannonballThiever extends Script {
         // Initialize tasks in priority order
         tasks = Arrays.asList(
                 new Setup(this),
+                new EscapeJail(this),      // high priority - escape jail if caught
                 new Retreat(this),
                 new WaitAtSafety(this),
                 new ReturnToThieving(this),
