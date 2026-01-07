@@ -62,14 +62,36 @@ public class StartThieving extends Task {
                 script.pollFramesHuman(() -> false, script.random(200, 400));
                 return false;
             }
+            
+            // CRITICAL: check guard BEFORE marking positioning done
+            // if guard is in danger zone, wait for them to pass first
+            if (guardTracker.isAnyGuardInDangerZone()) {
+                task = "Waiting for guard (setup)";
+                script.log("THIEVE", "At position but guard in danger zone - waiting...");
+                return false; // retreat task will handle it, or wait task
+            }
+            
+            // also wait if guard is about to arrive (early warning active)
+            if (!guardTracker.isSafeToReturn()) {
+                task = "Guard nearby (setup)";
+                script.log("THIEVE", "At position but guard nearby - waiting for them to pass...");
+                return false;
+            }
+            
             initialPositionDone = true;
-            script.log("THIEVE", "Initial positioning complete!");
+            script.log("THIEVE", "Initial positioning complete - guard clear!");
         }
 
         // STEP 2: instant danger check - NO DELAYS, speed is critical
         if (guardTracker.isAnyGuardInDangerZone()) {
             script.log("THIEVE", "ABORT - Guard in danger zone");
             return false; // retreat task will handle it
+        }
+        
+        // extra safety: also check isSafeToReturn
+        if (!guardTracker.isSafeToReturn()) {
+            script.log("THIEVE", "ABORT - Guard still in patrol zone");
+            return false;
         }
 
         script.log("THIEVE", "Clear - starting to steal...");

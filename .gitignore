@@ -19,3 +19,6 @@ dSunbleakWCer/settings.gradle
 .vscode/
 
 Example Scripts/
+
+#class files
+**/*.class

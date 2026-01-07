@@ -12,11 +12,11 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class EscapeJail extends Task {
-    // jail cell is 2x2 at roughly (1884-1885, 3273-3274)
+    // jail cell area (slightly expanded to catch edge cases)
     private static final int JAIL_MIN_X = 1884;
-    private static final int JAIL_MAX_X = 1885;
-    private static final int JAIL_MIN_Y = 3273;
-    private static final int JAIL_MAX_Y = 3274;
+    private static final int JAIL_MAX_X = 1886;
+    private static final int JAIL_MIN_Y = 3272;
+    private static final int JAIL_MAX_Y = 3275;
 
     // door position
     private static final WorldPosition DOOR_TILE = new WorldPosition(1885, 3273, 0);

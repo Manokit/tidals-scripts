@@ -6,10 +6,12 @@ import com.osmb.api.utils.UIResultList;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class GuardTracker {
 
     private final Script script;
+    private final Random random = new Random();
 
     // early warning tile - guard sits here for ~3 seconds
     private static final int EARLY_WARNING_X = 1865;
@@ -19,15 +21,35 @@ public class GuardTracker {
     private static final int DANGER_X_1 = 1866;
     private static final int DANGER_X_2 = 1867;
 
+    // early warning delay params (normal distribution)
+    private static final double DELAY_MIN_SEC = 2.5;
+    private static final double DELAY_MAX_SEC = 3.5;
+    private static final double DELAY_MEAN_SEC = 3.2;  // center of distribution
+    private static final double DELAY_STD_DEV = 0.25;  // standard deviation
+
     // track when we first saw guard at early warning tile
     private long earlyWarningStartTime = 0;
-    private static final long EARLY_WARNING_DELAY_MS = 3500; // wait 3.5 seconds before retreating from 1865
+    private long currentDelayMs = 0;  // randomized delay for current encounter
 
     // store last known npc positions for paint/debugging
     private List<WorldPosition> lastNpcPositions = new ArrayList<>();
 
     public GuardTracker(Script script) {
         this.script = script;
+    }
+
+    /**
+     * Generate a random delay using normal distribution
+     * centered around DELAY_MEAN_SEC, clamped to [DELAY_MIN_SEC, DELAY_MAX_SEC]
+     */
+    private long generateRandomDelay() {
+        // normal distribution centered at mean
+        double delay = DELAY_MEAN_SEC + random.nextGaussian() * DELAY_STD_DEV;
+        
+        // clamp to min/max
+        delay = Math.max(DELAY_MIN_SEC, Math.min(DELAY_MAX_SEC, delay));
+        
+        return (long) (delay * 1000); // convert to ms
     }
 
     /**
@@ -86,23 +108,29 @@ public class GuardTracker {
             }
         }
 
-        // handle early warning with delay
+        // handle early warning with randomized delay
         if (guardAtEarlyWarning) {
             if (earlyWarningStartTime == 0) {
-                // first time seeing guard at 1865
+                // first time seeing guard at 1865, generate random delay
                 earlyWarningStartTime = System.currentTimeMillis();
-                script.log("GUARD", "Early warning - guard at 1865, starting 2s countdown");
+                currentDelayMs = generateRandomDelay();
+                double delaySec = currentDelayMs / 1000.0;
+                script.log("GUARD", String.format("Early warning - guard at 1865, waiting %.2fs before retreat", delaySec));
             }
 
             long elapsed = System.currentTimeMillis() - earlyWarningStartTime;
-            if (elapsed >= EARLY_WARNING_DELAY_MS) {
-                script.log("GUARD", "Early warning expired after " + elapsed + "ms - retreating!");
+            if (elapsed >= currentDelayMs) {
+                double actualSec = elapsed / 1000.0;
+                script.log("GUARD", String.format("Early warning expired after %.2fs - retreating!", actualSec));
                 return true;
             }
             // still waiting, don't retreat yet
         } else {
             // guard no longer at 1865, reset timer
-            earlyWarningStartTime = 0;
+            if (earlyWarningStartTime != 0) {
+                earlyWarningStartTime = 0;
+                currentDelayMs = 0;
+            }
         }
 
         return false;
@@ -134,6 +162,7 @@ public class GuardTracker {
 
         // reset early warning timer when returning
         earlyWarningStartTime = 0;
+        currentDelayMs = 0;
 
         script.log("GUARD", "Safe to return - patrol zone clear");
         return true;
