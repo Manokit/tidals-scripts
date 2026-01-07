@@ -1,5 +1,6 @@
 package main;
 
+import com.osmb.api.ScriptCore;
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
 import com.osmb.api.location.position.types.WorldPosition;
@@ -10,6 +11,7 @@ import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
+import javafx.scene.Scene;
 import tasks.*;
 import utils.GuardTracker;
 import utils.Task;
@@ -44,7 +46,12 @@ public class TidalsCannonballThiever extends Script {
 
     public static boolean setupDone = false;
     public static int cannonballsStolen = 0;
+    public static int oresStolen = 0;
     public static Timer lastXpGain = new Timer();
+
+    // mode flags
+    public static boolean twoStallMode = false;
+    public static boolean atOreStall = false;  // track which stall we're at in two-stall mode
 
     // cannonball types from port roberts stall (sailing content)
     // map: name -> itemID
@@ -87,6 +94,9 @@ public class TidalsCannonballThiever extends Script {
     private Image logoImage = null;
     private boolean logoLoadAttempted = false;
 
+    // UI
+    private ScriptUI scriptUI;
+
     public TidalsCannonballThiever(Object scriptCore) {
         super(scriptCore);
         this.xpTracking = new XPTracking(this);
@@ -97,21 +107,35 @@ public class TidalsCannonballThiever extends Script {
         return new int[]{7475}; // port roberts cannonball stall area
     }
 
-    // only allow world hop / break / afk when at safety tile and not thieving
-    // prevents getting caught while trying to log out
+    // only allow world hop / break / afk when at safe position and not thieving
+    // two-stall mode: allow during stall transitions (before switching to ore stall)
+    // single mode: at safety tile
     @Override
     public boolean canHopWorlds() {
-        return isAtSafetyTile() && !currentlyThieving;
+        if (currentlyThieving) return false;
+        if (twoStallMode) {
+            // in two-stall mode, allow during transition when at ore stall
+            return atOreStall && !currentlyThieving;
+        }
+        return isAtSafetyTile();
     }
 
     @Override
     public boolean canBreak() {
-        return isAtSafetyTile() && !currentlyThieving;
+        if (currentlyThieving) return false;
+        if (twoStallMode) {
+            return atOreStall && !currentlyThieving;
+        }
+        return isAtSafetyTile();
     }
 
     @Override
     public boolean canAFK() {
-        return isAtSafetyTile() && !currentlyThieving;
+        if (currentlyThieving) return false;
+        if (twoStallMode) {
+            return atOreStall && !currentlyThieving;
+        }
+        return isAtSafetyTile();
     }
 
     private boolean isAtSafetyTile() {
@@ -126,6 +150,15 @@ public class TidalsCannonballThiever extends Script {
     public void onStart() {
         log("INFO", "Starting TidalsCannonballThiever v" + scriptVersion);
 
+        // Show UI for mode selection
+        scriptUI = new ScriptUI(this);
+        Scene scene = scriptUI.buildScene(this);
+        getStageController().show(scene, "Cannonball Thieving Options", false);
+
+        // Get selected mode
+        twoStallMode = scriptUI.isTwoStallMode();
+        log("UI", "Mode selected: " + (twoStallMode ? "Two Stall" : "Single Stall"));
+
         // Initialize guard tracker
         guardTracker = new GuardTracker(this);
 
@@ -136,11 +169,15 @@ public class TidalsCannonballThiever extends Script {
         }
 
         // Initialize tasks in priority order
+        // Two-stall mode tasks are added but only activate when twoStallMode is true
         tasks = Arrays.asList(
                 new Setup(this),
-                new EscapeJail(this),      // high priority - escape jail if caught
-                new Retreat(this),
-                new WaitAtSafety(this),
+                new EscapeJail(this),           // high priority - escape jail if caught
+                new DepositOres(this),          // two-stall: deposit when inventory full
+                new SwitchToOreStall(this),     // two-stall: switch to ore stall when guard approaches
+                new SwitchToCannonballStall(this), // two-stall: switch back when guard near ore stall
+                new Retreat(this),              // single-stall: retreat to safety
+                new WaitAtSafety(this),         // single-stall: wait at safety tile
                 new ReturnToThieving(this),
                 new StartThieving(this),
                 new MonitorThieving(this)
@@ -163,6 +200,18 @@ public class TidalsCannonballThiever extends Script {
     @Override
     public void onNewFrame() {
         xpTracking.checkXP();
+        
+        // TWO-STALL MODE: Continuously watch guard at specific danger tiles for instant detection
+        // This runs every frame for pixel-level movement detection (10-20x faster than tile updates!)
+        if (twoStallMode && setupDone && guardTracker != null && currentlyThieving) {
+            if (atOreStall) {
+                // At ore stall: watch guard at (1863, 3292)
+                guardTracker.shouldSwitchToCannonball();
+            } else {
+                // At cannonball stall: watch guard at (1865, 3295)
+                guardTracker.shouldSwitchToOre();
+            }
+        }
         
         // CRITICAL: only check inventory when actively thieving
         // prevents conflicts with world hop / break handler trying to open logout tab
@@ -198,6 +247,21 @@ public class TidalsCannonballThiever extends Script {
                     }
                     lastInventoryCounts.put(type, currentCount);
                 }
+            }
+            
+            // track ores in two-stall mode (when at ore stall)
+            if (twoStallMode && atOreStall) {
+                // count total inventory slots used - ores are unstackable
+                // just track how many items we have total when at ore stall
+                int currentOreCount = 0;
+                ItemGroupResult invCheck = getWidgetManager().getInventory().search(allIds);
+                if (invCheck != null) {
+                    // get count of non-cannonball items (subtract cannonballs from total)
+                    currentOreCount = invCheck.getAmount();
+                }
+                // Since we can't easily count "all" items, we'll track ore gains via XP instead
+                // or by counting slot changes - for now, skip direct ore counting here
+                // The DepositOres task will increment oresStolen when it deposits
             }
         } catch (Exception ignored) {
             // inventory read failed - silently skip this check
@@ -315,7 +379,9 @@ public class TidalsCannonballThiever extends Script {
             if (count > 0) nonZeroTypes++;
         }
         
-        int totalLines = 10 + nonZeroTypes; // base lines + one per non-zero cannonball type
+        // extra line for ores in two-stall mode, plus mode indicator
+        int extraLines = twoStallMode ? 2 : 0; // mode line + ores line (if any)
+        int totalLines = 10 + nonZeroTypes + extraLines; // base lines + one per non-zero cannonball type
         int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 10;
         int innerHeight = Math.max(230, contentHeight);
 
@@ -361,8 +427,18 @@ public class TidalsCannonballThiever extends Script {
         curY += lineGap;
         String cannonballsText = intFmt.format(cannonballsStolen) + " (" + intFmt.format(cannonballsHr) + "/hr)";
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Total", cannonballsText, labelColor, valueGreen,
+                "Total CB", cannonballsText, labelColor, valueGreen,
                 FONT_VALUE_BOLD, FONT_LABEL);
+
+        // 3b) Ores (two-stall mode only)
+        if (twoStallMode) {
+            curY += lineGap;
+            int oresHr = (int) Math.round(oresStolen / hours);
+            String oresText = intFmt.format(oresStolen) + " (" + intFmt.format(oresHr) + "/hr)";
+            drawStatLine(c, innerX, innerWidth, paddingX, curY,
+                    "Ores", oresText, labelColor, valueBlue,
+                    FONT_VALUE_BOLD, FONT_LABEL);
+        }
 
         // 4) XP gained
         curY += lineGap;
@@ -412,6 +488,15 @@ public class TidalsCannonballThiever extends Script {
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Version", scriptVersion, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
+
+        // 11) Mode (two-stall mode only)
+        if (twoStallMode) {
+            curY += lineGap;
+            String modeText = atOreStall ? "Ore Stall" : "Cannonball Stall";
+            drawStatLine(c, innerX, innerWidth, paddingX, curY,
+                    "Mode", "Two Stall (" + modeText + ")", labelColor, turquoise.getRGB(),
+                    FONT_VALUE_BOLD, FONT_LABEL);
+        }
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,

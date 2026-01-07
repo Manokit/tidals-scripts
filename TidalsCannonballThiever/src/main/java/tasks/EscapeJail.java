@@ -12,9 +12,9 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class EscapeJail extends Task {
-    // jail cell area (slightly expanded to catch edge cases)
+    // jail cell area - x <= 1885 means INSIDE cell, x > 1885 means OUT
     private static final int JAIL_MIN_X = 1884;
-    private static final int JAIL_MAX_X = 1886;
+    private static final int JAIL_MAX_X = 1885;  // x > 1885 = out of cell
     private static final int JAIL_MIN_Y = 3272;
     private static final int JAIL_MAX_Y = 3275;
 
@@ -24,7 +24,14 @@ public class EscapeJail extends Task {
     // waypoints back to stall (with randomization applied in execute)
     private static final WorldPosition WAYPOINT_1_BASE = new WorldPosition(1889, 3288, 0); // north of cell
     private static final WorldPosition WAYPOINT_2_BASE = new WorldPosition(1876, 3293, 0); // closer to stall
-    private static final WorldPosition THIEVING_TILE = new WorldPosition(1867, 3298, 0);
+    
+    // thieving tiles - different per mode
+    private static final WorldPosition THIEVING_TILE_SINGLE = new WorldPosition(1867, 3298, 0);
+    private static final WorldPosition THIEVING_TILE_TWO_STALL = new WorldPosition(1867, 3295, 0);
+
+    private WorldPosition getThievingTile() {
+        return twoStallMode ? THIEVING_TILE_TWO_STALL : THIEVING_TILE_SINGLE;
+    }
 
     private final WalkConfig minimapOnlyConfig;
 
@@ -57,24 +64,30 @@ public class EscapeJail extends Task {
         currentlyThieving = false;
         script.log("JAIL", "Caught! Attempting to escape...");
 
-        // STEP 1: Find and pick the cell door
-        if (!pickCellDoor()) {
-            script.log("JAIL", "Failed to pick door, retrying...");
-            isEscaping = false;
-            return false;
+        // check if we're already out of the cell (x > 1885)
+        WorldPosition currentPos = script.getWorldPosition();
+        if (currentPos != null && currentPos.getX() > 1885) {
+            script.log("JAIL", "Already outside cell (x=" + (int)currentPos.getX() + "), skipping door pick");
+        } else {
+            // STEP 1: Find and pick the cell door
+            if (!pickCellDoor()) {
+                script.log("JAIL", "Failed to pick door, retrying...");
+                isEscaping = false;
+                return false;
+            }
+
+            // STEP 2: Wait specifically for success message in chat
+            script.log("JAIL", "Picking lock, waiting for success...");
+            boolean success = script.pollFramesUntil(() -> chatContainsSuccess() || isOutOfCell(), 15000);
+
+            if (!success && !isOutOfCell()) {
+                script.log("JAIL", "Lock pick failed or timed out, retrying...");
+                isEscaping = false;
+                return false;
+            }
+
+            script.log("JAIL", "Lock picked successfully! Escaping...");
         }
-
-        // STEP 2: Wait specifically for success message in chat
-        script.log("JAIL", "Picking lock, waiting for success...");
-        boolean success = script.pollFramesUntil(() -> chatContainsSuccess(), 15000);
-
-        if (!success) {
-            script.log("JAIL", "Lock pick failed or timed out, retrying...");
-            isEscaping = false;
-            return false;
-        }
-
-        script.log("JAIL", "Lock picked successfully! Escaping...");
 
         // small delay after success message
         script.pollFramesHuman(() -> false, script.random(600, 1000));
@@ -176,14 +189,15 @@ public class EscapeJail extends Task {
         }, 8000);
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // final: thieving tile
-        script.log("JAIL", "Walking to thieving tile");
+        // final: thieving tile (mode-aware)
+        WorldPosition targetTile = getThievingTile();
+        script.log("JAIL", "Walking to thieving tile: " + (twoStallMode ? "two-stall (3295)" : "single (3298)"));
         WalkConfig exactConfig = new WalkConfig.Builder()
                 .disableWalkScreen(true)
                 .breakDistance(0)
                 .tileRandomisationRadius(0)
                 .build();
-        script.getWalker().walkTo(THIEVING_TILE, exactConfig);
+        script.getWalker().walkTo(targetTile, exactConfig);
         script.pollFramesUntil(() -> isAtThievingTile(), 10000);
     }
 
@@ -209,11 +223,18 @@ public class EscapeJail extends Task {
                pos.getPlane() == 0;
     }
 
+    private boolean isOutOfCell() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos == null) return false;
+        return pos.getX() > 1885;
+    }
+
     private boolean isAtThievingTile() {
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) return false;
+        WorldPosition target = getThievingTile();
         int x = (int) pos.getX();
         int y = (int) pos.getY();
-        return x == 1867 && y == 3298;
+        return x == (int) target.getX() && y == (int) target.getY();
     }
 }

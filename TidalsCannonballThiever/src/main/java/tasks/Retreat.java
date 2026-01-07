@@ -25,6 +25,9 @@ public class Retreat extends Task {
 
     @Override
     public boolean activate() {
+        // only for single-stall mode - two-stall mode uses SwitchToOreStall/SwitchToCannonballStall
+        if (twoStallMode) return false;
+
         // highest priority - activate if any npc in danger zone and we're still thieving
         return currentlyThieving && guardTracker.isAnyGuardInDangerZone();
     }

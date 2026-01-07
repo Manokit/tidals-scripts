@@ -17,11 +17,24 @@ import java.util.concurrent.atomic.AtomicReference;
 import static main.TidalsCannonballThiever.*;
 
 public class StartThieving extends Task {
-    private static final WorldPosition THIEVING_TILE = new WorldPosition(1867, 3298, 0);
-    private static final RectangleArea THIEVING_AREA = new RectangleArea(1865, 3296, 1869, 3300, 0);
+    // single-stall mode positions
+    private static final WorldPosition THIEVING_TILE_SINGLE = new WorldPosition(1867, 3298, 0);
+    private static final RectangleArea THIEVING_AREA_SINGLE = new RectangleArea(1865, 3296, 1869, 3300, 0);
+
+    // two-stall mode positions (cannonball stall at different Y)
+    private static final WorldPosition THIEVING_TILE_TWO_STALL = new WorldPosition(1867, 3295, 0);
+    private static final RectangleArea THIEVING_AREA_TWO_STALL = new RectangleArea(1862, 3293, 1869, 3297, 0);
 
     // track if we've done initial positioning (only need exact tile once)
     private static boolean initialPositionDone = false;
+
+    private WorldPosition getThievingTile() {
+        return twoStallMode ? THIEVING_TILE_TWO_STALL : THIEVING_TILE_SINGLE;
+    }
+
+    private RectangleArea getThievingArea() {
+        return twoStallMode ? THIEVING_AREA_TWO_STALL : THIEVING_AREA_SINGLE;
+    }
 
     public StartThieving(Script script) {
         super(script);
@@ -55,7 +68,7 @@ public class StartThieving extends Task {
                         .tileRandomisationRadius(0)
                         .build();
 
-                script.getWalker().walkTo(THIEVING_TILE, minimapOnly);
+                script.getWalker().walkTo(getThievingTile(), minimapOnly);
                 script.pollFramesUntil(() -> isAtExactThievingTile(), 5000);
 
                 // small delay after arriving
@@ -95,6 +108,17 @@ public class StartThieving extends Task {
         }
 
         script.log("THIEVE", "Clear - starting to steal...");
+
+        // ~25% chance to add humanized delay before clicking (balances XP vs detection)
+        if (script.random(1, 100) <= 25) {
+            script.pollFramesHuman(() -> false, script.random(80, 200));
+            
+            // quick recheck after delay (guard might have moved fast)
+            if (guardTracker.isAnyGuardInDangerZone()) {
+                script.log("THIEVE", "ABORT - Guard moved in during delay!");
+                return false;
+            }
+        }
 
         // STEP 3: find and click the stall
         WorldPosition myPos = script.getWorldPosition();
@@ -213,17 +237,17 @@ public class StartThieving extends Task {
         if (current == null) return false;
 
         // allow some flexibility - within thieving area
-        return THIEVING_AREA.contains(current);
+        return getThievingArea().contains(current);
     }
 
     private boolean isAtExactThievingTile() {
         WorldPosition current = script.getWorldPosition();
         if (current == null) return false;
 
-        // must be at exact tile (1867, 3298) - no travel time
+        WorldPosition target = getThievingTile();
         int x = (int) current.getX();
         int y = (int) current.getY();
-        return x == 1867 && y == 3298 && current.getPlane() == 0;
+        return x == (int) target.getX() && y == (int) target.getY() && current.getPlane() == 0;
     }
 
     private boolean isAtSafetyTile() {

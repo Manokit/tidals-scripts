@@ -14,6 +14,9 @@ public class WaitAtSafety extends Task {
 
     @Override
     public boolean activate() {
+        // only for single-stall mode - two-stall mode switches between stalls instead
+        if (twoStallMode) return false;
+
         // activate if at safety tile and guard hasn't passed yet
         return isAtSafetyTile() && !guardTracker.isSafeToReturn();
     }
@@ -30,6 +33,11 @@ public class WaitAtSafety extends Task {
             }
             return safe;
         }, 10000);
+
+        // ~30% chance to add humanized delay (balances XP/hr vs detection)
+        if (script.random(1, 100) <= 30) {
+            script.pollFramesHuman(() -> false, script.random(150, 400));
+        }
 
         return true;
     }
