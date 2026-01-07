@@ -1,9 +1,6 @@
 package tasks;
 
-import com.osmb.api.location.position.types.WorldPosition;
-import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
-import com.osmb.api.shape.Polygon;
 import utils.Task;
 
 import static main.TidalsCannonballThiever.*;
@@ -28,24 +25,13 @@ public class MonitorThieving extends Task {
         boolean conditionMet;
         
         if (twoStallMode) {
-            // two-stall mode: check based on which stall we're at
+            // two-stall mode: XP-based cycle with guard detection as backup
             if (atOreStall) {
-                // AT ORE STALL: Watch guard at (1863, 3292) - switch INSTANT they move!
+                // AT ORE STALL: Track XP drops, switch after 2 (don't wait for guard)
                 conditionMet = monitorOreStall();
             } else {
-                // AT CANNONBALL STALL: Watch guard at (1865, 3295) - switch INSTANT they move!
-                conditionMet = script.pollFramesUntil(() -> {
-                    // If actively watching, ONLY use pixel detection
-                    if (guardTracker.isWatchingAtCBTile()) {
-                        return guardTracker.shouldSwitchToOre();
-                    }
-                    // Not watching - try to start watching, or use fallback for guards past watch tile
-                    return guardTracker.shouldSwitchToOre() || 
-                           guardTracker.isGuardPastWatchTile();
-                }, 500);
-                if (conditionMet) {
-                    script.log("MONITOR", "Guard moving from watch tile - switching to ore!");
-                }
+                // AT CANNONBALL STALL: Track XP drops, switch after 4 OR guard detection
+                conditionMet = monitorCannonballStall();
             }
         } else {
             // single-stall mode: original behavior
@@ -59,88 +45,85 @@ public class MonitorThieving extends Task {
 
         return true;
     }
-
+    
     /**
-     * Monitor ore stall with PIXEL-BASED guard tracking.
-     * Watch guard at (1863, 3292) - the INSTANT they move, we must switch!
-     * All 3 guards move at once, so speed is critical.
-     * 
-     * @return true when should switch back to cannonball stall
+     * Monitor cannonball stall - track XP drops for cycle.
+     * Switch after 4 XP drops OR guard detection (backup, only if not in cooldown).
      */
-    private boolean monitorOreStall() {
-        // Continuously watch for guard movement - this is critical!
-        // The instant we detect movement, we need to switch
-        
-        // Check if we should do a 2nd ore thieve while watching
-        if (guardTracker.canDoMoreOreThieves()) {
-            script.log("MONITOR", "Watching ore guard while doing thieve #2...");
+    private boolean monitorCannonballStall() {
+        // Poll and track XP drops
+        boolean shouldSwitch = script.pollFramesUntil(() -> {
+            // Check for XP drop and increment counter
+            double currentXp = xpTracking.getThievingXpGained();
+            guardTracker.checkCbXpDrop(currentXp);
             
-            // Poll VERY briefly - we need to be ready to switch instantly
-            boolean shouldReturn = script.pollFramesUntil(() -> {
-                return guardTracker.shouldSwitchToCannonball();
-            }, 300); // Very short poll - guard movement detection is priority!
-            
-            // If guard started moving, return immediately - don't do another thieve!
-            if (shouldReturn) {
-                script.log("MONITOR", "Ore guard moving - abort thieve, switch NOW!");
+            // PRIMARY: Switch after 4 CB thieves
+            if (guardTracker.shouldSwitchToOreByXp()) {
                 return true;
             }
             
-            // Guard still stationary - safe to do another thieve
-            if (guardTracker.canDoMoreOreThieves()) {
-                task = "Ore thieve #2...";
-                if (doAnotherOreThieve()) {
-                    guardTracker.incrementOreThiefCount();
-                    // Short wait for thieve - but keep watching guard!
-                    boolean guardMoved = script.pollFramesUntil(() -> {
-                        return guardTracker.shouldSwitchToCannonball();
-                    }, 1500); // Watch during thieve animation
-                    
-                    if (guardMoved) {
-                        script.log("MONITOR", "Ore guard moved during thieve - switch NOW!");
-                        return true;
-                    }
-                }
+            // Skip backup guard detection if in cooldown (just switched via XP cycle)
+            if (guardTracker.isInXpSwitchCooldown()) {
+                return false;
             }
-        }
-        
-        // Continue watching until guard moves or leaves
-        boolean shouldSwitch = script.pollFramesUntil(() -> {
-            return guardTracker.shouldSwitchToCannonball() || guardTracker.isCannonballStallSafe();
+            
+            // BACKUP: Guard detection (only for mid-cycle starts)
+            if (guardTracker.isWatchingAtCBTile()) {
+                return guardTracker.shouldSwitchToOre();
+            }
+            return guardTracker.shouldSwitchToOre() || guardTracker.isGuardPastWatchTile();
         }, 500);
         
         if (shouldSwitch) {
-            script.log("MONITOR", "Time to switch to cannonball!");
+            if (guardTracker.shouldSwitchToOreByXp()) {
+                script.log("MONITOR", "4 CB thieves done - time to switch!");
+            } else {
+                script.log("MONITOR", "Guard detected - switching (backup)!");
+            }
         }
         
         return shouldSwitch;
     }
 
     /**
-     * Click ore stall for another thieve
+     * Monitor ore stall - track XP drops for cycle.
+     * Switch after 2 XP drops (don't wait for guard - timing is enough).
+     * Guard detection is backup only.
+     * 
+     * @return true when should switch back to cannonball stall
      */
-    private boolean doAnotherOreThieve() {
-        WorldPosition myPos = script.getWorldPosition();
-        if (myPos == null) return false;
-
-        RSObject stall = script.getObjectManager().getClosestObject(myPos, "Ore stall");
-        if (stall == null) {
-            script.log("MONITOR", "Can't find Ore stall for 2nd thieve!");
-            return false;
+    private boolean monitorOreStall() {
+        // Track XP drops - switch after 2 ore thieves
+        // Don't wait for guard movement - the timing of 2 ore XP drops is enough
+        // for the guard to start moving by the time we reach CB stall
+        
+        boolean shouldSwitch = script.pollFramesUntil(() -> {
+            // Check for XP drop and increment counter
+            double currentXp = xpTracking.getThievingXpGained();
+            guardTracker.checkOreXpDrop(currentXp);
+            
+            // PRIMARY: Switch after 2 ore thieves (don't wait for guard!)
+            if (guardTracker.shouldSwitchToCbByXp()) {
+                return true;
+            }
+            
+            // BACKUP: Guard detection for emergencies/mid-cycle
+            if (guardTracker.shouldSwitchToCannonball()) {
+                return true;
+            }
+            
+            return guardTracker.isCannonballStallSafe();
+        }, 500);
+        
+        if (shouldSwitch) {
+            if (guardTracker.shouldSwitchToCbByXp()) {
+                script.log("MONITOR", "2 ore thieves done - switching to CB!");
+            } else {
+                script.log("MONITOR", "Guard/safety check triggered - switching (backup)!");
+            }
         }
-
-        Polygon stallPoly = stall.getConvexHull();
-        if (stallPoly == null) {
-            script.log("MONITOR", "Ore stall hull null");
-            return false;
-        }
-
-        boolean tapped = script.getFinger().tap(stallPoly);
-        if (tapped) {
-            script.log("MONITOR", "Clicked Ore stall for thieve #2!");
-            return true;
-        }
-
-        return false;
+        
+        return shouldSwitch;
     }
+
 }

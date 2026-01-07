@@ -100,7 +100,7 @@ public class GuardTracker {
     // Track guard movement direction (true = moving east/away from cannonball stall)
     private boolean guardMovingEast = false;
     
-    // Number of ore thieves done in current ore stall visit
+    // Number of ore thieves done in current ore stall visit (legacy - kept for compatibility)
     private int oreThiefCount = 0;
     private static final int MAX_ORE_THIEVES = 2;
     
@@ -112,6 +112,20 @@ public class GuardTracker {
     // Track if we've received an XP drop at the CB stall (same approach)
     private long arrivedAtCBStallTime = 0;
     private boolean gotCBStallXpDrop = false;
+    
+    // === XP-BASED CYCLE TRACKING ===
+    // Primary switching logic: 4 CB thieves -> 2 ore thieves -> repeat
+    // Guard detection is now BACKUP only (for mid-cycle starts)
+    private int cbXpDropCount = 0;
+    private int oreXpDropCount = 0;
+    private static final int CB_THIEVES_PER_CYCLE = 4;
+    private static final int ORE_THIEVES_PER_CYCLE = 2;
+    private double lastKnownXpForCycle = -1;  // Track XP for counting drops
+    
+    // Cooldown after XP-based switch - don't let backup guard detection trigger
+    // This prevents the script from psyching itself out after a proper XP cycle switch
+    private long lastXpBasedSwitchTime = 0;
+    private static final long XP_SWITCH_COOLDOWN_MS = 5000;  // 5 seconds cooldown
     
     // CB stall player position - must be here before we start watching guard
     private static final int CB_STALL_PLAYER_X = 1867;
@@ -938,5 +952,131 @@ public class GuardTracker {
         gotOreStallXpDrop = false;
         arrivedAtCBStallTime = 0;
         gotCBStallXpDrop = false;
+    }
+
+    // === XP-BASED CYCLE METHODS ===
+    
+    /**
+     * Check for XP drop and increment counter for cannonball stall.
+     * Call this frequently while at CB stall.
+     * @param currentXp current total XP gained
+     * @return true if we got a new XP drop
+     */
+    public boolean checkCbXpDrop(double currentXp) {
+        if (lastKnownXpForCycle < 0) {
+            lastKnownXpForCycle = currentXp;
+            return false;
+        }
+        
+        if (currentXp > lastKnownXpForCycle) {
+            lastKnownXpForCycle = currentXp;
+            cbXpDropCount++;
+            script.log("CYCLE", "Main stall (CB) " + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE);
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Check for XP drop and increment counter for ore stall.
+     * Call this frequently while at ore stall.
+     * @param currentXp current total XP gained
+     * @return true if we got a new XP drop
+     */
+    public boolean checkOreXpDrop(double currentXp) {
+        if (lastKnownXpForCycle < 0) {
+            lastKnownXpForCycle = currentXp;
+            return false;
+        }
+        
+        if (currentXp > lastKnownXpForCycle) {
+            lastKnownXpForCycle = currentXp;
+            oreXpDropCount++;
+            script.log("CYCLE", "Extra stall (Ore) " + oreXpDropCount + "/" + ORE_THIEVES_PER_CYCLE);
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Check if we've completed enough CB thieves to switch to ore.
+     * PRIMARY trigger for switching to ore stall.
+     * @return true if done 4 CB thieves
+     */
+    public boolean shouldSwitchToOreByXp() {
+        return cbXpDropCount >= CB_THIEVES_PER_CYCLE;
+    }
+    
+    /**
+     * Check if we've completed enough ore thieves to switch to CB.
+     * PRIMARY trigger for switching to cannonball stall.
+     * @return true if done 2 ore thieves
+     */
+    public boolean shouldSwitchToCbByXp() {
+        return oreXpDropCount >= ORE_THIEVES_PER_CYCLE;
+    }
+    
+    /**
+     * Reset CB cycle counter (call when switching TO cannonball stall)
+     */
+    public void resetCbCycle() {
+        cbXpDropCount = 0;
+        script.log("CYCLE", "CB cycle reset - starting fresh");
+    }
+    
+    /**
+     * Reset ore cycle counter (call when switching TO ore stall)
+     */
+    public void resetOreCycle() {
+        oreXpDropCount = 0;
+        script.log("CYCLE", "Ore cycle reset - starting fresh");
+    }
+    
+    /**
+     * Get current CB XP drop count
+     */
+    public int getCbXpDropCount() {
+        return cbXpDropCount;
+    }
+    
+    /**
+     * Get current ore XP drop count
+     */
+    public int getOreXpDropCount() {
+        return oreXpDropCount;
+    }
+    
+    /**
+     * Initialize XP tracking (call at start or when resuming)
+     */
+    public void initXpTracking(double currentXp) {
+        lastKnownXpForCycle = currentXp;
+    }
+    
+    /**
+     * Mark that we just switched via XP cycle - starts cooldown
+     * Call this when switching from ore to CB via XP cycle
+     */
+    public void markXpBasedSwitch() {
+        lastXpBasedSwitchTime = System.currentTimeMillis();
+        script.log("CYCLE", "XP-based switch - guard backup disabled for " + (XP_SWITCH_COOLDOWN_MS/1000) + "s");
+    }
+    
+    /**
+     * Check if we're in cooldown after an XP-based switch
+     * During cooldown, backup guard detection should be skipped
+     * @return true if still in cooldown (don't use guard backup)
+     */
+    public boolean isInXpSwitchCooldown() {
+        if (lastXpBasedSwitchTime == 0) return false;
+        long elapsed = System.currentTimeMillis() - lastXpBasedSwitchTime;
+        return elapsed < XP_SWITCH_COOLDOWN_MS;
+    }
+    
+    /**
+     * Clear the XP switch cooldown (call when starting fresh or mid-cycle)
+     */
+    public void clearXpSwitchCooldown() {
+        lastXpBasedSwitchTime = 0;
     }
 }

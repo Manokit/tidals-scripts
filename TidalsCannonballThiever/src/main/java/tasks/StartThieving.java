@@ -165,6 +165,15 @@ public class StartThieving extends Task {
             script.log("THIEVE", "Clicked 'Steal-from Cannonball stall' - action: " + selectedAction.get());
             currentlyThieving = true; // we're now thieving, don't click again
             lastXpGain.reset();
+            
+            // Initialize XP-based cycle tracking for two-stall mode
+            if (twoStallMode) {
+                double currentXp = xpTracking.getThievingXpGained();
+                guardTracker.initXpTracking(currentXp);
+                guardTracker.resetCbCycle();
+                script.log("THIEVE", "Initialized XP cycle tracking");
+            }
+            
             // humanized delay after clicking
             script.pollFramesHuman(() -> false, script.random(200, 400));
             return true;

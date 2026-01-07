@@ -25,8 +25,20 @@ public class SwitchToOreStall extends Task {
         // only if currently thieving at cannonball stall (not already at ore stall)
         if (!currentlyThieving || atOreStall) return false;
 
+        // PRIMARY: XP-based cycle - switch after 4 CB thieves
+        if (guardTracker.shouldSwitchToOreByXp()) {
+            script.log("SWITCH", "4 CB thieves done - switching to ore (XP cycle)");
+            return true;
+        }
+        
+        // If we just switched via XP cycle, DON'T use backup guard detection
+        // This prevents psyching ourselves out right after a proper XP-based switch
+        if (guardTracker.isInXpSwitchCooldown()) {
+            return false;  // Trust the XP cycle timing, don't second-guess
+        }
+        
+        // BACKUP: Guard detection for mid-cycle starts or emergencies ONLY
         // PIXEL-BASED DETECTION: Watch guard at (1865, 3295) and switch the INSTANT they move!
-        // If we're actively watching, ONLY use pixel detection (don't use tile fallback)
         if (guardTracker.isWatchingAtCBTile()) {
             // Currently watching - only trigger on pixel movement
             return guardTracker.shouldSwitchToOre();
@@ -35,7 +47,7 @@ public class SwitchToOreStall extends Task {
         // Not watching yet - check if guard is at watch tile (will start watching)
         // OR if guard already past watch tile (x=1866, 1867) use tile fallback
         if (guardTracker.shouldSwitchToOre()) {
-            return true;  // Either just started watching (returns false) or detected movement (returns true)
+            return true;
         }
         
         // Tile fallback ONLY for guards already past the watch tile (x=1866 or 1867)
@@ -46,9 +58,10 @@ public class SwitchToOreStall extends Task {
     public boolean execute() {
         task = "Switching to ore stall";
         currentlyThieving = false;
-        script.log("SWITCH", "Guard approaching cannonball - switching to ore stall!");
+        script.log("SWITCH", "Switching to ore stall!");
 
-        // Reset ore thieve counter and guard tracking for fresh start
+        // Reset ore cycle counter and guard tracking for fresh start
+        guardTracker.resetOreCycle();
         guardTracker.resetOreThiefCount();
         guardTracker.resetGuardTracking();
 

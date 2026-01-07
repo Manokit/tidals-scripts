@@ -25,16 +25,23 @@ public class SwitchToCannonballStall extends Task {
         // only if at ore stall (doesn't need to be actively thieving - we do quick hit and run)
         if (!atOreStall) return false;
 
+        // PRIMARY: XP-based cycle - switch after 2 ore thieves
+        // Don't wait for guard movement - timing of 2 ore XP drops is enough
+        if (guardTracker.shouldSwitchToCbByXp()) {
+            script.log("SWITCH", "2 ore thieves done - switching to CB (XP cycle)");
+            return true;
+        }
+        
+        // BACKUP: Guard detection for mid-cycle starts or emergencies
         // PIXEL DETECTION: Watch guard at (1863, 3292) - the INSTANT they move, GO!
-        // All 3 guards move at once, so we need to be fast!
         if (guardTracker.shouldSwitchToCannonball()) {
-            script.log("SWITCH", "Ore guard moving - GO TO CANNONBALL NOW!");
+            script.log("SWITCH", "Ore guard moving - GO TO CANNONBALL NOW! (backup)");
             return true;
         }
 
         // FALLBACK: Also return if cannonball is confirmed safe (guard at x >= 1868)
         if (guardTracker.isCannonballStallSafe()) {
-            script.log("SWITCH", "Cannonball safe (tile check) - returning");
+            script.log("SWITCH", "Cannonball safe (tile check) - returning (backup)");
             return true;
         }
 
@@ -46,10 +53,17 @@ public class SwitchToCannonballStall extends Task {
         task = "Switching to cannonball stall";
         currentlyThieving = false;
         
-        int oreThieves = guardTracker.getOreThiefCount();
+        int oreThieves = guardTracker.getOreXpDropCount();
+        boolean wasXpBasedSwitch = guardTracker.shouldSwitchToCbByXp();
         script.log("SWITCH", "Returning to cannonball stall! (did " + oreThieves + " ore thieves)");
 
-        // Reset guard tracking for fresh detection at cannonball stall
+        // If this was an XP-based switch, mark it to prevent backup guard detection from psyching us out
+        if (wasXpBasedSwitch) {
+            guardTracker.markXpBasedSwitch();
+        }
+
+        // Reset CB cycle counter and guard tracking for fresh detection
+        guardTracker.resetCbCycle();
         guardTracker.resetGuardTracking();
         guardTracker.resetOreThiefCount();
 

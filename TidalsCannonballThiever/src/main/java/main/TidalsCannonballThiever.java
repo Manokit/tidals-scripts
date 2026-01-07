@@ -84,7 +84,7 @@ public class TidalsCannonballThiever extends Script {
     public static int currentLevel = 1;
     public static int startLevel = 1;
 
-    private final XPTracking xpTracking;
+    public static XPTracking xpTracking;
     private int xpGained = 0;
 
     // Guard tracker
@@ -99,7 +99,7 @@ public class TidalsCannonballThiever extends Script {
 
     public TidalsCannonballThiever(Object scriptCore) {
         super(scriptCore);
-        this.xpTracking = new XPTracking(this);
+        xpTracking = new XPTracking(this);
     }
 
     @Override

@@ -1,6 +1,6 @@
 package tasks;
 
-import com.osmb.api.input.MenuEntry;
+import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
@@ -12,11 +12,8 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class EscapeJail extends Task {
-    // jail cell area - x <= 1885 means INSIDE cell, x > 1885 means OUT
-    private static final int JAIL_MIN_X = 1884;
-    private static final int JAIL_MAX_X = 1885;  // x > 1885 = out of cell
-    private static final int JAIL_MIN_Y = 3272;
-    private static final int JAIL_MAX_Y = 3275;
+    // jail cell area - covers every tile in the cell
+    private static final RectangleArea JAIL_CELL = new RectangleArea(1883, 3272, 2, 2, 0);
 
     // door position
     private static final WorldPosition DOOR_TILE = new WorldPosition(1885, 3273, 0);
@@ -64,10 +61,9 @@ public class EscapeJail extends Task {
         currentlyThieving = false;
         script.log("JAIL", "Caught! Attempting to escape...");
 
-        // check if we're already out of the cell (x > 1885)
-        WorldPosition currentPos = script.getWorldPosition();
-        if (currentPos != null && currentPos.getX() > 1885) {
-            script.log("JAIL", "Already outside cell (x=" + (int)currentPos.getX() + "), skipping door pick");
+        // check if we're already out of the cell
+        if (isOutOfCell()) {
+            script.log("JAIL", "Already outside cell, skipping door pick");
         } else {
             // STEP 1: Find and pick the cell door
             if (!pickCellDoor()) {
@@ -117,23 +113,16 @@ public class EscapeJail extends Task {
             return false;
         }
 
-        // check what action is available on the door
-        MenuEntry response = script.getFinger().tapGetResponse(true, doorPoly);
-        if (response == null) {
-            script.log("JAIL", "No menu response from door");
-            return false;
+        // Directly use menu entry to picklock - don't tap first then check menu
+        script.log("JAIL", "Attempting Picklock on cell door...");
+        boolean tapped = script.getFinger().tap(doorPoly, "Picklock");
+        
+        if (tapped) {
+            script.log("JAIL", "Picklock action sent!");
+            return true;
         }
-
-        String action = response.getAction();
-        script.log("JAIL", "Door action: " + action);
-
-        // if picklock action available, use it
-        if (action != null && action.toLowerCase().contains("picklock")) {
-            return script.getFinger().tap(doorPoly, "Picklock");
-        }
-
-        // door might already be open or different action
-        script.log("JAIL", "No picklock action found, action was: " + action);
+        
+        script.log("JAIL", "Failed to send Picklock action");
         return false;
     }
 
@@ -214,19 +203,13 @@ public class EscapeJail extends Task {
     private boolean isInJail() {
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) return false;
-
-        int x = (int) pos.getX();
-        int y = (int) pos.getY();
-
-        return x >= JAIL_MIN_X && x <= JAIL_MAX_X &&
-               y >= JAIL_MIN_Y && y <= JAIL_MAX_Y &&
-               pos.getPlane() == 0;
+        return JAIL_CELL.contains(pos);
     }
 
     private boolean isOutOfCell() {
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) return false;
-        return pos.getX() > 1885;
+        return !JAIL_CELL.contains(pos);
     }
 
     private boolean isAtThievingTile() {
