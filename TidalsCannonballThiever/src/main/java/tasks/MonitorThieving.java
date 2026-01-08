@@ -1,7 +1,10 @@
 package tasks;
 
+import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.script.Script;
 import utils.Task;
+
+import java.util.Set;
 
 import static main.TidalsCannonballThiever.*;
 
@@ -47,12 +50,31 @@ public class MonitorThieving extends Task {
     }
     
     /**
+     * Check if inventory is full using built-in .isFull() method
+     */
+    private boolean isInventoryFull() {
+        try {
+            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+            return inv != null && inv.isFull();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
      * Monitor cannonball stall - track XP drops for cycle.
      * Switch after 4 XP drops OR guard detection (backup, only if not in cooldown).
      */
     private boolean monitorCannonballStall() {
         // Poll and track XP drops
         boolean shouldSwitch = script.pollFramesUntil(() -> {
+            // CRITICAL: Check for inventory full - break out immediately
+            if (isInventoryFull()) {
+                script.log("MONITOR", "Inventory full detected - stopping monitor");
+                currentlyThieving = false;
+                return true;  // Break out of poll loop
+            }
+            
             // Check for XP drop and increment counter
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkCbXpDrop(currentXp);
@@ -77,7 +99,7 @@ public class MonitorThieving extends Task {
         if (shouldSwitch) {
             if (guardTracker.shouldSwitchToOreByXp()) {
                 script.log("MONITOR", "4 CB thieves done - time to switch!");
-            } else {
+            } else if (!isInventoryFull()) {
                 script.log("MONITOR", "Guard detected - switching (backup)!");
             }
         }
@@ -98,6 +120,13 @@ public class MonitorThieving extends Task {
         // for the guard to start moving by the time we reach CB stall
         
         boolean shouldSwitch = script.pollFramesUntil(() -> {
+            // CRITICAL: Check for inventory full - break out immediately
+            if (isInventoryFull()) {
+                script.log("MONITOR", "Inventory full detected - stopping monitor");
+                currentlyThieving = false;
+                return true;  // Break out of poll loop
+            }
+            
             // Check for XP drop and increment counter
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkOreXpDrop(currentXp);
@@ -118,7 +147,7 @@ public class MonitorThieving extends Task {
         if (shouldSwitch) {
             if (guardTracker.shouldSwitchToCbByXp()) {
                 script.log("MONITOR", "2 ore thieves done - switching to CB!");
-            } else {
+            } else if (!isInventoryFull()) {
                 script.log("MONITOR", "Guard/safety check triggered - switching (backup)!");
             }
         }

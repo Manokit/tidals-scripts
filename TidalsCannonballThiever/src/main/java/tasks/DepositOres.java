@@ -42,14 +42,26 @@ public class DepositOres extends Task {
         // only in two-stall mode
         if (!twoStallMode) return false;
 
-        // check for "inventory is too full" dialogue first (regardless of position)
-        if (hasInventoryFullDialogue()) {
-            script.log("DEPOSIT", "Detected 'inventory too full' dialogue!");
+        // CRITICAL: If we're mid-deposit-run (interrupted by AFK/hop), continue it!
+        if (doingDepositRun) {
+            script.log("DEPOSIT", "Resuming interrupted deposit run...");
             return true;
         }
 
-        // check inventory full when we've visited ore stall
-        if (atOreStall && isInventoryFull()) {
+        // PRIMARY: Simple inventory full check using built-in .isFull() method
+        try {
+            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+            if (inv != null && inv.isFull()) {
+                script.log("DEPOSIT", "Inventory full (28/28) - need to deposit!");
+                return true;
+            }
+        } catch (Exception e) {
+            script.log("DEPOSIT", "Error checking inventory: " + e.getMessage());
+        }
+
+        // BACKUP: check for "inventory is too full" dialogue (edge case)
+        if (hasInventoryFullDialogue()) {
+            script.log("DEPOSIT", "Detected 'inventory too full' dialogue (fallback)!");
             return true;
         }
 
@@ -64,14 +76,35 @@ public class DepositOres extends Task {
             Dialogue dialogue = script.getWidgetManager().getDialogue();
             if (dialogue == null || !dialogue.isVisible()) return false;
             
-            DialogueType type = dialogue.getDialogueType();
-            if (type != DialogueType.TAP_HERE_TO_CONTINUE) return false;
+            // Try to get dialogue text (any type)
+            UIResult<String> textResult = dialogue.getText();
+            if (textResult == null || !textResult.isFound()) return false;
+            
+            String text = textResult.get().toLowerCase();
+            // Check for various inventory full messages
+            return text.contains("inventory is too full") || 
+                   text.contains("inventory is full") ||
+                   text.contains("can't carry any more");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Public static method so other tasks can check for inventory full dialogue
+     */
+    public static boolean checkInventoryFullDialogue(Script script) {
+        try {
+            Dialogue dialogue = script.getWidgetManager().getDialogue();
+            if (dialogue == null || !dialogue.isVisible()) return false;
             
             UIResult<String> textResult = dialogue.getText();
             if (textResult == null || !textResult.isFound()) return false;
             
             String text = textResult.get().toLowerCase();
-            return text.contains("inventory is too full");
+            return text.contains("inventory is too full") || 
+                   text.contains("inventory is full") ||
+                   text.contains("can't carry any more");
         } catch (Exception e) {
             return false;
         }
@@ -82,7 +115,6 @@ public class DepositOres extends Task {
         task = "Depositing ores";
         currentlyThieving = false;  // Allow breaks/hops/AFKs during deposit run
         doingDepositRun = true;     // Flag for canBreak/canHop/canAFK
-        script.log("DEPOSIT", "Inventory full - heading to deposit box!");
 
         // dismiss dialogue if present
         if (hasInventoryFullDialogue()) {
@@ -95,61 +127,64 @@ public class DepositOres extends Task {
             }
         }
 
-        // Walk to deposit box area first - breaks/hops/AFKs allowed during walk
-        script.log("DEPOSIT", "Walking to deposit box...");
-        script.getWalker().walkTo(DEPOSIT_BOX_TILE, exactTileConfig);
+        // STATE-AWARE EXECUTION: Check what stage we're at
+        boolean hasItems = !isInventoryEmpty();
+        boolean nearDepositBox = isNearDepositBox();
+        boolean atStall = isAtCannonballStallExact();
         
-        // Wait until near deposit box - allow interrupts (ignoreTasks=false)
-        script.pollFramesUntil(() -> isNearDepositBox(), 8000, false);
-        
-        // Humanized delay after arriving
-        script.pollFramesHuman(() -> false, script.random(300, 600));
+        // STAGE 1: If we have items, need to deposit them
+        if (hasItems) {
+            // Walk to deposit box if not near it
+            if (!nearDepositBox) {
+                script.log("DEPOSIT", "Walking to deposit box...");
+                script.getWalker().walkTo(DEPOSIT_BOX_TILE, exactTileConfig);
+                script.pollFramesUntil(() -> isNearDepositBox(), 8000, false);
+                script.pollFramesHuman(() -> false, script.random(300, 600));
+            }
+            
+            // Open deposit box
+            if (!openDepositBoxWithMenu()) {
+                script.log("DEPOSIT", "Failed to open deposit box, retrying...");
+                return false;  // Keep doingDepositRun true for retry
+            }
 
-        // Find and click deposit box using MENU ENTRY to avoid misclicks
-        if (!openDepositBoxWithMenu()) {
-            script.log("DEPOSIT", "Failed to open deposit box, retrying...");
-            doingDepositRun = false;
-            return false;
+            // Wait for deposit interface
+            script.pollFramesUntil(() -> isDepositInterfaceOpen(), 5000);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+
+            if (!isDepositInterfaceOpen()) {
+                script.log("DEPOSIT", "Deposit interface didn't open, retrying...");
+                return false;  // Keep doingDepositRun true for retry
+            }
+
+            // Deposit all
+            if (!depositAll()) {
+                script.log("DEPOSIT", "Failed to deposit, retrying...");
+                return false;  // Keep doingDepositRun true for retry
+            }
+
+            // Wait for inventory to empty
+            script.pollFramesUntil(() -> isInventoryEmpty(), 3000);
+            script.pollFramesHuman(() -> false, script.random(300, 500));
+
+            // Close deposit interface
+            closeDepositInterface();
+            
+            script.log("DEPOSIT", "Ores deposited!");
         }
 
-        // Wait for deposit interface to open
-        script.pollFramesUntil(() -> isDepositInterfaceOpen(), 5000);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
-
-        if (!isDepositInterfaceOpen()) {
-            script.log("DEPOSIT", "Deposit interface didn't open, retrying...");
-            doingDepositRun = false;
-            return false;
+        // STAGE 2: Items deposited, return to stall
+        if (!atStall) {
+            script.log("DEPOSIT", "Returning to cannonball stall...");
+            script.getWalker().walkTo(CANNONBALL_STALL_TILE, exactTileConfig);
+            script.pollFramesUntil(() -> isAtCannonballStallExact(), 8000, false);
+            script.pollFramesHuman(() -> false, script.random(300, 600));
         }
 
-        // deposit all
-        if (!depositAll()) {
-            script.log("DEPOSIT", "Failed to deposit, retrying...");
-            doingDepositRun = false;
-            return false;
-        }
-
-        // wait for inventory to be empty
-        script.pollFramesUntil(() -> isInventoryEmpty(), 3000);
-        script.pollFramesHuman(() -> false, script.random(300, 500));
-
-        // close deposit interface if still open
-        closeDepositInterface();
-
-        script.log("DEPOSIT", "Ores deposited! Returning to cannonball stall...");
-
-        // Walk back to cannonball stall - breaks/hops/AFKs allowed during walk
-        script.getWalker().walkTo(CANNONBALL_STALL_TILE, exactTileConfig);
-        
-        // Wait until at stall - allow interrupts (ignoreTasks=false)
-        script.pollFramesUntil(() -> isAtCannonballStallExact(), 8000, false);
-        
-        // Humanized delay after arriving
-        script.pollFramesHuman(() -> false, script.random(300, 600));
-
+        // DONE: Clear flags
         atOreStall = false;
-        doingDepositRun = false;  // Clear flag - back to normal thieving
-        script.log("DEPOSIT", "Back at cannonball stall!");
+        doingDepositRun = false;
+        script.log("DEPOSIT", "Deposit run complete - back at cannonball stall!");
         return true;
     }
     
@@ -185,39 +220,15 @@ public class DepositOres extends Task {
         return false;
     }
 
-    private boolean isInventoryFull() {
-        try {
-            // check if inventory has 28 items (full)
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(ORE_IDS);
-            if (inv == null) return false;
-            // full if we have 28 ores (assuming we start empty for two-stall mode)
-            return inv.getAmount() >= 28;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private boolean isInventoryEmpty() {
         try {
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(ORE_IDS);
-            return inv == null || inv.getAmount() == 0;
+            // Empty = 28 free slots. Simple check, no item IDs needed.
+            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+            return inv != null && inv.getFreeSlots() == 28;
         } catch (Exception e) {
             return true; // assume empty on error
         }
     }
-
-    // common ore IDs from the ore stall
-    private static final Set<Integer> ORE_IDS = Set.of(
-            436,  // copper ore
-            438,  // tin ore
-            440,  // iron ore
-            442,  // silver ore
-            444,  // gold ore
-            447,  // mithril ore
-            449,  // adamantite ore
-            451,  // runite ore
-            453   // coal
-    );
 
     private boolean isNearDepositBox() {
         WorldPosition pos = script.getWorldPosition();
@@ -226,26 +237,6 @@ public class DepositOres extends Task {
         int y = (int) pos.getY();
         // within 2 tiles of deposit box
         return Math.abs(x - 1872) <= 2 && Math.abs(y - 3301) <= 2;
-    }
-
-    private boolean openDepositBox() {
-        WorldPosition myPos = script.getWorldPosition();
-        if (myPos == null) return false;
-
-        RSObject depositBox = script.getObjectManager().getClosestObject(myPos, "Bank deposit box");
-        if (depositBox == null) {
-            script.log("DEPOSIT", "Can't find deposit box!");
-            return false;
-        }
-
-        Polygon boxPoly = depositBox.getConvexHull();
-        if (boxPoly == null) {
-            script.log("DEPOSIT", "Deposit box hull null");
-            return false;
-        }
-
-        // fast left-click (deposit is default action)
-        return script.getFinger().tap(boxPoly);
     }
 
     private boolean isDepositInterfaceOpen() {

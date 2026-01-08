@@ -1,8 +1,6 @@
 package main;
 
-import com.osmb.api.ScriptCore;
 import com.osmb.api.item.ItemGroupResult;
-import com.osmb.api.item.ItemID;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.script.ScriptDefinition;
@@ -34,8 +32,7 @@ import java.awt.*;
         author = "Tidalus"
 )
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.0";
-    private final String scriptName = "CannonballThiever";
+    public static final String scriptVersion = "1.2";
 
     public static int screenWidth = 0;
     public static int screenHeight = 0;
@@ -114,40 +111,33 @@ public class TidalsCannonballThiever extends Script {
         return new int[]{7475}; // port roberts cannonball stall area
     }
 
-    // only allow world hop / break / afk when at safe position and not thieving
-    // two-stall mode: allow during deposit runs or at safety tile
-    // single mode: at safety tile
+    // World hop: Only when safe (at safety tile, doing deposit, or not thieving)
+    // PrepareForBreak will proactively move to safety when hop is needed
     @Override
     public boolean canHopWorlds() {
-        if (currentlyThieving) return false;
-        // Always allow during deposit runs - good time for humanization
+        // Allow during deposit runs
         if (doingDepositRun) return true;
-        if (twoStallMode) {
-            // in two-stall mode, allow at safety tile
-            return isAtSafetyTile();
-        }
-        return isAtSafetyTile();
+        // Allow when not actively thieving
+        if (!currentlyThieving) return true;
+        // Allow when at safety tile
+        if (isAtSafetyTile()) return true;
+        // Block hop while mid-thieve - PrepareForBreak will move us to safety
+        return false;
     }
 
     @Override
     public boolean canBreak() {
+        // Breaks are longer - only allow at safety tile
         if (currentlyThieving) return false;
-        // Always allow during deposit runs - good time for humanization
         if (doingDepositRun) return true;
-        if (twoStallMode) {
-            return isAtSafetyTile();
-        }
         return isAtSafetyTile();
     }
 
     @Override
     public boolean canAFK() {
+        // AFK pauses are longer - only allow at safety tile
         if (currentlyThieving) return false;
-        // Always allow during deposit runs - good time for humanization
         if (doingDepositRun) return true;
-        if (twoStallMode) {
-            return isAtSafetyTile();
-        }
         return isAtSafetyTile();
     }
 
@@ -172,7 +162,7 @@ public class TidalsCannonballThiever extends Script {
         // Get selected mode
         twoStallMode = scriptUI.isTwoStallMode();
         log("UI", "Mode selected: " + (twoStallMode ? "Two Stall" : "Single Stall"));
-
+        
         // Initialize guard tracker
         guardTracker = new GuardTracker(this);
 
@@ -219,20 +209,31 @@ public class TidalsCannonballThiever extends Script {
 
     @Override
     public void onNewFrame() {
+        // Skip all operations if world position is null (loading, hopping, etc.)
+        // This prevents interfering with world hops by opening inventory
+        if (getWorldPosition() == null) {
+            return;
+        }
+        
         // Check for XP drops and trigger inventory check if XP gained
         boolean xpGained = xpTracking.checkXPAndReturnIfGained();
         
-        // TWO-STALL MODE: Continuously watch guard at specific danger tiles for instant detection
+        // TWO-STALL MODE: Track XP drops for cycle counting EVERY FRAME
+        // This ensures we don't miss drops during task transitions (e.g., StartThieving -> MonitorThieving)
         if (twoStallMode && setupDone && guardTracker != null && currentlyThieving) {
+            double currentXp = xpTracking.getCurrentXp();
             if (atOreStall) {
+                guardTracker.checkOreXpDrop(currentXp);
                 guardTracker.shouldSwitchToCannonball();
             } else {
+                guardTracker.checkCbXpDrop(currentXp);
                 guardTracker.shouldSwitchToOre();
             }
         }
         
-        // Only check inventory when actively thieving
-        if (!currentlyThieving || !setupDone) {
+        // Only check inventory when actively thieving and NOT at safety tile
+        // (at safety tile = might be hopping, don't interfere with inventory)
+        if (!currentlyThieving || !setupDone || isAtSafetyTile()) {
             return;
         }
         

@@ -1,18 +1,12 @@
 package tasks;
 
-import com.osmb.api.input.MenuEntry;
-import com.osmb.api.input.MenuHook;
 import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
-import com.osmb.api.ui.component.chatbox.ChatboxComponent;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
-
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static main.TidalsCannonballThiever.*;
 
@@ -170,25 +164,28 @@ public class StartThieving extends Task {
             return false;
         }
 
-        // use menu hook to properly select steal-from action
-        AtomicReference<String> selectedAction = new AtomicReference<>(null);
-        AtomicReference<List<MenuEntry>> menuCache = new AtomicReference<>(null);
+        // FAST: Simple left-click - "Steal-from" is the default action
+        // No menu overhead = faster startup = more time for full 4-thieve cycle
+        boolean tapped = script.getFinger().tap(stallPoly);
 
-        MenuHook hook = getStealFromMenuHook(selectedAction, menuCache, stall);
-
-        boolean tapped = script.getFinger().tap(stallPoly, hook);
-
-        if (tapped && selectedAction.get() != null) {
-            script.log("THIEVE", "Clicked 'Steal-from Cannonball stall' - action: " + selectedAction.get());
-            currentlyThieving = true; // we're now thieving, don't click again
+        if (tapped) {
+            script.log("THIEVE", "Clicked Cannonball stall!");
+            currentlyThieving = true;
             lastXpGain.reset();
             
             // Initialize XP-based cycle tracking for two-stall mode
             if (twoStallMode) {
-                double currentXp = xpTracking.getThievingXpGained();
+                // Ensure XP tracking is initialized
+                if (!xpTracking.isInitialized()) {
+                    script.log("THIEVE", "XP tracking not initialized, initializing now...");
+                    xpTracking.initialize();
+                }
+                
+                // Get current XP and initialize guard tracker
+                double currentXp = xpTracking.getCurrentXp();
                 guardTracker.initXpTracking(currentXp);
                 guardTracker.resetCbCycle();
-                script.log("THIEVE", "Initialized XP cycle tracking");
+                script.log("THIEVE", "Initialized XP cycle tracking (baseline: " + currentXp + ")");
             }
             
             // humanized delay after clicking
@@ -196,66 +193,8 @@ public class StartThieving extends Task {
             return true;
         }
 
-        // tap failed, inspect menu to see why
-        List<MenuEntry> menu = menuCache.get();
-        if (menu != null) {
-            script.log("THIEVE", "Menu entries found but no valid Steal-from action:");
-            for (MenuEntry e : menu) {
-                script.log("THIEVE", "  - " + e.getAction() + " " + e.getEntityName());
-            }
-        } else {
-            script.log("THIEVE", "No menu entries found at stall location");
-        }
-
+        script.log("THIEVE", "Failed to click stall, retrying...");
         return false;
-    }
-
-    /**
-     * menu hook that only selects "steal-from" actions on cannonball stall
-     */
-    private static MenuHook getStealFromMenuHook(
-            AtomicReference<String> selected,
-            AtomicReference<List<MenuEntry>> lastMenu,
-            RSObject stall
-    ) {
-        return menuEntries -> {
-            selected.set(null);
-            lastMenu.set(menuEntries);
-
-            if (menuEntries == null) return null;
-
-            MenuEntry best = null;
-            int bestScore = Integer.MIN_VALUE;
-
-            for (MenuEntry entry : menuEntries) {
-                String action = entry.getAction().toLowerCase();
-                String entity = entry.getEntityName().toLowerCase();
-
-                // only accept steal-from actions
-                if (!action.contains("steal")) {
-                    continue;
-                }
-
-                int score = 0;
-
-                // prefer exact cannonball stall match
-                if (entity.contains("cannonball stall")) score += 100;
-                if (entity.contains("cannonball")) score += 50;
-                if (entity.contains("stall")) score += 25;
-
-                if (score > bestScore && score > 0) {
-                    bestScore = score;
-                    best = entry;
-                }
-            }
-
-            if (best == null) {
-                return null;
-            }
-
-            selected.set(best.getAction());
-            return best;
-        };
     }
 
     private boolean isAtThievingTile() {

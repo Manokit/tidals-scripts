@@ -8,76 +8,149 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 /**
- * Periodically moves to a safe tile to allow breaks/world hops/AFKs to trigger.
- * This task activates after X completed cycles to give the framework a chance
- * to execute scheduled breaks.
+ * Moves to a safe tile when conditions require it (breaks, hops, AFKs, white dot detection).
+ * Uses ProfileManager API to check if the framework is due for break/hop/AFK.
+ * Also handles white dot (player) detection hopping.
+ * 
+ * IMPORTANT: This task proactively moves to safety BEFORE allowing hops/breaks.
+ * canHopWorlds() blocks hops while mid-thieve, so we must move to safety first.
  */
 public class PrepareForBreak extends Task {
     
     // Safety tile - one tile south of cannonball stall
     private static final WorldPosition SAFETY_TILE = new WorldPosition(1867, 3294, 0);
     
-    // How often to allow breaks (every N full cycles)
-    private static final int CYCLES_BEFORE_BREAK_CHECK = 8;
+    // Cooldown to prevent rapid checks (shorter for responsive WDH)
+    private static long lastCheckTime = 0;
+    private static final long MIN_TIME_BETWEEN_CHECKS_MS = 2000; // 2 second cooldown
     
-    // Track completed cycles
-    private static int completedCycles = 0;
-    private static long lastBreakCheckTime = 0;
-    private static final long MIN_TIME_BETWEEN_CHECKS_MS = 90000; // at least 1.5 minutes between checks
+    // Track why we activated (for execute)
+    private boolean activatedForWhiteDot = false;
+    private boolean activatedForBreak = false;
+    private boolean activatedForHop = false;
+    private boolean activatedForAFK = false;
+    
+    // White dot hop settings (read from OSMB's built-in settings would be ideal, but we use a sensible default)
+    private static final int MAX_PLAYERS_BEFORE_HOP = 1;
     
     public PrepareForBreak(Script script) {
         super(script);
     }
     
     /**
-     * Call this when a full cycle completes (4 CB + 2 ore)
+     * Reset state (e.g., after a break happens)
      */
-    public static void incrementCycleCount() {
-        completedCycles++;
+    public static void resetState() {
+        lastCheckTime = 0;
     }
     
     /**
-     * Reset cycle count (e.g., after a break happens)
+     * Increment cycle count - called when a full cycle completes (4 CB + 2 ore)
+     * Kept for compatibility with SwitchToCannonballStall
+     */
+    public static void incrementCycleCount() {
+        // No longer used for break timing (using ProfileManager now)
+    }
+    
+    /**
+     * Reset cycle count - kept for compatibility
      */
     public static void resetCycleCount() {
-        completedCycles = 0;
+        // No longer used for break timing (using ProfileManager now)
+    }
+    
+    /**
+     * Get number of nearby players (white dots on minimap)
+     */
+    private int getNearbyPlayerCount() {
+        try {
+            int playerCount = script.getWidgetManager().getMinimap().getPlayerPositions().size();
+            // Subtract 1 for our own player
+            return Math.max(0, playerCount - 1);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+    
+    /**
+     * Check if too many players are nearby
+     */
+    private boolean shouldHopDueToPlayers() {
+        // Only check if hop profile is configured
+        try {
+            if (!script.getProfileManager().hasHopProfile()) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        
+        int nearbyPlayers = getNearbyPlayerCount();
+        return nearbyPlayers >= MAX_PLAYERS_BEFORE_HOP;
     }
     
     @Override
     public boolean activate() {
-        // Only in two-stall mode
-        if (!twoStallMode) return false;
+        // Don't activate if not set up yet
+        if (!setupDone) return false;
         
-        // Only check if we've completed enough cycles
-        if (completedCycles < CYCLES_BEFORE_BREAK_CHECK) return false;
+        // Don't interrupt if currently thieving mid-action (just got XP)
+        if (currentlyThieving && lastXpGain.timeElapsed() < 1500) return false;
         
-        // Don't check too frequently
+        // Cooldown to prevent rapid checks
         long now = System.currentTimeMillis();
-        if (now - lastBreakCheckTime < MIN_TIME_BETWEEN_CHECKS_MS) return false;
+        if (now - lastCheckTime < MIN_TIME_BETWEEN_CHECKS_MS) return false;
         
-        // Only activate when at cannonball stall and not mid-thieve
-        // (we just switched from ore, good time to check for breaks)
-        if (atOreStall) return false;
+        // Update lastCheckTime
+        lastCheckTime = now;
         
-        // Don't interrupt if XP cycle just started
-        if (guardTracker.getCbXpDropCount() > 0) return false;
+        // Reset activation flags
+        activatedForWhiteDot = false;
+        activatedForBreak = false;
+        activatedForHop = false;
+        activatedForAFK = false;
         
-        script.log("BREAK", "Cycle count reached " + completedCycles + " - checking for breaks...");
-        return true;
+        // Check for white dot hop (highest priority - players nearby)
+        if (shouldHopDueToPlayers()) {
+            activatedForWhiteDot = true;
+            script.log("BREAK", "White dot detected - " + getNearbyPlayerCount() + " player(s) nearby!");
+            return true;
+        }
+        
+        // Check ProfileManager for scheduled break/hop
+        try {
+            if (script.getProfileManager().hasBreakProfile() && script.getProfileManager().isDueToBreak()) {
+                activatedForBreak = true;
+                script.log("BREAK", "ProfileManager: Due for break");
+                return true;
+            }
+            
+            if (script.getProfileManager().hasHopProfile() && script.getProfileManager().isDueToHop()) {
+                activatedForHop = true;
+                script.log("BREAK", "ProfileManager: Due for scheduled hop");
+                return true;
+            }
+        } catch (Exception e) {
+            // ProfileManager may not be available, silently skip
+        }
+        
+        return false;
     }
     
     @Override
     public boolean execute() {
-        task = "Checking for breaks...";
-        lastBreakCheckTime = System.currentTimeMillis();
+        String reason = activatedForWhiteDot ? "white dot hop" :
+                       activatedForBreak ? "scheduled break" :
+                       activatedForHop ? "scheduled hop" :
+                       activatedForAFK ? "scheduled AFK" : "unknown";
         
-        script.log("BREAK", "Moving to safety tile to allow breaks/hops/AFKs...");
+        task = "Preparing for " + reason + "...";
+        script.log("BREAK", "Moving to safety tile for " + reason);
         
         // Stop thieving
         currentlyThieving = false;
         
-        // For short distance (1 tile), just tap on the destination tile directly
-        // Much more natural than using the full pathfinder!
+        // Move to safety tile (short distance, use direct tap)
         if (!tapOnTile(SAFETY_TILE)) {
             script.log("BREAK", "Failed to tap on safety tile, using walker fallback...");
             script.getWalker().walkTo(SAFETY_TILE);
@@ -86,39 +159,48 @@ public class PrepareForBreak extends Task {
         // Wait until we're at safety tile
         script.pollFramesUntil(() -> isAtSafetyTile(), 3000);
         
-        if (isAtSafetyTile()) {
-            script.log("BREAK", "At safety tile - breaks/hops/AFKs can now trigger");
-            
-            // Wait a moment to give framework time to trigger break/hop/AFK
-            // If one triggers, this poll will be interrupted by TaskInterruptedException
-            script.pollFramesHuman(() -> false, script.random(1500, 2500));
-            
-            script.log("BREAK", "No break triggered, resuming thieving...");
+        if (!isAtSafetyTile()) {
+            script.log("BREAK", "Failed to reach safety tile");
+            return true;
         }
         
-        // Reset cycle count after break check
-        resetCycleCount();
+        script.log("BREAK", "At safety tile - triggering " + reason);
         
-        // Reset StartThieving positioning flag so we wait for a fresh guard cycle
-        // This ensures we see the guard pass before starting after a break
-        StartThieving.resetAfterBreak();
+        // Execute the appropriate action
+        try {
+            if (activatedForWhiteDot) {
+                // White dot hop - force hop immediately
+                script.getProfileManager().forceHop();
+                script.log("BREAK", "Forced white dot hop!");
+            } else if (activatedForBreak) {
+                script.getProfileManager().forceBreak();
+                script.log("BREAK", "Forced scheduled break");
+            } else if (activatedForHop) {
+                script.getProfileManager().forceHop();
+                script.log("BREAK", "Forced scheduled hop");
+            }
+            // Note: AFK is handled by the framework via canAFK() callback
+            
+            // After any break/hop, reset StartThieving positioning flag
+            // so we wait for a fresh guard cycle before starting again
+            StartThieving.resetAfterBreak();
+            
+        } catch (Exception e) {
+            script.log("BREAK", "Error executing " + reason + ": " + e.getMessage());
+        }
         
         return true;
     }
     
     /**
      * Tap directly on a nearby tile (for short distance walking)
-     * Much more natural than using the pathfinder for 1-2 tile movements
      */
     private boolean tapOnTile(WorldPosition tile) {
         try {
-            // Get the tile polygon (height 0 = ground level)
             Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
             if (tilePoly == null) {
                 return false;
             }
-            
-            // Tap on the tile to walk there
             return script.getFinger().tap(tilePoly);
         } catch (Exception e) {
             script.log("BREAK", "Error tapping tile: " + e.getMessage());

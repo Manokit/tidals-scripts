@@ -36,9 +36,6 @@ public class GuardTracker {
     // ore stall position: 1863, 3295
     // guard patrols from west to east and back
     
-    // cannonball stall danger tile (two-stall mode)
-    private static final int TWO_STALL_CANNONBALL_DANGER_X = 1866;
-    
     // ore stall danger tile
     private static final int ORE_STALL_DANGER_Y = 3292;
     private static final int ORE_STALL_X = 1863;
@@ -88,10 +85,6 @@ public class GuardTracker {
     // Track when we started watching (for settling delay)
     private long cbWatchStartTime = 0;
     private long oreWatchStartTime = 0;
-    
-    // Settling delay - wait this long after guard arrives before recording their position
-    // This prevents detecting their walking-into-position as "movement"
-    private static final long SETTLE_DELAY_MS = 300;
     
     // Track last known guard highlight center position
     private Point lastGuardCenter = null;
@@ -181,7 +174,6 @@ public class GuardTracker {
         List<WorldPosition> npcPositions = findAllNPCPositions();
 
         boolean guardAtEarlyWarning = false;
-        boolean guardAtImmediateDanger = false;
 
         for (WorldPosition npcPos : npcPositions) {
             if (npcPos == null || npcPos.getPlane() != 0) continue;
@@ -963,15 +955,19 @@ public class GuardTracker {
      * @return true if we got a new XP drop
      */
     public boolean checkCbXpDrop(double currentXp) {
+        // If not initialized, initialize now and return false (don't count this as a drop)
         if (lastKnownXpForCycle < 0) {
             lastKnownXpForCycle = currentXp;
+            script.log("CYCLE", "CB XP tracking auto-initialized with: " + currentXp);
             return false;
         }
         
+        // Check for XP increase (new drop)
         if (currentXp > lastKnownXpForCycle) {
+            double xpGained = currentXp - lastKnownXpForCycle;
             lastKnownXpForCycle = currentXp;
             cbXpDropCount++;
-            script.log("CYCLE", "Main stall (CB) " + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE);
+            script.log("CYCLE", "CB steal #" + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE + " (+" + String.format("%.0f", xpGained) + " XP)");
             return true;
         }
         return false;
@@ -1048,9 +1044,23 @@ public class GuardTracker {
     
     /**
      * Initialize XP tracking (call at start or when resuming)
+     * @param currentXp the current XP value to use as baseline
      */
     public void initXpTracking(double currentXp) {
-        lastKnownXpForCycle = currentXp;
+        // Only update if we got a valid XP value
+        if (currentXp >= 0) {
+            lastKnownXpForCycle = currentXp;
+            script.log("GUARD", "XP cycle tracking initialized with baseline: " + currentXp);
+        } else {
+            script.log("GUARD", "WARNING: Invalid XP value for initialization: " + currentXp);
+        }
+    }
+    
+    /**
+     * Check if XP cycle tracking is initialized
+     */
+    public boolean isXpTrackingInitialized() {
+        return lastKnownXpForCycle >= 0;
     }
     
     /**

@@ -59,6 +59,28 @@ public class Setup extends Task {
             return false;
         }
 
+        // Wait for XP tracker to be ready before completing setup
+        script.log("SETUP", "Waiting for XP tracker to initialize...");
+        
+        boolean xpTrackerReady = script.pollFramesUntil(() -> {
+            if (xpTracking == null) return false;
+            return xpTracking.getThievingTracker() != null;
+        }, 5000);
+        
+        if (!xpTrackerReady) {
+            script.log("SETUP", "WARNING: XP tracker not ready after 5s, continuing anyway...");
+        } else {
+            // Small delay to let tracker stabilize
+            script.pollFramesHuman(() -> false, script.random(300, 500));
+            
+            // Initialize XP tracking with current value
+            if (xpTracking.initialize()) {
+                script.log("SETUP", "XP tracking initialized successfully");
+            } else {
+                script.log("SETUP", "WARNING: Failed to initialize XP tracking");
+            }
+        }
+        
         script.log("SETUP", "Setup complete! Starting cannonball thieving...");
         setupDone = true;
         

@@ -2,72 +2,262 @@
 
 > **CRITICAL: OSMB is a COLOR BOT** - It uses visual/pixel detection, NOT injection. You cannot access game memory directly. All detection is done through screen analysis, color matching, and OCR.
 
-## 📚 Documentation Index
+---
 
-**Core References:**
-- `docs/api-reference.md` - Complete API methods and imports
-- `docs/critical-concepts.md` - Color bot fundamentals (MUST READ)
-- `docs/banking-patterns.md` - Banking, inventory, deposits
-- `docs/walking-npcs.md` - Walking, NPC interaction, objects
-- `docs/ui-widgets.md` - Dialogue, equipment, minimap, overlays
-- `docs/paint-overlay.md` - Professional paint implementation
-- `docs/common-mistakes.md` - Debugging guide, pitfalls to avoid
-- `docs/advanced-patterns.md` - Production patterns from Davy's scripts
-- `docs/advanced-techniques.md` - Ground items, agility, combat, health
-- `docs/specialized-patterns.md` - Altars, minigames, processing, smelting
+## 🚀 Getting Started
 
-**Examples:**
-- `examples/gem-cutting.md` - Gem cutting specifics
+**New to OSMB? Start here:**
 
-## Quick Reference
+1. **`docs/critical-concepts.md`** - ⭐ **MUST READ FIRST** - Color bot fundamentals
+2. **`docs/api-reference.md`** - Core API overview and imports
+3. **`docs/common-mistakes.md`** - Avoid these pitfalls
+---
 
-### Basic Script Structure
-```java
-@ScriptManifest(name = "Name", author = "Author", version = 1.0, description = "Description")
-public class MyScript extends Script {
-    @Override
-    public void onStart() { }           // Called once at startup
-    
-    @Override  
-    public int poll() { return 600; }   // Main loop - return sleep ms
-    
-    @Override
-    public void onStop() { }            // Called on stop
-}
-```
+## 📖 Documentation by Category
 
-### Core API Access
-```java
-getWidgetManager()      // UI: Bank, Inventory, Dialogue, Tabs, Minimap
-getObjectManager()      // Find RSObjects (trees, rocks, banks, etc.)
-getSceneManager()       // NPCs, ground items, tiles
-getWalker()             // Pathfinding and walking
-getFinger()             // Mouse/touch input
-getPixelAnalyzer()      // Color/pixel detection
-getOCR()                // Text recognition
-```
+### 🎯 Core Patterns & Techniques
 
-## Top 5 Critical Concepts
+**Essential Patterns:**
+- **`docs/highlight-npc-detection.md`** - ⚡ Instant NPC movement detection (guards, combat)
+- **`docs/walking-npcs.md`** - Walking, NPC interaction, pathfinding
+- **`docs/banking-patterns.md`** - Safe banking, deposits, withdrawals
+- **`docs/ui-widgets.md`** - Dialogues, equipment, minimap, interfaces
+- **`docs/paint-overlay.md`** - Professional paint implementation
 
-### 1. NPCs Aren't in ObjectManager - Use Minimap!
+**Advanced Techniques:**
+- **`docs/advanced-patterns.md`** - Production patterns from real scripts
+- **`docs/advanced-techniques.md`** - Ground items, agility, combat, health
+- **`docs/specialized-patterns.md`** - Minigames, altars, processing, smelting
+
+### 🔧 API References
+
+**Core APIs:**
+- **`docs/ItemManager.md`** - Item management and searching (NEW)
+- **`docs/PixelAnalyzer_API.md`** - Visual analysis and color detection (NEW)
+- **`docs/Deposit-box.md`** - Deposit box API (NEW)
+- **`docs/ProfileManager.md`** - Breaks, world hopping, AFK (NEW)
+- **`docs/XPDropsListener.md`** - XP drop tracking (NEW)
+- **`docs/EntityMapDot.md`** - Minimap entity types (NEW)
+
+**JSON API References:**
+- **`docs/Finger.json`** - Complete Finger API methods
+- **`docs/ScriptCore.json`** - ScriptCore interface documentation
+- **`docs/Minimap.json`** - Minimap API reference
+- **`docs/com.osmb.api.walker.json`** - Walker API
+- **`docs/com.osmb.api.walker.WalkConfig.json`** - WalkConfig options
+- **`docs/Interface Chatbox.json`** - Chatbox interface API
+- **`docs/Interface TabManager.json`** - Tab management API
+- **`docs/Interface ScriptOptions.json`** - Script options API
+- **`docs/rectangle area.json`** - Rectangle area utilities
+
+### 📝 Working Examples
+
+- **`examples/mining-script.md`** - Complete mining bot with state machine
+- **`examples/gem-cutting.md`** - Gem cutting with dialogue handling
+- **`examples/BlisterwoodChopper.java`** - Woodcutting with inventory checking and dropping
+
+---
+
+## ⚡ Quick Reference by Use Case
+
+### Finding & Interacting with NPCs
+
+**Combat / Attacking:**
+→ **`docs/highlight-npc-detection.md`** ⚡ (Fastest method)
+- Sub-tile movement detection (3-5 pixels)
+- Frame-by-frame tracking (50-150ms detection)
+- Combat targeting patterns
+- Multi-NPC tracking
+
+**General NPC Interaction:**
+→ **`docs/walking-npcs.md`** (TOP SECTION)
+- Minimap positions + tile cubes (3 methods)
+- Finding NPCs by name
+- Large NPC handling (2x2, 3x3)
+- Shop keepers, dialogue NPCs
+
+**Thieving with Guards:**
+→ **`docs/highlight-npc-detection.md`** ⚡ (INSTANT detection)
+- 10-20x faster than minimap
+- Complete thieving state machine
+- Guard alert system
+
+### Banking & Inventory
+
+**Safe Banking:**
+→ **`docs/banking-patterns.md`**
+- Bank loading delays (300-500ms)
+- Withdrawal timing
+- Deposit box usage
+- Free slot calculations
+
+**Deposit Box:**
+→ **`docs/Deposit-box.md`** (NEW)
+- Deposit box API reference
+- Direct API usage
+
+**Item Management:**
+→ **`docs/ItemManager.md`** (NEW)
+- Item searching and filtering
+- Item group management
+- Drop actions
+
+**Inventory Checking:**
+→ **`examples/BlisterwoodChopper.java`**
+- Check if inventory is full
+- Get item counts from snapshots
+- Efficient inventory state tracking
+
+### Visual Detection
+
+**Pixel & Color Detection:**
+→ **`docs/PixelAnalyzer_API.md`** (NEW)
+- Highlight bounds detection
+- Pixel clusters
+- Color matching
+- Shape analysis
+
+**Identical Items:**
+→ **`docs/critical-concepts.md`**
+- BuffOverlay for charges
+- External tracking
+- Menu detection
+
+### UI & Interfaces
+
+**Dialogues:**
+→ **`docs/ui-widgets.md`**
+- Multi-step sequences
+- Item selection dialogs
+- Level-up handling
+
+**Minimap:**
+→ **`docs/Minimap.json`** & **`docs/EntityMapDot.md`** (NEW)
+- NPC positions
+- Entity types (dots)
+- Minimap API
+
+**Tabs & Equipment:**
+→ **`docs/ui-widgets.md`** & **`docs/Interface TabManager.json`**
+- Equipment tab
+- Spellbook teleports
+- Tab switching
+
+### Movement & Pathfinding
+
+**Walking:**
+→ **`docs/walking-npcs.md`** & **`docs/com.osmb.api.walker.json`**
+- Basic walking
+- Break conditions
+- Multi-step travel
+- Area definitions
+
+**WalkConfig:**
+→ **`docs/com.osmb.api.walker.WalkConfig.json`** (NEW)
+- Configuration options
+- Custom walk behavior
+
+### Looting & Ground Items
+
+→ **`docs/advanced-techniques.md`**
+- Ground item detection
+- Loot tracking
+- Distance filtering
+- Value-based looting
+
+### Combat & Health
+
+→ **`docs/advanced-techniques.md`**
+- Health monitoring
+- Food eating patterns
+- Prayer restoration
+- Animation detection
+
+### Agility
+
+→ **`docs/advanced-techniques.md`**
+- Obstacle detection
+- Course completion tracking
+- Lap counting
+- Animation waiting
+
+### Minigames & Altars
+
+→ **`docs/specialized-patterns.md`**
+- Castle Wars AFK
+- Altar offering (POH)
+- Pest Control
+- Burner management
+
+### Processing Activities
+
+→ **`docs/specialized-patterns.md`**
+- Sawmill running
+- Winemaking
+- Blast furnace
+- Cannonball smelting
+- Cooking patterns
+
+### Script Features
+
+**XP Tracking:**
+→ **`docs/XPDropsListener.md`** (NEW)
+- XP drop tracking
+- Skill-specific listeners
+
+**Breaks & Anti-Ban:**
+→ **`docs/ProfileManager.md`** (NEW)
+- Break scheduling
+- World hopping
+- AFK behavior
+
+**Paint Overlays:**
+→ **`docs/paint-overlay.md`**
+- Professional design
+- XP tracking integration
+- Level 99 handling
+
+---
+
+## 🎓 Learning Path
+
+### Beginner (Start Here)
+1. Read **`docs/critical-concepts.md`** - Understand color bot limitations
+2. Study **`examples/mining-script.md`** - See complete working example
+3. Review **`docs/common-mistakes.md`** - Avoid common pitfalls
+
+### Intermediate
+4. Learn **`docs/banking-patterns.md`** - Master safe banking
+5. Study **`docs/walking-npcs.md`** - NPC interaction
+6. Practice **`docs/ui-widgets.md`** - Dialogue handling
+
+### Advanced
+7. Master **`docs/highlight-npc-detection.md`** - Instant NPC detection
+8. Study **`docs/advanced-patterns.md`** - Production-ready patterns
+9. Reference API docs as needed for specific features
+
+---
+
+## 🔥 Critical Concepts (Quick Reference)
+
+### 1. NPCs Aren't in ObjectManager
 ```java
 // Get NPC positions from minimap
-List<WorldPosition> npcPositions = getWidgetManager().getMinimap().getNPCPositions();
+UIResultList<WorldPosition> npcPositions = getWidgetManager().getMinimap().getNPCPositions();
 
 for (WorldPosition npcPos : npcPositions) {
     Polygon tileCube = getSceneProjector().getTileCube(npcPos, 60);
     if (tileCube == null) continue;
     
-    // Verify what's at this position
     MenuEntry response = getFinger().tapGetResponse(true, tileCube);
     if (response != null && response.getEntityName().contains("Guard")) {
         getFinger().tap(tileCube, "Attack");
     }
 }
 ```
-→ **See `docs/walking-npcs.md` for complete NPC finding guide (highlights, clusters, etc.)**
+→ See **`docs/walking-npcs.md`** for complete guide
 
-### 2. Items with Identical Sprites CANNOT Be Distinguished
+### 2. Identical Sprites Cannot Be Distinguished
 ```java
 // WRONG - Waterskin(0) through (4) look identical!
 inventory.search(Set.of(ItemID.WATERSKIN_4)); 
@@ -76,22 +266,11 @@ inventory.search(Set.of(ItemID.WATERSKIN_4));
 BuffOverlay waterskinBuff = new BuffOverlay(core, WATERSKIN_ID);
 String charges = waterskinBuff.getText();
 ```
-→ **See `docs/critical-concepts.md` for solutions**
+→ See **`docs/critical-concepts.md`** for solutions
 
-### 3. Items with Identical Sprites CANNOT Be Distinguished
+### 3. Collision Map is Static
 ```java
-// WRONG - Waterskin(0) through (4) look identical!
-inventory.search(Set.of(ItemID.WATERSKIN_4)); 
-
-// CORRECT - Use BuffOverlay for items with charges
-BuffOverlay waterskinBuff = new BuffOverlay(core, WATERSKIN_ID);
-String charges = waterskinBuff.getText();
-```
-→ **See `docs/critical-concepts.md` for solutions**
-
-### 4. Visual Door Detection (Collision Map is Static!)
-```java
-// WRONG - Assuming collision map is accurate
+// WRONG - Assuming collision map updates in real-time
 if (collisionMap.isBlocked(doorTile)) { /* door is closed */ }
 
 // CORRECT - Visual verification via menu
@@ -100,25 +279,24 @@ if (response != null && response.getAction().equalsIgnoreCase("Open")) {
     // Door is closed, open it
 }
 ```
-→ **See `docs/critical-concepts.md` for details**
+→ See **`docs/critical-concepts.md`**
 
-### 5. Verify Interactions with tapGetResponse
+### 4. Always Verify Interactions
 ```java
+// Verify what you're clicking
 MenuEntry response = getFinger().tapGetResponse(true, objectPoly);
 if (response != null && response.getAction().equalsIgnoreCase("Mine")) {
-    log("Successfully clicked mine action");
+    getFinger().tap(objectPoly, "Mine");
 }
 ```
-→ **See `docs/walking-npcs.md` for interaction patterns**
 
-### 6. State Machine Pattern
+### 5. Use State Machines
 ```java
 private enum State { IDLE, GATHERING, BANKING, WALKING }
 
 @Override
 public int poll() {
-    State state = getState();
-    switch (state) {
+    switch (getState()) {
         case GATHERING: return gather();
         case BANKING: return bank();
         case WALKING: return walk();
@@ -127,102 +305,139 @@ public int poll() {
 }
 ```
 
-### 7. Prioritize Regions for Fast Startup
+### 6. Prioritize Regions
 ```java
 @Override
 public ScriptOptions getScriptOptions() {
     return new ScriptOptions() {
         @Override
         public int[] regionsToPrioritise() {
-            return new int[]{12850, 12851}; // Your operating regions
+            return new int[]{12850, 12851}; // Avoid 90+ second startup
         }
     };
 }
 ```
 
-## Common Tasks - Quick Links
+### 7. Inventory State Checking
+```java
+// Create inventory snapshot (returns ItemGroupResult)
+ItemGroupResult inventorySnapshot = getWidgetManager().getInventory().search(Set.of(ITEM_ID));
 
-**Finding NPCs?** → `docs/walking-npcs.md` (TOP SECTION)
-- Minimap positions + tile cubes
-- Highlight detection for combat
-- Pixel clusters for precision
-- Large NPC handling (2x2, 3x3)
-- Finding NPCs by name
+// Null check is essential
+if (inventorySnapshot == null) return 0;
 
-**Banking Issues?** → `docs/banking-patterns.md`
-- Safe banking pattern
-- Deposit box usage
-- Bank loading delays
-- Withdrawal timing
+// Check if inventory is full
+if (inventorySnapshot.isFull()) {
+    log("Inventory is full!");
+    // Handle full inventory (drop, bank, etc.)
+}
 
-**NPC/Object Interaction?** → `docs/walking-npcs.md`
-- Finding objects
-- NPC position detection
-- Shrinking click areas
-- Walking with break conditions
-
-**Dialogue Not Working?** → `docs/ui-widgets.md`
-- Dialogue handling
-- Multi-step sequences
-- Item selection dialogs
-
-**Paint Overlay?** → `docs/paint-overlay.md`
-- Professional clean design
-- XP tracking integration
-- Level 99 handling
-
-**Script Broken?** → `docs/common-mistakes.md`
-- Null checking
-- onNewFrame misuse
-- Timing issues
-- Debug logging
-
-**Ground Items / Looting?** → `docs/advanced-techniques.md`
-- Finding ground items
-- Loot tracking
-- Distance filtering
-- Multi-item looting
-
-**Agility Course?** → `docs/advanced-techniques.md`
-- Obstacle detection
-- Course completion tracking
-- Animation waiting
-- Lap counting
-
-**Combat / Health?** → `docs/advanced-techniques.md`
-- Health monitoring
-- Food eating
-- Prayer restoration
-- Animation detection
-
-**Minigames / Altars?** → `docs/specialized-patterns.md`
-- Castle Wars AFK
-- Altar offering
-- Pest Control
-- Burner management
-
-**Processing Activities?** → `docs/specialized-patterns.md`
-- Sawmill running
-- Winemaking
-- Blast furnace
-- Cannonball smelting
-
-## When to Check Detailed Docs
-
-- **Can't find NPCs** → See `docs/walking-npcs.md` TOP SECTION (minimap positions, highlights, clusters)
-- **NPCs not clickable** → See `docs/walking-npcs.md` for tapGetResponse verification
-- **Paint looks amateur** → See `docs/paint-overlay.md` for modern template
-- **Bank withdrawing 0 items** → See `examples/gem-cutting.md` for timing fix
-- **Items not detected** → See `docs/critical-concepts.md` for HSL/RGB
-- **Complex travel** → See `docs/advanced-patterns.md` for multi-step sequences
-
-## Resources
-
-- **API Documentation**: https://doc.osmb.co.uk
-- **Javadocs**: https://osmb.co.uk/javadocs (ItemID constants)
-- **Debug Tool**: Built into OSMB client
-- **Discord**: Developer knowledge base
+// Get count of specific item
+int itemCount = inventorySnapshot.getAmount(ITEM_ID);
+log("Found " + itemCount + " items");
+```
+→ See **`examples/BlisterwoodChopper.java`** for complete example
 
 ---
 
-*Remember: Think visually, verify interactions, and be creative when the API can't distinguish items directly!*
+## 🛠️ Basic Script Structure
+
+```java
+@ScriptManifest(name = "Name", author = "Author", version = 1.0, description = "Description")
+public class MyScript extends Script {
+    
+    @Override
+    public void onStart() {
+        // Called once at startup
+        log("Script started!");
+    }
+    
+    @Override  
+    public int poll() {
+        // Main loop - return sleep time in milliseconds
+        // This is your script's "brain"
+        return doTask();
+    }
+    
+    @Override
+    public void onNewFrame() {
+        // Called every game frame (READ-ONLY)
+        // Never modify state here, only read/monitor
+    }
+    
+    @Override
+    public void onStop() {
+        // Called when script stops
+        log("Script stopped!");
+    }
+}
+```
+
+---
+
+## 🔑 Core API Access
+
+```java
+// UI Components
+getWidgetManager()      // Bank, Inventory, Dialogue, Tabs, Minimap
+
+// Game Objects
+getObjectManager()      // Find RSObjects (trees, rocks, banks, etc.)
+getSceneManager()       // NPCs, ground items, scene tiles
+
+// Movement
+getWalker()             // Pathfinding and walking
+
+// Input
+getFinger()             // Mouse/touch input, clicking, tapping
+
+// Visual Analysis
+getPixelAnalyzer()      // Color detection, highlight bounds, pixel clusters
+getOCR()                // Text recognition
+
+// Items
+getItemManager()        // Item searching, management (See ItemManager.md)
+
+// Utilities
+getWorldPosition()      // Get player position
+getSceneProjector()     // Convert positions to polygons
+```
+
+---
+
+## 🐛 Troubleshooting
+
+**Script won't start?** → Check region priorities (`docs/common-mistakes.md`)
+**Can't find NPCs?** → Read `docs/walking-npcs.md` TOP SECTION
+**Bank withdrawing 0?** → Check `examples/gem-cutting.md` for timing
+**NPCs not detected?** → Use `docs/highlight-npc-detection.md`
+**Items not found?** → See `docs/ItemManager.md` and `docs/critical-concepts.md`
+**Inventory checking issues?** → See `examples/BlisterwoodChopper.java` for isFull() pattern
+**Dialogue not working?** → Check `docs/ui-widgets.md`
+**Paint broken?** → See `docs/paint-overlay.md`
+**General debugging?** → Read `docs/common-mistakes.md`
+
+---
+
+## 📚 External Resources
+
+- **API Documentation**: https://doc.osmb.co.uk
+- **Javadocs**: https://osmb.co.uk/javadocs (ItemID constants)
+- **Debug Tool**: Built into OSMB client (get exact HSL/RGB values)
+- **Discord**: Community support and knowledge base
+
+---
+
+## 💡 Pro Tips
+
+1. **Think visually** - You're a color bot, not an injection bot
+2. **Verify everything** - Use `tapGetResponse()` before clicking
+3. **Handle nulls** - Everything can be null, check before using
+4. **Use Debug Tool** - Get exact color values for detection
+5. **Read critical-concepts.md** - Understand fundamental limitations
+6. **Check examples** - See working patterns before writing your own
+7. **Start simple** - Build complexity gradually
+
+---
+
+*Remember: OSMB gives you eyes, not memory access. Be creative with visual detection!*

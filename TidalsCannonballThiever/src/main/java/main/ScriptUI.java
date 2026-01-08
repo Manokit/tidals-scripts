@@ -120,7 +120,7 @@ public class ScriptUI {
             "-fx-min-width: 20;"
         );
 
-        Label warningText = new Label("Start 2-stall mode with empty inventory for ore deposi");
+        Label warningText = new Label("Start 2-stall mode with empty inventory for ore deposits.");
         warningText.setStyle("-fx-text-fill: #FF7F50; -fx-font-size: 10px;");
         warningText.setWrapText(true);
         warningText.setMaxWidth(250);
