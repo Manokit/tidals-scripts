@@ -22,105 +22,71 @@ public class GuardTracker {
     private final Script script;
     private final Random random = new Random();
 
-    // === SINGLE STALL MODE (original) ===
-    // early warning tile - guard sits here for ~3 seconds
+    // single stall mode
     private static final int EARLY_WARNING_X = 1865;
     private static final int PATROL_Y = 3295;
 
-    // immediate danger tiles (single stall)
     private static final int DANGER_X_1 = 1866;
     private static final int DANGER_X_2 = 1867;
 
-    // === TWO STALL MODE ===
-    // cannonball stall position in two-stall mode: 1867, 3295
-    // ore stall position: 1863, 3295
-    // guard patrols from west to east and back
-    
-    // ore stall danger tile
+    // two stall mode
     private static final int ORE_STALL_DANGER_Y = 3292;
     private static final int ORE_STALL_X = 1863;
 
-    // early warning delay params (normal distribution)
+    // early warning delay params
     private static final double DELAY_MIN_SEC = 2.5;
     private static final double DELAY_MAX_SEC = 3.5;
-    private static final double DELAY_MEAN_SEC = 3.2;  // center of distribution
-    private static final double DELAY_STD_DEV = 0.25;  // standard deviation
+    private static final double DELAY_MEAN_SEC = 3.2;
+    private static final double DELAY_STD_DEV = 0.25;
 
-    // track when we first saw guard at early warning tile
     private long earlyWarningStartTime = 0;
-    private long currentDelayMs = 0;  // randomized delay for current encounter
+    private long currentDelayMs = 0;
 
-    // store last known npc positions for paint/debugging
     private List<WorldPosition> lastNpcPositions = new ArrayList<>();
 
-    // === HIGHLIGHT-BASED PIXEL DETECTION (10-20x faster than tile updates!) ===
-    // Cyan highlight color for Market Guards
-    // RGB cyan = 0x00FFFF (0, 255, 255), tolerance = 15 for each HSL channel
+    // highlight-based pixel detection (cyan guard highlight)
     private static final SearchablePixel GUARD_HIGHLIGHT = new SearchablePixel(
-            0x00FFFF,  // Cyan RGB value
-            new SingleThresholdComparator(15),  // Tolerance of 15 for all channels
-            ColorModel.HSL  // Compare in HSL color space
+            0x00FFFF,
+            new SingleThresholdComparator(15),
+            ColorModel.HSL
     );
     
-    // Movement detection threshold (pixels)
-    // Idle animations can cause 5-15 pixel jitter, actual walking is 30+ pixels
     private static final int MOVEMENT_THRESHOLD = 20;
     
-    // === SPECIFIC WATCH TILES ===
-    // These are the exact tiles where we START watching for guard movement
-    // Cannonball stall watch tile: (1865, 3295, 0) - guard stands here before approaching CB stall
+    // watch tiles
     private static final int CB_WATCH_X = 1865;
     private static final int CB_WATCH_Y = 3295;
-    
-    // Ore stall watch tile: (1863, 3292, 0) - guard stands here before approaching ore stall
     private static final int ORE_WATCH_X = 1863;
     private static final int ORE_WATCH_Y = 3292;
     
-    // Track if we're actively watching at each stall's danger tile
     private boolean watchingAtCBTile = false;
     private boolean watchingAtOreTile = false;
     private Point cbWatchStartCenter = null;
     private Point oreWatchStartCenter = null;
-    
-    // Track when we started watching (for settling delay)
     private long cbWatchStartTime = 0;
     private long oreWatchStartTime = 0;
-    
-    // Track last known guard highlight center position
     private Point lastGuardCenter = null;
     private long lastGuardCheckTime = 0;
-    
-    // Track guard movement direction (true = moving east/away from cannonball stall)
     private boolean guardMovingEast = false;
     
-    // Number of ore thieves done in current ore stall visit (legacy - kept for compatibility)
     private int oreThiefCount = 0;
     private static final int MAX_ORE_THIEVES = 2;
     
-    // Track if we've received an XP drop at the ore stall
-    // Only start watching guard AFTER we get an XP drop (confirms we're settled)
     private long arrivedAtOreStallTime = 0;
     private boolean gotOreStallXpDrop = false;
-    
-    // Track if we've received an XP drop at the CB stall (same approach)
     private long arrivedAtCBStallTime = 0;
     private boolean gotCBStallXpDrop = false;
     
-    // === XP-BASED CYCLE TRACKING ===
-    // Primary switching logic: 4 CB thieves -> 2 ore thieves -> repeat
-    // Guard detection is now BACKUP only (for mid-cycle starts)
+    // xp-based cycle tracking (4 cb -> 2 ore -> repeat)
     private int cbXpDropCount = 0;
     private int oreXpDropCount = 0;
     private static final int CB_THIEVES_PER_CYCLE = 4;
     private static final int ORE_THIEVES_PER_CYCLE = 2;
-    private double lastKnownXpForCycle = -1;  // Track XP for counting drops
+    private double lastKnownXpForCycle = -1;
     
-    // Cooldown after XP-based switch - don't let backup guard detection trigger
-    // This prevents the script from psyching itself out after a proper XP cycle switch
     private long lastXpBasedSwitchTime = 0;
-    private static final long XP_SWITCH_COOLDOWN_MS = 5000;  // 5 seconds cooldown
+    private static final long XP_SWITCH_COOLDOWN_MS = 5000;
     
-    // CB stall player position - must be here before we start watching guard
     private static final int CB_STALL_PLAYER_X = 1867;
     private static final int CB_STALL_PLAYER_Y = 3295;
 
@@ -128,48 +94,26 @@ public class GuardTracker {
         this.script = script;
     }
 
-    /**
-     * Generate a random delay using normal distribution
-     * centered around DELAY_MEAN_SEC, clamped to [DELAY_MIN_SEC, DELAY_MAX_SEC]
-     */
     private long generateRandomDelay() {
-        // normal distribution centered at mean
         double delay = DELAY_MEAN_SEC + random.nextGaussian() * DELAY_STD_DEV;
-        
-        // clamp to min/max
         delay = Math.max(DELAY_MIN_SEC, Math.min(DELAY_MAX_SEC, delay));
-        
-        return (long) (delay * 1000); // convert to ms
+        return (long) (delay * 1000);
     }
 
-    /**
-     * find all npc positions from minimap (no tapping, just positions)
-     * @return list of npc positions
-     */
     public List<WorldPosition> findAllNPCPositions() {
         List<WorldPosition> npcPositions = new ArrayList<>();
 
-        // get all npc positions from minimap
         UIResultList<WorldPosition> npcResult = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcResult == null || !npcResult.isFound()) {
             return npcPositions;
         }
 
-        // create mutable copy since asList() returns unmodifiable list
         npcPositions = new ArrayList<>(npcResult.asList());
-
-        // update cached positions
         lastNpcPositions = npcPositions;
 
         return npcPositions;
     }
 
-    /**
-     * check if any npc is at a danger tile
-     * - immediate danger (1866, 1867): return true right away
-     * - early warning (1865): return true after 2 seconds delay
-     * @return true if danger detected
-     */
     public boolean isAnyGuardInDangerZone() {
         List<WorldPosition> npcPositions = findAllNPCPositions();
 
@@ -181,26 +125,21 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // check patrol row
             if (y != PATROL_Y) continue;
 
-            // immediate danger - retreat NOW
             if (x == DANGER_X_1 || x == DANGER_X_2) {
                 script.log("GUARD", "IMMEDIATE DANGER! NPC at x=" + x);
-                earlyWarningStartTime = 0; // reset early warning timer
+                earlyWarningStartTime = 0;
                 return true;
             }
 
-            // early warning - guard at 1865
             if (x == EARLY_WARNING_X) {
                 guardAtEarlyWarning = true;
             }
         }
 
-        // handle early warning with randomized delay
         if (guardAtEarlyWarning) {
             if (earlyWarningStartTime == 0) {
-                // first time seeing guard at 1865, generate random delay
                 earlyWarningStartTime = System.currentTimeMillis();
                 currentDelayMs = generateRandomDelay();
                 double delaySec = currentDelayMs / 1000.0;
@@ -213,9 +152,7 @@ public class GuardTracker {
                 script.log("GUARD", String.format("Early warning expired after %.2fs - retreating!", actualSec));
                 return true;
             }
-            // still waiting, don't retreat yet
         } else {
-            // guard no longer at 1865, reset timer
             if (earlyWarningStartTime != 0) {
                 earlyWarningStartTime = 0;
                 currentDelayMs = 0;
@@ -225,31 +162,21 @@ public class GuardTracker {
         return false;
     }
 
-    /**
-     * check if safe to return to thieving
-     * guard must have moved PAST the stall (x >= 1868) or be off the patrol row
-     * @return true if safe to return
-     */
     public boolean isSafeToReturn() {
         List<WorldPosition> npcPositions = findAllNPCPositions();
 
-        // check if any npc is in the guard patrol area (x 1864-1867, y 3295)
-        // ignore NPCs outside this range - they're not guards
         for (WorldPosition npcPos : npcPositions) {
             if (npcPos == null || npcPos.getPlane() != 0) continue;
 
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // only check NPCs in the guard patrol zone (x 1864-1867 at y=3295)
-            // NPCs outside this range are not the patrolling guard
             if (y == PATROL_Y && x >= 1864 && x <= DANGER_X_2) {
                 script.log("GUARD", "Not safe yet - NPC at x=" + x + " in patrol zone");
                 return false;
             }
         }
 
-        // reset early warning timer when returning
         earlyWarningStartTime = 0;
         currentDelayMs = 0;
 
@@ -257,29 +184,13 @@ public class GuardTracker {
         return true;
     }
 
-    /**
-     * get last known npc positions (for paint overlay)
-     */
     public List<WorldPosition> getLastNpcPositions() {
         return lastNpcPositions;
     }
 
-    // === TWO STALL MODE METHODS ===
-    // Guards patrol CLOCKWISE only!
-    // - At cannonball stall: guard at x=1865 = danger (heading toward stall)
-    // - Guard at x > 1868 = safe (has passed cannonball stall, heading to ore stall)
-    // - At ore stall: guard at (1863, 3292) = danger (heading toward ore stall from south)
-    // Priority: cannonball stall (more XP), ore stall is just a waiting spot
-
-    // GLOBAL early warning timer - persists across stall switches!
-    // This way if guard is at 1865 while we're at ore stall, timer is already counting
     private long twoStallEarlyWarningStart = 0;
     private long twoStallCurrentDelay = 0;
 
-    /**
-     * Update the global early warning timer based on guard position
-     * Call this frequently (e.g. in MonitorThieving) regardless of which stall we're at
-     */
     public void updateGlobalGuardTimer() {
         if (!twoStallMode) return;
 
@@ -292,13 +203,11 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // guard on patrol row at early warning position (1865)
             if (y == PATROL_Y && x == EARLY_WARNING_X) {
                 guardAtEarlyWarning = true;
             }
         }
 
-        // keep timer running if guard at 1865
         if (guardAtEarlyWarning) {
             if (twoStallEarlyWarningStart == 0) {
                 twoStallEarlyWarningStart = System.currentTimeMillis();
@@ -307,7 +216,6 @@ public class GuardTracker {
                 script.log("GUARD", String.format("GLOBAL: Guard at 1865, timer started (%.2fs)", delaySec));
             }
         } else {
-            // guard moved away, reset timer
             if (twoStallEarlyWarningStart != 0) {
                 script.log("GUARD", "GLOBAL: Guard moved from 1865, timer reset");
                 twoStallEarlyWarningStart = 0;
@@ -316,11 +224,6 @@ public class GuardTracker {
         }
     }
 
-    /**
-     * check if guard is approaching the cannonball stall in two-stall mode
-     * MORE AGGRESSIVE: switch immediately at 1865 (no timer) because travel to ore takes time
-     * @return true if should switch to ore stall
-     */
     public boolean isGuardNearCannonballStall() {
         if (!twoStallMode) return false;
 
@@ -332,11 +235,8 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // check guard on patrol row (y=3295)
             if (y != PATROL_Y) continue;
 
-            // IMMEDIATE switch in two-stall mode when guard at 1865, 1866, or 1867
-            // No timer delay - we need the extra time to travel to ore stall!
             if (x >= EARLY_WARNING_X && x <= DANGER_X_2) {
                 script.log("GUARD", "Guard at x=" + x + " - SWITCH TO ORE NOW!");
                 twoStallEarlyWarningStart = 0;
@@ -348,11 +248,6 @@ public class GuardTracker {
         return false;
     }
 
-    /**
-     * check if cannonball stall is safe to return to (guard has passed it)
-     * REQUIRES seeing guard at x >= 1868 - won't return true if no guard visible
-     * @return true if guard is CONFIRMED at x >= 1868 (at or past the cannonball stall)
-     */
     public boolean isCannonballStallSafe() {
         if (!twoStallMode) return isSafeToReturn();
 
@@ -367,46 +262,29 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // only check NPCs on patrol row
             if (y != PATROL_Y) continue;
-            
             foundGuardOnPatrol = true;
 
-            // guard still in danger zone (1865-1867) = NOT SAFE
             if (x >= EARLY_WARNING_X && x <= 1867) {
                 script.log("GUARD", "Cannonball NOT safe - guard at x=" + x);
                 return false;
             }
             
-            // guard at or past the stall (x >= 1868) = SAFE to return
             if (x >= 1868) {
                 guardPastStall = true;
             }
         }
 
-        // ONLY safe if we actually SAW the guard past the stall
-        // Don't return true just because we didn't see any guard (detection might have failed)
         if (guardPastStall) {
-            // reset early warning timer when returning
             twoStallEarlyWarningStart = 0;
             twoStallCurrentDelay = 0;
             script.log("GUARD", "Cannonball SAFE - guard at x>=1868!");
             return true;
         }
         
-        // if we found a guard but they weren't past, not safe
-        // if we didn't find any guard, also not safe (detection might have missed them)
-        if (!foundGuardOnPatrol) {
-            // don't spam log, just return false silently
-        }
         return false;
     }
 
-    /**
-     * check if guard is approaching the ore stall (from the south)
-     * triggers when guard is at (1863, 3292)
-     * @return true if guard is near ore stall
-     */
     public boolean isGuardNearOreStall() {
         if (!twoStallMode) return false;
 
@@ -418,7 +296,6 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // guard at ore stall danger zone (south of stall)
             if (x == ORE_STALL_X && y == ORE_STALL_DANGER_Y) {
                 script.log("GUARD", "Guard near ore stall at (" + x + ", " + y + ")");
                 return true;
@@ -427,13 +304,6 @@ public class GuardTracker {
         return false;
     }
 
-    // === HIGHLIGHT-BASED PIXEL DETECTION METHODS ===
-    // These detect guard movement 10-20x faster than tile-based methods!
-
-    /**
-     * Find if any NPC is at the exact specified tile
-     * @return WorldPosition if found, null otherwise
-     */
     private WorldPosition findNPCAtTile(int targetX, int targetY) {
         UIResultList<WorldPosition> npcPositions = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcPositions == null || !npcPositions.isFound()) return null;
@@ -451,9 +321,6 @@ public class GuardTracker {
         return null;
     }
 
-    /**
-     * Log all NPC positions visible from minimap (for debugging)
-     */
     private void logAllNPCPositions() {
         UIResultList<WorldPosition> npcPositions = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcPositions == null || !npcPositions.isFound()) {
@@ -472,37 +339,21 @@ public class GuardTracker {
         script.log("GUARD-DEBUG", sb.toString());
     }
 
-    /**
-     * Get the highlight center point for a guard at the given position
-     * @return Point center of highlight bounds, or null if not found
-     */
     private Point getGuardHighlightCenter(WorldPosition guardPos) {
         if (guardPos == null) return null;
 
-        // Get tile cube for this NPC (100 height for guard)
         Polygon tileCube = script.getSceneProjector().getTileCube(guardPos, 100);
         if (tileCube == null) return null;
 
-        // Get highlight bounds using cyan color
         Rectangle bounds = script.getPixelAnalyzer().getHighlightBounds(tileCube, GUARD_HIGHLIGHT);
         if (bounds == null) return null;
 
         return bounds.getCenter();
     }
 
-    /**
-     * MAIN METHOD FOR CANNONBALL STALL:
-     * Check if guard is at CB watch tile (1865, 3295) and watch for movement.
-     * Returns true the INSTANT they start moving away.
-     * 
-     * Call this frequently (every frame) when at cannonball stall.
-     * 
-     * @return true if guard just started moving = SWITCH TO ORE NOW!
-     */
     public boolean shouldSwitchToOre() {
         if (!twoStallMode) return false;
 
-        // CRITICAL: Don't start watching until we're actually at the CB stall!
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
         
@@ -510,7 +361,6 @@ public class GuardTracker {
         int playerY = (int) myPos.getY();
         
         if (playerX != CB_STALL_PLAYER_X || playerY != CB_STALL_PLAYER_Y) {
-            // Not at CB stall yet - don't watch, reset any existing watch state
             if (watchingAtCBTile || arrivedAtCBStallTime != 0) {
                 script.log("GUARD-PIXEL", "Not at CB stall yet - resetting watch state");
                 watchingAtCBTile = false;
@@ -522,7 +372,6 @@ public class GuardTracker {
             return false;
         }
         
-        // Track when we first arrived at the CB stall
         if (arrivedAtCBStallTime == 0) {
             arrivedAtCBStallTime = System.currentTimeMillis();
             gotCBStallXpDrop = false;
@@ -530,7 +379,6 @@ public class GuardTracker {
             return false;
         }
         
-        // CRITICAL: Wait for XP drop before starting guard watch!
         if (!gotCBStallXpDrop) {
             if (lastXpGain.timeElapsed() < (System.currentTimeMillis() - arrivedAtCBStallTime)) {
                 gotCBStallXpDrop = true;
@@ -540,20 +388,14 @@ public class GuardTracker {
             }
         }
 
-        // Check if guard is at the CB watch tile
         WorldPosition guardPos = findNPCAtTile(CB_WATCH_X, CB_WATCH_Y);
 
         if (guardPos != null) {
-            // Guard IS at the watch tile - track their highlight pixel center
             Point currentCenter = getGuardHighlightCenter(guardPos);
 
-            if (currentCenter == null) {
-                // Can't see highlight, maybe occluded - keep watching
-                return false;
-            }
+            if (currentCenter == null) return false;
 
             if (!watchingAtCBTile) {
-                // Just started watching - record time and wait for settle
                 watchingAtCBTile = true;
                 cbWatchStartTime = System.currentTimeMillis();
                 cbWatchStartCenter = null;
@@ -561,32 +403,25 @@ public class GuardTracker {
                 return false;
             }
 
-            // Check if settling delay has passed (short - XP drop confirms we're settled)
             long elapsed = System.currentTimeMillis() - cbWatchStartTime;
-            if (elapsed < 300) {
-                return false;
-            }
+            if (elapsed < 300) return false;
 
-            // Record position if not done yet
             if (cbWatchStartCenter == null) {
                 cbWatchStartCenter = currentCenter;
                 script.log("GUARD-PIXEL", "Guard settled at CB tile - NOW watching for movement...");
                 return false;
             }
 
-            // Already watching - check for ANY movement from settled position
             int dx = Math.abs(currentCenter.x - cbWatchStartCenter.x);
             int dy = Math.abs(currentCenter.y - cbWatchStartCenter.y);
 
             if (dx > MOVEMENT_THRESHOLD || dy > MOVEMENT_THRESHOLD) {
                 script.log("GUARD-PIXEL", "GUARD MOVED! dx=" + dx + ", dy=" + dy + " pixels - SWITCH TO ORE!");
-                return true;  // SWITCH NOW!
+                return true;
             }
 
-            // Still watching, no movement yet
             return false;
         } else {
-            // Guard NOT at watch tile
             if (watchingAtCBTile) {
                 script.log("GUARD-PIXEL", "Guard left CB watch tile - stopping watch");
                 watchingAtCBTile = false;
@@ -597,25 +432,12 @@ public class GuardTracker {
         }
     }
 
-    // Ore stall player position - must be here before we start watching guard
     private static final int ORE_STALL_PLAYER_X = 1863;
     private static final int ORE_STALL_PLAYER_Y = 3295;
 
-    /**
-     * MAIN METHOD FOR ORE STALL:
-     * Watch the guard at (1863, 3292) - the INSTANT they start moving, we must
-     * click cannonball stall immediately because all 3 guards move at once!
-     * 
-     * IMPORTANT: Only starts watching once player is AT the ore stall (1863, 3295, 0).
-     * This prevents false positives from camera movement during the walk.
-     * 
-     * @return true if guard started moving = CLICK CANNONBALL NOW!
-     */
     public boolean shouldSwitchToCannonball() {
         if (!twoStallMode) return false;
 
-        // CRITICAL: Don't start watching until we're actually at the ore stall!
-        // Camera movement during walking causes false "guard movement" detection
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
         
@@ -623,7 +445,6 @@ public class GuardTracker {
         int playerY = (int) myPos.getY();
         
         if (playerX != ORE_STALL_PLAYER_X || playerY != ORE_STALL_PLAYER_Y) {
-            // Not at ore stall yet - don't watch, reset any existing watch state
             if (watchingAtOreTile || arrivedAtOreStallTime != 0) {
                 script.log("GUARD-PIXEL", "Not at ore stall yet - resetting watch state");
                 watchingAtOreTile = false;
@@ -635,7 +456,6 @@ public class GuardTracker {
             return false;
         }
         
-        // Track when we first arrived at the ore stall
         if (arrivedAtOreStallTime == 0) {
             arrivedAtOreStallTime = System.currentTimeMillis();
             gotOreStallXpDrop = false;
@@ -643,41 +463,26 @@ public class GuardTracker {
             return false;
         }
         
-        // CRITICAL: Wait for XP drop before starting guard watch!
-        // XP drop confirms thieve completed and we're settled
         if (!gotOreStallXpDrop) {
-            // Check if we got an XP drop since arriving (lastXpGain timer resets on XP)
-            // If lastXpGain was reset AFTER we arrived, we got an XP drop
             if (lastXpGain.timeElapsed() < (System.currentTimeMillis() - arrivedAtOreStallTime)) {
                 gotOreStallXpDrop = true;
                 script.log("GUARD-PIXEL", "Got XP drop at ore stall - NOW can start watching guard!");
-                // Log all visible NPCs for debugging
                 logAllNPCPositions();
             } else {
-                // Still waiting for XP drop
                 return false;
             }
         }
 
-        // Check if guard is at the ore watch tile
         WorldPosition guardPos = findNPCAtTile(ORE_WATCH_X, ORE_WATCH_Y);
 
         if (guardPos != null) {
-            // Log actual tile position of the NPC we found
             int guardX = (int) guardPos.getX();
             int guardY = (int) guardPos.getY();
-            
-            // Guard IS at the watch tile - track their highlight pixel center
             Point currentCenter = getGuardHighlightCenter(guardPos);
 
-            if (currentCenter == null) {
-                // Can't see highlight - keep waiting
-                script.log("GUARD-PIXEL", "NPC at tile (" + guardX + "," + guardY + ") but can't see highlight");
-                return false;
-            }
+            if (currentCenter == null) return false;
 
             if (!watchingAtOreTile) {
-                // Just started watching - record time and wait for guard to settle
                 watchingAtOreTile = true;
                 oreWatchStartTime = System.currentTimeMillis();
                 oreWatchStartCenter = null;
@@ -685,63 +490,43 @@ public class GuardTracker {
                 return false;
             }
 
-            // Check if settling delay has passed (shorter now - XP drop already confirmed we're settled)
             long elapsed = System.currentTimeMillis() - oreWatchStartTime;
-            if (elapsed < 300) {  // 300ms settle time (reduced since XP drop confirms player settled)
-                return false;
-            }
+            if (elapsed < 300) return false;
 
-            // Settling complete - record position if not done yet
             if (oreWatchStartCenter == null) {
                 oreWatchStartCenter = currentCenter;
-                script.log("GUARD-PIXEL", "NPC at (" + guardX + "," + guardY + ") settled - pixel pos: (" + currentCenter.x + "," + currentCenter.y + ")");
+                script.log("GUARD-PIXEL", "NPC at (" + guardX + "," + guardY + ") settled");
                 return false;
             }
 
-            // Already watching - check for ANY movement from settled position
             int dx = Math.abs(currentCenter.x - oreWatchStartCenter.x);
             int dy = Math.abs(currentCenter.y - oreWatchStartCenter.y);
 
             if (dx > MOVEMENT_THRESHOLD || dy > MOVEMENT_THRESHOLD) {
-                script.log("GUARD-PIXEL", "NPC at (" + guardX + "," + guardY + ") MOVED! start=(" + oreWatchStartCenter.x + "," + oreWatchStartCenter.y + ") now=(" + currentCenter.x + "," + currentCenter.y + ") dx=" + dx + " dy=" + dy);
-                return true;  // DROP EVERYTHING AND CLICK CANNONBALL!
+                script.log("GUARD-PIXEL", "NPC MOVED! dx=" + dx + " dy=" + dy);
+                return true;
             }
 
             return false;
         } else {
-            // Guard NOT at watch tile anymore
             if (watchingAtOreTile) {
                 script.log("GUARD-PIXEL", "Guard left ore watch tile");
                 watchingAtOreTile = false;
                 oreWatchStartCenter = null;
                 oreWatchStartTime = 0;
             }
-            // Guard left - cannonball should be safe now
             return isCannonballStallSafe();
         }
     }
 
-    /**
-     * Check if we're currently watching the guard at CB tile
-     * @return true if actively watching
-     */
     public boolean isWatchingAtCBTile() {
         return watchingAtCBTile;
     }
 
-    /**
-     * Check if we're currently watching the guard at ore tile
-     * @return true if actively watching
-     */
     public boolean isWatchingAtOreTile() {
         return watchingAtOreTile;
     }
 
-    /**
-     * Check if guard has PASSED the CB watch tile (at x=1866 or 1867)
-     * This is a fallback for when pixel detection might have missed them
-     * @return true if guard is past the watch tile
-     */
     public boolean isGuardPastWatchTile() {
         if (!twoStallMode) return false;
 
@@ -753,10 +538,8 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // Only check guard on patrol row (y=3295)
             if (y != PATROL_Y) continue;
 
-            // Guard at x=1866 or 1867 = PAST the watch tile, need to switch NOW
             if (x == 1866 || x == 1867) {
                 script.log("GUARD", "Guard PAST watch tile at x=" + x + " - SWITCH NOW!");
                 return true;
@@ -765,11 +548,6 @@ public class GuardTracker {
         return false;
     }
 
-    /**
-     * Check if guard has PASSED the ore watch tile
-     * This is a fallback for when pixel detection might have missed them
-     * @return true if guard is past the ore watch tile (heading toward ore stall)
-     */
     public boolean isGuardPastOreWatchTile() {
         if (!twoStallMode) return false;
 
@@ -781,8 +559,6 @@ public class GuardTracker {
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // Guard past ore watch tile - check if they're at ore stall area
-            // Ore watch tile is (1863, 3292), past would be closer to stall
             if (x == ORE_STALL_X && y == 3293) {
                 script.log("GUARD", "Guard PAST ore watch tile - heading to ore stall!");
                 return true;
@@ -791,32 +567,24 @@ public class GuardTracker {
         return false;
     }
 
-    /**
-     * Update the guard's highlight pixel position (generic method).
-     * Call this frequently (e.g., in onNewFrame) for instant movement detection.
-     * Returns the current guard highlight bounds center, or null if not found.
-     */
     public Point updateGuardHighlightPosition() {
         if (!twoStallMode) return null;
 
         UIResultList<WorldPosition> npcPositions = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcPositions == null || !npcPositions.isFound()) return null;
 
-        // Look for guard near cannonball stall area (x 1863-1870, y 3291-3297)
         for (WorldPosition npcPos : npcPositions) {
             if (npcPos == null || npcPos.getPlane() != 0) continue;
 
             int x = (int) npcPos.getX();
             int y = (int) npcPos.getY();
 
-            // Only check NPCs in the guard patrol zone
             if (y < 3291 || y > 3297) continue;
             if (x < 1863 || x > 1872) continue;
 
             Point currentCenter = getGuardHighlightCenter(npcPos);
             if (currentCenter == null) continue;
 
-            // Track movement direction
             if (lastGuardCenter != null) {
                 int dx = currentCenter.x - lastGuardCenter.x;
                 if (Math.abs(dx) > MOVEMENT_THRESHOLD) {
@@ -832,13 +600,6 @@ public class GuardTracker {
         return null;
     }
 
-    /**
-     * Detects the MOMENT a guard starts moving via highlight pixel shift.
-     * Returns true when guard's highlight center moves beyond threshold.
-     * This is 10-20x faster than waiting for minimap tile update!
-     * 
-     * @return true if guard has started moving (pixel shift detected)
-     */
     public boolean hasGuardStartedMoving() {
         if (!twoStallMode) return false;
         if (lastGuardCenter == null) return false;
@@ -859,100 +620,58 @@ public class GuardTracker {
         return false;
     }
 
-    /**
-     * Check if guard is moving AWAY from cannonball stall (east direction).
-     * When true, it's safe to return to cannonball stall.
-     * 
-     * @return true if guard is moving east (away from cannonball, toward ore stall)
-     */
     public boolean isGuardMovingAwayFromCannonball() {
         if (!twoStallMode) return false;
         updateGuardHighlightPosition();
         return guardMovingEast;
     }
 
-    /**
-     * Check if guard is moving TOWARD cannonball stall (west direction).
-     * When true, should switch to ore stall.
-     * 
-     * @return true if guard is moving west (toward cannonball stall)
-     */
     public boolean isGuardMovingTowardCannonball() {
         if (!twoStallMode) return false;
         updateGuardHighlightPosition();
         return !guardMovingEast && lastGuardCenter != null;
     }
 
-    // === ORE THIEVE TRACKING ===
-
-    /**
-     * Reset ore thieve count (call when switching to ore stall)
-     */
     public void resetOreThiefCount() {
         oreThiefCount = 0;
     }
 
-    /**
-     * Increment ore thieve count (call after each successful ore thieve)
-     */
     public void incrementOreThiefCount() {
         oreThiefCount++;
         script.log("GUARD", "Ore thieve #" + oreThiefCount + " of " + MAX_ORE_THIEVES);
     }
 
-    /**
-     * Check if we can do more ore thieves
-     * @return true if under max ore thieves limit
-     */
     public boolean canDoMoreOreThieves() {
         return oreThiefCount < MAX_ORE_THIEVES;
     }
 
-    /**
-     * Get current ore thieve count
-     */
     public int getOreThiefCount() {
         return oreThiefCount;
     }
 
-    /**
-     * Reset guard tracking state (call when switching stalls)
-     */
     public void resetGuardTracking() {
         lastGuardCenter = null;
         guardMovingEast = false;
         lastGuardCheckTime = 0;
-        // Also reset watch states
         watchingAtCBTile = false;
         watchingAtOreTile = false;
         cbWatchStartCenter = null;
         oreWatchStartCenter = null;
         cbWatchStartTime = 0;
         oreWatchStartTime = 0;
-        // Reset XP tracking for both stalls
         arrivedAtOreStallTime = 0;
         gotOreStallXpDrop = false;
         arrivedAtCBStallTime = 0;
         gotCBStallXpDrop = false;
     }
 
-    // === XP-BASED CYCLE METHODS ===
-    
-    /**
-     * Check for XP drop and increment counter for cannonball stall.
-     * Call this frequently while at CB stall.
-     * @param currentXp current total XP gained
-     * @return true if we got a new XP drop
-     */
     public boolean checkCbXpDrop(double currentXp) {
-        // If not initialized, initialize now and return false (don't count this as a drop)
         if (lastKnownXpForCycle < 0) {
             lastKnownXpForCycle = currentXp;
             script.log("CYCLE", "CB XP tracking auto-initialized with: " + currentXp);
             return false;
         }
         
-        // Check for XP increase (new drop)
         if (currentXp > lastKnownXpForCycle) {
             double xpGained = currentXp - lastKnownXpForCycle;
             lastKnownXpForCycle = currentXp;
@@ -963,12 +682,6 @@ public class GuardTracker {
         return false;
     }
     
-    /**
-     * Check for XP drop and increment counter for ore stall.
-     * Call this frequently while at ore stall.
-     * @param currentXp current total XP gained
-     * @return true if we got a new XP drop
-     */
     public boolean checkOreXpDrop(double currentXp) {
         if (lastKnownXpForCycle < 0) {
             lastKnownXpForCycle = currentXp;
@@ -984,60 +697,33 @@ public class GuardTracker {
         return false;
     }
     
-    /**
-     * Check if we've completed enough CB thieves to switch to ore.
-     * PRIMARY trigger for switching to ore stall.
-     * @return true if done 4 CB thieves
-     */
     public boolean shouldSwitchToOreByXp() {
         return cbXpDropCount >= CB_THIEVES_PER_CYCLE;
     }
     
-    /**
-     * Check if we've completed enough ore thieves to switch to CB.
-     * PRIMARY trigger for switching to cannonball stall.
-     * @return true if done 2 ore thieves
-     */
     public boolean shouldSwitchToCbByXp() {
         return oreXpDropCount >= ORE_THIEVES_PER_CYCLE;
     }
     
-    /**
-     * Reset CB cycle counter (call when switching TO cannonball stall)
-     */
     public void resetCbCycle() {
         cbXpDropCount = 0;
         script.log("CYCLE", "CB cycle reset - starting fresh");
     }
     
-    /**
-     * Reset ore cycle counter (call when switching TO ore stall)
-     */
     public void resetOreCycle() {
         oreXpDropCount = 0;
         script.log("CYCLE", "Ore cycle reset - starting fresh");
     }
     
-    /**
-     * Get current CB XP drop count
-     */
     public int getCbXpDropCount() {
         return cbXpDropCount;
     }
     
-    /**
-     * Get current ore XP drop count
-     */
     public int getOreXpDropCount() {
         return oreXpDropCount;
     }
     
-    /**
-     * Initialize XP tracking (call at start or when resuming)
-     * @param currentXp the current XP value to use as baseline
-     */
     public void initXpTracking(double currentXp) {
-        // Only update if we got a valid XP value
         if (currentXp >= 0) {
             lastKnownXpForCycle = currentXp;
             script.log("GUARD", "XP cycle tracking initialized with baseline: " + currentXp);
@@ -1046,36 +732,21 @@ public class GuardTracker {
         }
     }
     
-    /**
-     * Check if XP cycle tracking is initialized
-     */
     public boolean isXpTrackingInitialized() {
         return lastKnownXpForCycle >= 0;
     }
     
-    /**
-     * Mark that we just switched via XP cycle - starts cooldown
-     * Call this when switching from ore to CB via XP cycle
-     */
     public void markXpBasedSwitch() {
         lastXpBasedSwitchTime = System.currentTimeMillis();
         script.log("CYCLE", "XP-based switch - guard backup disabled for " + (XP_SWITCH_COOLDOWN_MS/1000) + "s");
     }
     
-    /**
-     * Check if we're in cooldown after an XP-based switch
-     * During cooldown, backup guard detection should be skipped
-     * @return true if still in cooldown (don't use guard backup)
-     */
     public boolean isInXpSwitchCooldown() {
         if (lastXpBasedSwitchTime == 0) return false;
         long elapsed = System.currentTimeMillis() - lastXpBasedSwitchTime;
         return elapsed < XP_SWITCH_COOLDOWN_MS;
     }
     
-    /**
-     * Clear the XP switch cooldown (call when starting fresh or mid-cycle)
-     */
     public void clearXpSwitchCooldown() {
         lastXpBasedSwitchTime = 0;
     }

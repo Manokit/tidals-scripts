@@ -12,17 +12,10 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class EscapeJail extends Task {
-    // jail cell area - covers every tile in the cell
     private static final RectangleArea JAIL_CELL = new RectangleArea(1883, 3272, 2, 2, 0);
-
-    // door position
     private static final WorldPosition DOOR_TILE = new WorldPosition(1885, 3273, 0);
-
-    // waypoints back to stall (with randomization applied in execute)
-    private static final WorldPosition WAYPOINT_1_BASE = new WorldPosition(1889, 3288, 0); // north of cell
-    private static final WorldPosition WAYPOINT_2_BASE = new WorldPosition(1876, 3293, 0); // closer to stall
-    
-    // thieving tiles - different per mode
+    private static final WorldPosition WAYPOINT_1_BASE = new WorldPosition(1889, 3288, 0);
+    private static final WorldPosition WAYPOINT_2_BASE = new WorldPosition(1876, 3293, 0);
     private static final WorldPosition THIEVING_TILE_SINGLE = new WorldPosition(1867, 3298, 0);
     private static final WorldPosition THIEVING_TILE_TWO_STALL = new WorldPosition(1867, 3295, 0);
 
@@ -31,48 +24,39 @@ public class EscapeJail extends Task {
     }
 
     private final WalkConfig minimapOnlyConfig;
-
-    // flag to prevent re-activation while escaping
     private boolean isEscaping = false;
 
     public EscapeJail(Script script) {
         super(script);
         this.minimapOnlyConfig = new WalkConfig.Builder()
                 .disableWalkScreen(true)
-                .breakDistance(2) // close enough
+                .breakDistance(2)
                 .tileRandomisationRadius(0)
                 .build();
     }
 
     @Override
     public boolean activate() {
-        // don't re-activate if we're already escaping
-        if (isEscaping) {
-            return false;
-        }
-        // activate if we're in the jail cell
+        if (isEscaping) return false;
         return isInJail();
     }
 
     @Override
     public boolean execute() {
         task = "Escaping jail!";
-        isEscaping = true; // prevent re-activation
+        isEscaping = true;
         currentlyThieving = false;
         script.log("JAIL", "Caught! Attempting to escape...");
 
-        // check if we're already out of the cell
         if (isOutOfCell()) {
             script.log("JAIL", "Already outside cell, skipping door pick");
         } else {
-            // STEP 1: Find and pick the cell door
             if (!pickCellDoor()) {
                 script.log("JAIL", "Failed to pick door, retrying...");
                 isEscaping = false;
                 return false;
             }
 
-            // STEP 2: Wait specifically for success message in chat
             script.log("JAIL", "Picking lock, waiting for success...");
             boolean success = script.pollFramesUntil(() -> chatContainsSuccess() || isOutOfCell(), 15000);
 
@@ -85,19 +69,15 @@ public class EscapeJail extends Task {
             script.log("JAIL", "Lock picked successfully! Escaping...");
         }
 
-        // small delay after success message
         script.pollFramesHuman(() -> false, script.random(600, 1000));
-
-        // STEP 3: Path back to thieving area via waypoints
         pathBackToStall();
 
         script.log("JAIL", "Escaped and back at stall!");
-        isEscaping = false; // done escaping
+        isEscaping = false;
         return true;
     }
 
     private boolean pickCellDoor() {
-        // find the cell door object
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
 
@@ -113,7 +93,6 @@ public class EscapeJail extends Task {
             return false;
         }
 
-        // Directly use menu entry to picklock - don't tap first then check menu
         script.log("JAIL", "Attempting Picklock on cell door...");
         boolean tapped = script.getFinger().tap(doorPoly, "Picklock");
         
@@ -137,7 +116,6 @@ public class EscapeJail extends Task {
                 }
             }
         } catch (Exception e) {
-            // ignore chat read errors
         }
         return false;
     }
@@ -145,40 +123,30 @@ public class EscapeJail extends Task {
     private void pathBackToStall() {
         script.log("JAIL", "Pathing back to stall...");
 
-        // first step: walk out of the cell area (just east of door)
         WorldPosition exitTile = new WorldPosition(1887, 3273, 0);
         script.log("JAIL", "Stepping out of cell to: " + exitTile);
         script.getWalker().walkTo(exitTile, minimapOnlyConfig);
-        
-        // wait until we're actually out of the cell
         script.pollFramesUntil(() -> !isInJail(), 5000);
         script.pollFramesHuman(() -> false, script.random(400, 700));
 
-        // waypoint 1: north of cell area
         WorldPosition wp1 = randomizePosition(WAYPOINT_1_BASE, 2);
         script.log("JAIL", "Walking north to: " + wp1);
         script.getWalker().walkTo(wp1, minimapOnlyConfig);
-        
-        // wait until Y coord is north of cell (y > 3280)
         script.pollFramesUntil(() -> {
             WorldPosition pos = script.getWorldPosition();
             return pos != null && pos.getY() > 3280;
         }, 8000);
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // waypoint 2: heading toward stall
         WorldPosition wp2 = randomizePosition(WAYPOINT_2_BASE, 2);
         script.log("JAIL", "Walking west to: " + wp2);
         script.getWalker().walkTo(wp2, minimapOnlyConfig);
-        
-        // wait until X coord is west enough (x < 1880)
         script.pollFramesUntil(() -> {
             WorldPosition pos = script.getWorldPosition();
             return pos != null && pos.getX() < 1880;
         }, 8000);
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // final: thieving tile (mode-aware)
         WorldPosition targetTile = getThievingTile();
         script.log("JAIL", "Walking to thieving tile: " + (twoStallMode ? "two-stall (3295)" : "single (3298)"));
         WalkConfig exactConfig = new WalkConfig.Builder()

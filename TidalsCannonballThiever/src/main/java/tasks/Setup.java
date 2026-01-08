@@ -25,7 +25,7 @@ public class Setup extends Task {
     public boolean execute() {
         task = "Setup";
 
-        // Check thieving level
+        // check thieving level
         SkillsTabComponent.SkillLevel thievingSkillLevel = script.getWidgetManager()
                 .getSkillTab()
                 .getSkillLevel(SkillType.THIEVING);
@@ -47,7 +47,7 @@ public class Setup extends Task {
             return false;
         }
 
-        // Get screen dimensions
+        // get screen dimensions
         Rectangle screenRect = script.getScreen().getBounds();
         screenWidth = screenRect.width;
         screenHeight = screenRect.height;
@@ -60,10 +60,9 @@ public class Setup extends Task {
             return false;
         }
 
-        // Check current zoom level
         checkZoomLevel();
 
-        // Wait for XP tracker to be ready before completing setup
+        // wait for xp tracker
         script.log("SETUP", "Waiting for XP tracker to initialize...");
         
         boolean xpTrackerReady = script.pollFramesUntil(() -> {
@@ -74,10 +73,8 @@ public class Setup extends Task {
         if (!xpTrackerReady) {
             script.log("SETUP", "WARNING: XP tracker not ready after 5s, continuing anyway...");
         } else {
-            // Small delay to let tracker stabilize
             script.pollFramesHuman(() -> false, script.random(300, 500));
             
-            // Initialize XP tracking with current value
             if (xpTracking.initialize()) {
                 script.log("SETUP", "XP tracking initialized successfully");
             } else {
@@ -88,7 +85,6 @@ public class Setup extends Task {
         script.log("SETUP", "Setup complete! Starting cannonball thieving...");
         setupDone = true;
         
-        // Initialize inventory snapshot for item tracking
         if (script instanceof main.TidalsCannonballThiever) {
             ((main.TidalsCannonballThiever) script).initializeInventorySnapshot();
         }
@@ -96,31 +92,22 @@ public class Setup extends Task {
         return true;
     }
     
-    // Target zoom level for optimal stall visibility
     private static final int TARGET_ZOOM_LEVEL = 3;
     
-    /**
-     * Check zoom level and set to target if needed
-     */
     private void checkZoomLevel() {
         try {
-            // Open settings tab to read zoom level
             boolean opened = script.getWidgetManager().getSettings().open();
             if (!opened) {
                 script.log("SETUP", "Could not open settings tab to check zoom");
                 return;
             }
             
-            // Small delay for tab to fully open
             script.pollFramesHuman(() -> false, script.random(200, 400));
-            
-            // Get current zoom level
             UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
             if (zoomResult != null && zoomResult.isFound()) {
                 int currentZoom = zoomResult.get();
                 script.log("SETUP", "Current zoom level: " + currentZoom);
                 
-                // Set to target if different
                 if (currentZoom != TARGET_ZOOM_LEVEL) {
                     script.log("SETUP", "Setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
                     boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
@@ -137,7 +124,6 @@ public class Setup extends Task {
                 script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
             }
             
-            // Close settings tab
             script.getWidgetManager().getSettings().close();
             script.pollFramesHuman(() -> false, script.random(200, 400));
             

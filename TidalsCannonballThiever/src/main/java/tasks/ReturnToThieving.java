@@ -10,11 +10,8 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class ReturnToThieving extends Task {
-    // single-stall mode positions
     private static final WorldPosition THIEVING_TILE_SINGLE = new WorldPosition(1867, 3298, 0);
     private static final RectangleArea THIEVING_AREA_SINGLE = new RectangleArea(1865, 3296, 1869, 3300, 0);
-
-    // two-stall mode positions
     private static final WorldPosition THIEVING_TILE_TWO_STALL = new WorldPosition(1867, 3295, 0);
     private static final RectangleArea THIEVING_AREA_TWO_STALL = new RectangleArea(1862, 3293, 1869, 3297, 0);
 
@@ -26,9 +23,7 @@ public class ReturnToThieving extends Task {
         return twoStallMode ? THIEVING_AREA_TWO_STALL : THIEVING_AREA_SINGLE;
     }
 
-    // Config for two-stall mode - exact positioning needed for guard detection
     private final WalkConfig exactTileConfig;
-    // Config for single stall mode - more lenient positioning
     private final WalkConfig singleStallConfig;
 
     public ReturnToThieving(Script script) {
@@ -51,21 +46,16 @@ public class ReturnToThieving extends Task {
         if (pos == null) return false;
         if (currentlyThieving) return false;
         
-        // if we're far from thieving area (e.g. starting near jail), always activate
         if (!isInThievingArea()) {
             script.log("RETURN", "Far from stall area, need to walk there");
             return true;
         }
         
-        // If at safety/break tile, walk to stall position immediately (don't wait for guard!)
-        // This way we're ready to thieve the instant the guard passes
-        // StartThieving will handle waiting for guard before actually clicking the stall
         if (isAtAnySafetyTile() && !isAtThievingTile()) {
             script.log("RETURN", "At safety tile - moving to stall position to be ready");
             return true;
         }
         
-        // For other positions, only activate when safe
         return !isAtAnySafetyTile() && !isAtThievingTile() && guardTracker.isSafeToReturn();
     }
 
@@ -79,7 +69,6 @@ public class ReturnToThieving extends Task {
             return false;
         }
         
-        // For short distances (from safety tile), use direct tile tap
         if (isAtAnySafetyTile()) {
             script.log("RETURN", "Moving to stall position (short distance)...");
             if (!tapOnTile(getThievingTile())) {
@@ -89,11 +78,9 @@ public class ReturnToThieving extends Task {
             }
             script.pollFramesUntil(() -> isAtThievingTile(), 3000);
         } else {
-            // For longer distances, use walker
             script.log("RETURN", "Walking to thieving tile...");
             WalkConfig config = twoStallMode ? exactTileConfig : singleStallConfig;
             script.getWalker().walkTo(getThievingTile(), config);
-            
             int timeout = isInThievingArea() ? 3000 : 15000;
             script.pollFramesUntil(() -> isAtThievingTile(), timeout);
         }
@@ -102,9 +89,6 @@ public class ReturnToThieving extends Task {
         return true;
     }
     
-    /**
-     * Tap directly on a nearby tile (for short distance walking)
-     */
     private boolean tapOnTile(WorldPosition tile) {
         try {
             Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
@@ -121,17 +105,11 @@ public class ReturnToThieving extends Task {
         return getThievingArea().contains(pos);
     }
 
-    /**
-     * Check if at any safety/break tile
-     * - Single stall safety: (1867, 3299)
-     * - Two stall break: (1867, 3294)
-     */
     private boolean isAtAnySafetyTile() {
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) return false;
         int x = (int) pos.getX();
         int y = (int) pos.getY();
-        // Single stall safety tile OR two-stall break tile
         return (x == 1867 && y == 3299) || (x == 1867 && y == 3294);
     }
 

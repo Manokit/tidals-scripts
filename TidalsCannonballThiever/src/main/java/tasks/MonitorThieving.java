@@ -16,7 +16,6 @@ public class MonitorThieving extends Task {
 
     @Override
     public boolean activate() {
-        // only activate if we're currently thieving (after clicking stall)
         return currentlyThieving;
     }
 
@@ -24,20 +23,11 @@ public class MonitorThieving extends Task {
     public boolean execute() {
         task = atOreStall ? "Thieving ores..." : "Thieving...";
 
-        // poll with condition check - checks every frame but doesn't spam
         boolean conditionMet;
         
         if (twoStallMode) {
-            // two-stall mode: XP-based cycle with guard detection as backup
-            if (atOreStall) {
-                // AT ORE STALL: Track XP drops, switch after 2 (don't wait for guard)
-                conditionMet = monitorOreStall();
-            } else {
-                // AT CANNONBALL STALL: Track XP drops, switch after 4 OR guard detection
-                conditionMet = monitorCannonballStall();
-            }
+            conditionMet = atOreStall ? monitorOreStall() : monitorCannonballStall();
         } else {
-            // single-stall mode: original behavior
             conditionMet = script.pollFramesUntil(() -> {
                 return guardTracker.isAnyGuardInDangerZone();
             }, 500);
@@ -49,9 +39,6 @@ public class MonitorThieving extends Task {
         return true;
     }
     
-    /**
-     * Check if inventory is full using built-in .isFull() method
-     */
     private boolean isInventoryFull() {
         try {
             ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
@@ -61,35 +48,26 @@ public class MonitorThieving extends Task {
         }
     }
     
-    /**
-     * Monitor cannonball stall - track XP drops for cycle.
-     * Switch after 4 XP drops OR guard detection (backup, only if not in cooldown).
-     */
+    // switch after 4 xp drops or guard detection
     private boolean monitorCannonballStall() {
-        // Poll and track XP drops
         boolean shouldSwitch = script.pollFramesUntil(() -> {
-            // CRITICAL: Check for inventory full - break out immediately
             if (isInventoryFull()) {
                 script.log("MONITOR", "Inventory full detected - stopping monitor");
                 currentlyThieving = false;
-                return true;  // Break out of poll loop
+                return true;
             }
             
-            // Check for XP drop and increment counter
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkCbXpDrop(currentXp);
             
-            // PRIMARY: Switch after 4 CB thieves
             if (guardTracker.shouldSwitchToOreByXp()) {
                 return true;
             }
             
-            // Skip backup guard detection if in cooldown (just switched via XP cycle)
             if (guardTracker.isInXpSwitchCooldown()) {
                 return false;
             }
             
-            // BACKUP: Guard detection (only for mid-cycle starts)
             if (guardTracker.isWatchingAtCBTile()) {
                 return guardTracker.shouldSwitchToOre();
             }
@@ -107,36 +85,22 @@ public class MonitorThieving extends Task {
         return shouldSwitch;
     }
 
-    /**
-     * Monitor ore stall - track XP drops for cycle.
-     * Switch after 2 XP drops (don't wait for guard - timing is enough).
-     * Guard detection is backup only.
-     * 
-     * @return true when should switch back to cannonball stall
-     */
+    // switch after 2 xp drops
     private boolean monitorOreStall() {
-        // Track XP drops - switch after 2 ore thieves
-        // Don't wait for guard movement - the timing of 2 ore XP drops is enough
-        // for the guard to start moving by the time we reach CB stall
-        
         boolean shouldSwitch = script.pollFramesUntil(() -> {
-            // CRITICAL: Check for inventory full - break out immediately
             if (isInventoryFull()) {
                 script.log("MONITOR", "Inventory full detected - stopping monitor");
                 currentlyThieving = false;
-                return true;  // Break out of poll loop
+                return true;
             }
             
-            // Check for XP drop and increment counter
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkOreXpDrop(currentXp);
             
-            // PRIMARY: Switch after 2 ore thieves (don't wait for guard!)
             if (guardTracker.shouldSwitchToCbByXp()) {
                 return true;
             }
             
-            // BACKUP: Guard detection for emergencies/mid-cycle
             if (guardTracker.shouldSwitchToCannonball()) {
                 return true;
             }

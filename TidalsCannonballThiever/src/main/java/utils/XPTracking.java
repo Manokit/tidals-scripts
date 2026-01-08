@@ -11,25 +11,19 @@ import java.util.Map;
 public class XPTracking {
 
     private final ScriptCore core;
-    private double lastKnownXp = -1.0;  // Start at -1 to indicate not initialized
+    private double lastKnownXp = -1.0;
     private boolean initialized = false;
 
     public XPTracking(ScriptCore core) {
         this.core = core;
     }
     
-    /**
-     * Initialize XP tracking with current tracker value.
-     * Call this during setup AFTER waiting for tracker to be ready.
-     * @return true if initialization successful
-     */
     public boolean initialize() {
         XPTracker tracker = getThievingTracker();
         if (tracker == null) {
             return false;
         }
         
-        // Get current XP from tracker - this is the baseline
         double currentXp = tracker.getXpGained();
         lastKnownXp = currentXp;
         initialized = true;
@@ -41,30 +35,22 @@ public class XPTracking {
         return true;
     }
     
-    /**
-     * Check if XP tracking has been properly initialized
-     */
     public boolean isInitialized() {
         return initialized;
     }
     
-    /**
-     * Get the current XP from tracker (for external initialization)
-     */
     public double getCurrentXp() {
         XPTracker tracker = getThievingTracker();
         if (tracker == null) return 0.0;
         return tracker.getXpGained();
     }
 
-    // --- Internal helper to retrieve a specific tracker ---
     private XPTracker getTracker(SkillType skill) {
         Map<SkillType, XPTracker> trackers = core.getXPTrackers();
         if (trackers == null) return null;
         return trackers.get(skill);
     }
 
-    // --- Thieving-specific methods ---
     public XPTracker getThievingTracker() {
         return getTracker(SkillType.THIEVING);
     }
@@ -93,25 +79,18 @@ public class XPTracking {
         return tracker.timeToNextLevelString();
     }
 
-    /**
-     * Check if XP was gained since last check
-     * @return true if XP increased (successful steal)
-     */
     public boolean checkXPAndReturnIfGained() {
         XPTracker tracker = getThievingTracker();
         if (tracker == null) return false;
 
         double currentXp = tracker.getXpGained();
         
-        // If not initialized yet, initialize now with current value
-        // This prevents false positives on first check
         if (!initialized || lastKnownXp < 0) {
             lastKnownXp = currentXp;
             initialized = true;
             return false;
         }
 
-        // Check if XP actually increased (new xp drop = successful steal)
         if (currentXp > lastKnownXp) {
             lastXpGain.reset();
             lastKnownXp = currentXp;
@@ -120,9 +99,6 @@ public class XPTracking {
         return false;
     }
     
-    /**
-     * Legacy method for backwards compatibility
-     */
     public void checkXP() {
         checkXPAndReturnIfGained();
     }
