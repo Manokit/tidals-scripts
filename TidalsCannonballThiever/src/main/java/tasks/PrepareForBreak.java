@@ -117,7 +117,7 @@ public class PrepareForBreak extends Task {
             return true;
         }
         
-        // Check ProfileManager for scheduled break/hop
+        // Check ProfileManager for scheduled break/hop/AFK
         try {
             if (script.getProfileManager().hasBreakProfile() && script.getProfileManager().isDueToBreak()) {
                 activatedForBreak = true;
@@ -128,6 +128,13 @@ public class PrepareForBreak extends Task {
             if (script.getProfileManager().hasHopProfile() && script.getProfileManager().isDueToHop()) {
                 activatedForHop = true;
                 script.log("BREAK", "ProfileManager: Due for scheduled hop");
+                return true;
+            }
+            
+            // Check for humanized AFK - breaks up high APM actions
+            if (script.getProfileManager().isAFKEnabled() && script.getProfileManager().isDueToAFK()) {
+                activatedForAFK = true;
+                script.log("BREAK", "ProfileManager: Due for AFK pause");
                 return true;
             }
         } catch (Exception e) {
@@ -178,10 +185,13 @@ public class PrepareForBreak extends Task {
             } else if (activatedForHop) {
                 script.getProfileManager().forceHop();
                 script.log("BREAK", "Forced scheduled hop");
+            } else if (activatedForAFK) {
+                // Humanized AFK pause - breaks up high APM thieving
+                script.getProfileManager().forceAFK();
+                script.log("BREAK", "Forced AFK pause");
             }
-            // Note: AFK is handled by the framework via canAFK() callback
             
-            // After any break/hop, reset StartThieving positioning flag
+            // After any break/hop/AFK, reset StartThieving positioning flag
             // so we wait for a fresh guard cycle before starting again
             StartThieving.resetAfterBreak();
             
