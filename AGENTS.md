@@ -21,6 +21,8 @@
 
 ## Quick Reference
 
+// when writing comments, make them blunt and lowercase
+
 ### Basic Script Structure
 ```java
 @ScriptManifest(name = "Name", author = "Author", version = 1.0, description = "Description")
