@@ -1,0 +1,96 @@
+[
+  {
+    "detail": "getLastArrowResult",
+    "member-signature": "MinimapArrowResult getLastArrowResult()",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/ui/minimap/MinimapArrowResult.html",
+    "return-type": "MinimapArrowResult"
+  },
+  {
+    "detail": "arrowDetectionEnabled",
+    "return-type (2)": "void",
+    "parameters": "(boolean enabled)"
+  },
+  {
+    "detail": "isArrowDetectionEnabled",
+    "member-signature": "boolean isArrowDetectionEnabled()",
+    "return-type (2)": "boolean"
+  },
+  {
+    "detail": "positionToMinimapClamped",
+    "parameters": "(WorldPosition playerPosition,\n WorldPosition targetPos)",
+    "external-link href": "https://docs.oracle.com/en/java/javase/17/docs/api/java.desktop/java/awt/Point.html",
+    "external-link": "Point",
+    "parameters href": "https://osmb.co.uk/documentation/com/osmb/api/location/position/types/WorldPosition.html",
+    "parameters (2)": "WorldPosition"
+  },
+  {
+    "detail": "positionToMinimap",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/shape/Rectangle.html",
+    "return-type": "Rectangle",
+    "parameters": "(WorldPosition playerPosition,\n WorldPosition targetPos)",
+    "parameters href": "https://osmb.co.uk/documentation/com/osmb/api/location/position/types/WorldPosition.html",
+    "parameters (2)": "WorldPosition"
+  },
+  {
+    "detail": "getCenter",
+    "member-signature": "UIResult<Point> getCenter()",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/utils/UIResult.html",
+    "return-type": "UIResult",
+    "return-type (2)": "UIResult<Point>",
+    "external-link href": "https://docs.oracle.com/en/java/javase/17/docs/api/java.desktop/java/awt/Point.html",
+    "external-link": "Point"
+  },
+  {
+    "detail": "clampToMinimap",
+    "parameters": "(int x,\n int y)",
+    "external-link href": "https://docs.oracle.com/en/java/javase/17/docs/api/java.desktop/java/awt/Point.html",
+    "external-link": "Point"
+  },
+  {
+    "detail": "insideMinimap",
+    "return-type (2)": "boolean",
+    "parameters": "(int x,\n int y)"
+  },
+  {
+    "detail": "getMinimapImage",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/visual/image/Image.html",
+    "return-type": "Image",
+    "parameters": "(boolean cleanDynamicEntities)"
+  },
+  {
+    "detail": "getPlayerPositions",
+    "member-signature": "UIResultList<WorldPosition> getPlayerPositions()",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/utils/UIResultList.html",
+    "return-type": "UIResultList",
+    "return-type (2)": "UIResultList<WorldPosition>",
+    "return-type href (2)": "https://osmb.co.uk/documentation/com/osmb/api/location/position/types/WorldPosition.html",
+    "return-type (3)": "WorldPosition",
+    "block": "Returns a list containing the coordinates of each player(white) dot seen on the minimap.",
+    "notes": "Returns:",
+    "notes (2)": "List"
+  },
+  {
+    "detail": "getNPCPositions",
+    "member-signature": "UIResultList<WorldPosition> getNPCPositions()",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/utils/UIResultList.html",
+    "return-type": "UIResultList",
+    "return-type (2)": "UIResultList<WorldPosition>",
+    "return-type href (2)": "https://osmb.co.uk/documentation/com/osmb/api/location/position/types/WorldPosition.html",
+    "return-type (3)": "WorldPosition",
+    "block": "Returns a list containing the coordinates of each NPC(yellow) dot seen on the minimap.",
+    "notes": "Returns:",
+    "notes (2)": "List"
+  },
+  {
+    "detail": "getItemPositions",
+    "member-signature": "UIResultList<WorldPosition> getItemPositions()",
+    "return-type href": "https://osmb.co.uk/documentation/com/osmb/api/utils/UIResultList.html",
+    "return-type": "UIResultList",
+    "return-type (2)": "UIResultList<WorldPosition>",
+    "return-type href (2)": "https://osmb.co.uk/documentation/com/osmb/api/location/position/types/WorldPosition.html",
+    "return-type (3)": "WorldPosition",
+    "block": "Returns a list containing the coordinates of each item(red) dot seen on the minimap.",
+    "notes": "Returns:",
+    "notes (2)": "List"
+  }
+]
