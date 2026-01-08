@@ -61,6 +61,11 @@ public class Setup extends Task {
 
         script.log("SETUP", "Setup complete! Starting cannonball thieving...");
         setupDone = true;
+        
+        // Initialize inventory snapshot for item tracking
+        if (script instanceof main.TidalsCannonballThiever) {
+            ((main.TidalsCannonballThiever) script).initializeInventorySnapshot();
+        }
 
         return true;
     }

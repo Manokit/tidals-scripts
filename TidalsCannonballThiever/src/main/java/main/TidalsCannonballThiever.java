@@ -10,7 +10,6 @@ import com.osmb.api.script.SkillCategory;
 import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.drawing.Canvas;
-import com.osmb.api.visual.image.Image;
 import javafx.scene.Scene;
 import tasks.*;
 import utils.GuardTracker;
@@ -25,10 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import javax.imageio.ImageIO;
 import java.awt.*;
-import java.awt.image.BufferedImage;
-import java.io.InputStream;
 
 @ScriptDefinition(
         name = "TidalsCannonballThiever",
@@ -52,23 +48,36 @@ public class TidalsCannonballThiever extends Script {
     // mode flags
     public static boolean twoStallMode = false;
     public static boolean atOreStall = false;  // track which stall we're at in two-stall mode
+    public static boolean doingDepositRun = false;  // track if we're doing a deposit run (allows breaks)
 
-    // cannonball types from port roberts stall (sailing content)
-    // map: name -> itemID
+    // Cannonball types from Port Roberts stall (correct IDs)
     private static final Map<String, Integer> CANNONBALL_TYPES = new LinkedHashMap<>() {{
-        put("Bronze", 29387);
-        put("Iron", 29389);
-        put("Steel", 29391);
-        put("Mithril", 29393);
-        put("Adamant", 29395);
-        put("Rune", 29397);
+        put("Bronze CB", 31906);
+        put("Iron CB", 31908);
+        put("Steel CB", 2);
+        put("Mithril CB", 31910);
+        put("Adamant CB", 31912);
+        put("Rune CB", 31914);
     }};
 
-    // track counts for each type
+    // Ore types from Port Roberts stall
+    private static final Map<String, Integer> ORE_TYPES = new LinkedHashMap<>() {{
+        put("Iron ore", 440);
+        put("Coal", 453);
+        put("Silver ore", 442);
+        put("Gold ore", 444);
+        put("Mithril ore", 447);
+        put("Adamantite ore", 449);
+        put("Runite ore", 451);
+    }};
+
+    // Track counts for each type (public for paint access)
     public static Map<String, Integer> cannonballCounts = new LinkedHashMap<>();
-    private Map<String, Integer> lastInventoryCounts = new HashMap<>();
-    private long lastInventoryCheck = 0;
-    private static final long INVENTORY_CHECK_INTERVAL_MS = 500; // only check every 500ms
+    public static Map<String, Integer> oreCounts = new LinkedHashMap<>();
+    
+    // Last inventory snapshot for detecting changes
+    private Map<Integer, Integer> lastInventorySnapshot = new HashMap<>();
+    private boolean inventoryInitialized = false;
 
     // flag to track if we're actively thieving (set when we click stall, cleared on retreat)
     public static boolean currentlyThieving = false;
@@ -77,8 +86,8 @@ public class TidalsCannonballThiever extends Script {
     public static long startTime = System.currentTimeMillis();
 
     private List<Task> tasks;
-    private static final Font FONT_LABEL       = new Font("Arial", Font.PLAIN, 12);
-    private static final Font FONT_VALUE_BOLD  = new Font("Arial", Font.BOLD, 12);
+    private static final Font FONT_TITLE = new Font("Arial", Font.BOLD, 14);
+    private static final Font FONT_LABEL = new Font("Arial", Font.PLAIN, 12);
 
     public static double levelProgressFraction = 0.0;
     public static int currentLevel = 1;
@@ -90,9 +99,7 @@ public class TidalsCannonballThiever extends Script {
     // Guard tracker
     public static GuardTracker guardTracker;
 
-    // Logo image
-    private Image logoImage = null;
-    private boolean logoLoadAttempted = false;
+
 
     // UI
     private ScriptUI scriptUI;
@@ -108,14 +115,16 @@ public class TidalsCannonballThiever extends Script {
     }
 
     // only allow world hop / break / afk when at safe position and not thieving
-    // two-stall mode: allow during stall transitions (before switching to ore stall)
+    // two-stall mode: allow during deposit runs or at safety tile
     // single mode: at safety tile
     @Override
     public boolean canHopWorlds() {
         if (currentlyThieving) return false;
+        // Always allow during deposit runs - good time for humanization
+        if (doingDepositRun) return true;
         if (twoStallMode) {
-            // in two-stall mode, allow during transition when at ore stall
-            return atOreStall && !currentlyThieving;
+            // in two-stall mode, allow at safety tile
+            return isAtSafetyTile();
         }
         return isAtSafetyTile();
     }
@@ -123,8 +132,10 @@ public class TidalsCannonballThiever extends Script {
     @Override
     public boolean canBreak() {
         if (currentlyThieving) return false;
+        // Always allow during deposit runs - good time for humanization
+        if (doingDepositRun) return true;
         if (twoStallMode) {
-            return atOreStall && !currentlyThieving;
+            return isAtSafetyTile();
         }
         return isAtSafetyTile();
     }
@@ -132,8 +143,10 @@ public class TidalsCannonballThiever extends Script {
     @Override
     public boolean canAFK() {
         if (currentlyThieving) return false;
+        // Always allow during deposit runs - good time for humanization
+        if (doingDepositRun) return true;
         if (twoStallMode) {
-            return atOreStall && !currentlyThieving;
+            return isAtSafetyTile();
         }
         return isAtSafetyTile();
     }
@@ -143,7 +156,8 @@ public class TidalsCannonballThiever extends Script {
         if (pos == null) return false;
         int x = (int) pos.getX();
         int y = (int) pos.getY();
-        return x == 1867 && y == 3299;
+        // Original safety tile (single stall) or break safety tile (two stall)
+        return (x == 1867 && y == 3299) || (x == 1867 && y == 3294);
     }
 
     @Override
@@ -162,10 +176,15 @@ public class TidalsCannonballThiever extends Script {
         // Initialize guard tracker
         guardTracker = new GuardTracker(this);
 
-        // Initialize cannonball counts
+        // Reset static state from tasks (important for script restarts!)
+        StartThieving.resetStaticState();
+
+        // Initialize cannonball and ore counts
         for (String type : CANNONBALL_TYPES.keySet()) {
             cannonballCounts.put(type, 0);
-            lastInventoryCounts.put(type, 0);
+        }
+        for (String type : ORE_TYPES.keySet()) {
+            oreCounts.put(type, 0);
         }
 
         // Initialize tasks in priority order
@@ -174,6 +193,7 @@ public class TidalsCannonballThiever extends Script {
                 new Setup(this),
                 new EscapeJail(this),           // high priority - escape jail if caught
                 new DepositOres(this),          // two-stall: deposit when inventory full
+                new PrepareForBreak(this),      // two-stall: periodically allow breaks/hops/AFKs
                 new SwitchToOreStall(this),     // two-stall: switch to ore stall when guard approaches
                 new SwitchToCannonballStall(this), // two-stall: switch back when guard near ore stall
                 new Retreat(this),              // single-stall: retreat to safety
@@ -199,73 +219,120 @@ public class TidalsCannonballThiever extends Script {
 
     @Override
     public void onNewFrame() {
-        xpTracking.checkXP();
+        // Check for XP drops and trigger inventory check if XP gained
+        boolean xpGained = xpTracking.checkXPAndReturnIfGained();
         
         // TWO-STALL MODE: Continuously watch guard at specific danger tiles for instant detection
-        // This runs every frame for pixel-level movement detection (10-20x faster than tile updates!)
         if (twoStallMode && setupDone && guardTracker != null && currentlyThieving) {
             if (atOreStall) {
-                // At ore stall: watch guard at (1863, 3292)
                 guardTracker.shouldSwitchToCannonball();
             } else {
-                // At cannonball stall: watch guard at (1865, 3295)
                 guardTracker.shouldSwitchToOre();
             }
         }
         
-        // CRITICAL: only check inventory when actively thieving
-        // prevents conflicts with world hop / break handler trying to open logout tab
-        if (!currentlyThieving) {
+        // Only check inventory when actively thieving
+        if (!currentlyThieving || !setupDone) {
             return;
         }
         
-        // throttle inventory checks to prevent spam (only every 500ms)
-        long now = System.currentTimeMillis();
-        if (!setupDone || now - lastInventoryCheck < INVENTORY_CHECK_INTERVAL_MS) {
-            return;
+        // Check inventory when XP is gained (successful steal)
+        if (xpGained) {
+            checkInventoryForChanges();
         }
-        lastInventoryCheck = now;
+    }
+    
+    /**
+     * Initialize inventory snapshot on first check
+     */
+    public void initializeInventorySnapshot() {
+        if (inventoryInitialized) return;
         
-        // track cannonball counts by type (like Chop.java does for logs)
         try {
-            // get all cannonball item IDs
-            Set<Integer> allIds = new HashSet<>(CANNONBALL_TYPES.values());
+            Set<Integer> allIds = getAllTrackedItemIds();
             ItemGroupResult inv = getWidgetManager().getInventory().search(allIds);
             
             if (inv != null) {
-                for (Map.Entry<String, Integer> entry : CANNONBALL_TYPES.entrySet()) {
-                    String type = entry.getKey();
-                    int itemId = entry.getValue();
-                    
-                    int currentCount = inv.getAmount(itemId);
-                    int lastCount = lastInventoryCounts.getOrDefault(type, 0);
-                    
-                    if (currentCount > lastCount) {
-                        int gained = currentCount - lastCount;
-                        cannonballCounts.merge(type, gained, Integer::sum);
-                        cannonballsStolen += gained;
+                lastInventorySnapshot.clear();
+                for (int itemId : allIds) {
+                    int count = inv.getAmount(itemId);
+                    if (count > 0) {
+                        lastInventorySnapshot.put(itemId, count);
                     }
-                    lastInventoryCounts.put(type, currentCount);
                 }
+                inventoryInitialized = true;
+                log("INVENTORY", "Initialized inventory snapshot with " + lastInventorySnapshot.size() + " item types");
+            }
+        } catch (Exception e) {
+            log("INVENTORY", "Failed to initialize inventory: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Get all tracked item IDs (cannonballs + ores)
+     */
+    private Set<Integer> getAllTrackedItemIds() {
+        Set<Integer> allIds = new HashSet<>();
+        allIds.addAll(CANNONBALL_TYPES.values());
+        allIds.addAll(ORE_TYPES.values());
+        return allIds;
+    }
+    
+    /**
+     * Check inventory for changes and update counts
+     */
+    private void checkInventoryForChanges() {
+        try {
+            Set<Integer> allIds = getAllTrackedItemIds();
+            ItemGroupResult inv = getWidgetManager().getInventory().search(allIds);
+            
+            if (inv == null) return;
+            
+            // Check cannonballs
+            for (Map.Entry<String, Integer> entry : CANNONBALL_TYPES.entrySet()) {
+                String type = entry.getKey();
+                int itemId = entry.getValue();
+                
+                int currentCount = inv.getAmount(itemId);
+                int lastCount = lastInventorySnapshot.getOrDefault(itemId, 0);
+                
+                if (currentCount > lastCount) {
+                    int gained = currentCount - lastCount;
+                    cannonballCounts.merge(type, gained, Integer::sum);
+                    cannonballsStolen += gained;
+                    log("LOOT", "+" + gained + " " + type + " (total: " + cannonballCounts.get(type) + ")");
+                }
+                lastInventorySnapshot.put(itemId, currentCount);
             }
             
-            // track ores in two-stall mode (when at ore stall)
-            if (twoStallMode && atOreStall) {
-                // count total inventory slots used - ores are unstackable
-                // just track how many items we have total when at ore stall
-                int currentOreCount = 0;
-                ItemGroupResult invCheck = getWidgetManager().getInventory().search(allIds);
-                if (invCheck != null) {
-                    // get count of non-cannonball items (subtract cannonballs from total)
-                    currentOreCount = invCheck.getAmount();
+            // Check ores
+            for (Map.Entry<String, Integer> entry : ORE_TYPES.entrySet()) {
+                String type = entry.getKey();
+                int itemId = entry.getValue();
+                
+                int currentCount = inv.getAmount(itemId);
+                int lastCount = lastInventorySnapshot.getOrDefault(itemId, 0);
+                
+                if (currentCount > lastCount) {
+                    int gained = currentCount - lastCount;
+                    oreCounts.merge(type, gained, Integer::sum);
+                    oresStolen += gained;
+                    log("LOOT", "+" + gained + " " + type + " (total: " + oreCounts.get(type) + ")");
                 }
-                // Since we can't easily count "all" items, we'll track ore gains via XP instead
-                // or by counting slot changes - for now, skip direct ore counting here
-                // The DepositOres task will increment oresStolen when it deposits
+                lastInventorySnapshot.put(itemId, currentCount);
             }
-        } catch (Exception ignored) {
-            // inventory read failed - silently skip this check
+            
+        } catch (Exception e) {
+            // Inventory read failed - silently skip
         }
+    }
+    
+    /**
+     * Reset inventory snapshot (call after depositing)
+     */
+    public void resetInventorySnapshot() {
+        lastInventorySnapshot.clear();
+        inventoryInitialized = false;
     }
 
     @Override
@@ -344,168 +411,176 @@ public class TidalsCannonballThiever extends Script {
         sym.setGroupingSeparator('.');
         intFmt.setDecimalFormatSymbols(sym);
 
-        // === Ocean Theme Colors (Clean & Modern) ===
-        final Color oceanDeep = new Color(15, 52, 96);           // Deep ocean blue background
-        final Color turquoise = new Color(64, 224, 208);         // Turquoise for labels
-        final Color seafoamGreen = new Color(152, 251, 152);     // Seafoam green for progress
+        // === Ocean Theme Colors ===
+        final Color oceanDeep = new Color(15, 52, 96, 240);      // Deep ocean blue background
+        final Color oceanDark = new Color(10, 35, 65, 240);      // Darker blue for title bar
+        final Color turquoise = new Color(64, 224, 208);         // Turquoise for accents
+        final Color seafoamGreen = new Color(152, 251, 152);     // Seafoam green for success
         final Color oceanAccent = new Color(100, 149, 237);      // Cornflower blue for highlights
+        final Color oceanBorder = new Color(0, 0, 0);            // Black border
 
-        // === Panel + layout ===
-        final int x = 5;
-        final int baseY = 40;
-        final int width = 260;
-        final int borderThickness = 2;
-        final int paddingX = 10;
-        final int topGap = 6;
-        final int lineGap = 16;
-        final int logoBottomGap = 8;
+        // === Panel Layout (KyyzMasterFarmer style) ===
+        final int x = 10;
+        final int baseY = 50;
+        final int width = 240;
+        final int paddingX = 12;
+        final int topGap = 8;
+        final int lineGap = 18;
+        final int titleHeight = 40;
 
-        final int labelColor = turquoise.getRGB();
-        final int valueWhite = Color.WHITE.getRGB();
+        final int labelColor = Color.WHITE.getRGB();
+        final int valueYellow = turquoise.getRGB();
         final int valueGreen = seafoamGreen.getRGB();
-        final int valueBlue = oceanAccent.getRGB();
 
         int innerX = x;
         int innerY = baseY;
         int innerWidth = width;
 
-        // load logo first so we can account for its height
-        ensureLogoLoaded();
-        int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
-
-        // count non-zero cannonball types for display
-        int nonZeroTypes = 0;
+        // Count non-zero cannonball types for dynamic height
+        int nonZeroCBTypes = 0;
         for (int count : cannonballCounts.values()) {
-            if (count > 0) nonZeroTypes++;
+            if (count > 0) nonZeroCBTypes++;
         }
         
-        // extra line for ores in two-stall mode, plus mode indicator
-        int extraLines = twoStallMode ? 2 : 0; // mode line + ores line (if any)
-        int totalLines = 10 + nonZeroTypes + extraLines; // base lines + one per non-zero cannonball type
-        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 10;
-        int innerHeight = Math.max(230, contentHeight);
-
-        // clean ocean panel
-        c.fillRect(innerX - borderThickness, innerY - borderThickness,
-                innerWidth + (borderThickness * 2),
-                innerHeight + (borderThickness * 2),
-                Color.WHITE.getRGB(), 1);
-        c.fillRect(innerX, innerY, innerWidth, innerHeight, oceanDeep.getRGB(), 1);
-        c.drawRect(innerX, innerY, innerWidth, innerHeight, Color.WHITE.getRGB());
-
-        int curY = innerY + topGap;
-
-        // logo at top (centered)
-        if (logoImage != null) {
-            int logoX = innerX + (innerWidth - logoImage.width) / 2;
-            c.drawAtOn(logoImage, logoX, curY);
-            curY += logoImage.height + logoBottomGap;
+        // Count non-zero ore types for dynamic height
+        int nonZeroOreTypes = 0;
+        for (int count : oreCounts.values()) {
+            if (count > 0) nonZeroOreTypes++;
         }
+
+        // Calculate dynamic height
+        // Base lines: Runtime, XP gained, XP/hr, ETL, TTL, Level progress, Current level, Task, Version = 9
+        // + Total CB line (if any cannonballs)
+        // + non-zero cannonball types
+        // + divider (if ores exist)
+        // + Total Ores line (if any ores)
+        // + non-zero ore types
+        // + mode line (two-stall only)
+        int cbLines = (cannonballsStolen > 0 || nonZeroCBTypes > 0) ? 1 + nonZeroCBTypes : 0;
+        int oreLines = (oresStolen > 0 || nonZeroOreTypes > 0) ? 1 + nonZeroOreTypes : 0;
+        int dividerLines = (cbLines > 0 && oreLines > 0) ? 1 : 0; // divider between CB and ores
+        int modeLines = twoStallMode ? 1 : 0;
+        int totalLines = 9 + cbLines + dividerLines + oreLines + modeLines;
+        int innerHeight = titleHeight + (totalLines * lineGap) + topGap + 18;
+
+        // Draw border (black)
+        c.fillRect(innerX - 2, innerY - 2, innerWidth + 4, innerHeight + 4, oceanBorder.getRGB(), 1);
+
+        // Draw main background (ocean blue)
+        c.fillRect(innerX, innerY, innerWidth, innerHeight, oceanDeep.getRGB(), 1);
+
+        // Draw title bar (darker ocean)
+        c.fillRect(innerX, innerY, innerWidth, titleHeight, oceanDark.getRGB(), 1);
+
+        // Draw title text (centered)
+        String title = "Tidals Cannonball Thiever";
+        int titleX = innerX + (innerWidth / 2) - (c.getFontMetrics(FONT_TITLE).stringWidth(title) / 2);
+        int titleY = innerY + 26;
+        c.drawText(title, titleX, titleY, valueYellow, FONT_TITLE);
+
+        // Draw separator line under title
+        int sepY = innerY + titleHeight;
+        c.fillRect(innerX, sepY, innerWidth, 1, oceanBorder.getRGB(), 1);
+
+        int curY = innerY + titleHeight + topGap + lineGap;
 
         // === Stat Lines ===
 
-        // 1) Runtime
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Runtime", runtime, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        // Runtime
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Runtime", runtime, labelColor, labelColor);
 
-        // 2) Individual cannonball types (only show non-zero)
-        for (Map.Entry<String, Integer> entry : cannonballCounts.entrySet()) {
-            int count = entry.getValue();
-            if (count > 0) {
-                curY += lineGap;
-                int perHour = (int) Math.round(count / hours);
-                String text = intFmt.format(count) + " (" + intFmt.format(perHour) + "/hr)";
-                drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                        entry.getKey(), text, labelColor, valueBlue,
-                        FONT_VALUE_BOLD, FONT_LABEL);
+        // === CANNONBALLS SECTION ===
+        if (cannonballsStolen > 0 || nonZeroCBTypes > 0) {
+            // Individual cannonball types (only show non-zero)
+            for (Map.Entry<String, Integer> entry : cannonballCounts.entrySet()) {
+                int count = entry.getValue();
+                if (count > 0) {
+                    curY += lineGap;
+                    int perHour = (int) Math.round(count / hours);
+                    String text = intFmt.format(count) + " (" + intFmt.format(perHour) + "/hr)";
+                    drawStatLine(c, innerX, innerWidth, paddingX, curY, entry.getKey(), text, labelColor, valueGreen);
+                }
             }
+
+            // Total cannonballs
+            curY += lineGap;
+            String cannonballsText = intFmt.format(cannonballsStolen) + " (" + intFmt.format(cannonballsHr) + "/hr)";
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "Total CB", cannonballsText, labelColor, valueYellow);
         }
 
-        // 3) Total cannonballs
-        curY += lineGap;
-        String cannonballsText = intFmt.format(cannonballsStolen) + " (" + intFmt.format(cannonballsHr) + "/hr)";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Total CB", cannonballsText, labelColor, valueGreen,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        // === DIVIDER between Cannonballs and Ores ===
+        if ((cannonballsStolen > 0 || nonZeroCBTypes > 0) && (oresStolen > 0 || nonZeroOreTypes > 0)) {
+            curY += lineGap / 2 + 4;
+            c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, oceanBorder.getRGB(), 1);
+            curY += lineGap / 2 + 4;
+        }
 
-        // 3b) Ores (two-stall mode only)
-        if (twoStallMode) {
+        // === ORES SECTION ===
+        if (oresStolen > 0 || nonZeroOreTypes > 0) {
+            // Individual ore types (only show non-zero)
+            for (Map.Entry<String, Integer> entry : oreCounts.entrySet()) {
+                int count = entry.getValue();
+                if (count > 0) {
+                    curY += lineGap;
+                    int perHour = (int) Math.round(count / hours);
+                    String text = intFmt.format(count) + " (" + intFmt.format(perHour) + "/hr)";
+                    drawStatLine(c, innerX, innerWidth, paddingX, curY, entry.getKey(), text, labelColor, oceanAccent.getRGB());
+                }
+            }
+
+            // Total ores
             curY += lineGap;
             int oresHr = (int) Math.round(oresStolen / hours);
             String oresText = intFmt.format(oresStolen) + " (" + intFmt.format(oresHr) + "/hr)";
-            drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                    "Ores", oresText, labelColor, valueBlue,
-                    FONT_VALUE_BOLD, FONT_LABEL);
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "Total Ores", oresText, labelColor, valueYellow);
         }
 
-        // 4) XP gained
+        // XP gained
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "XP gained", intFmt.format(xpGainedInt), labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "XP gained", intFmt.format(xpGainedInt), labelColor, valueGreen);
 
-        // 4) XP/hr
+        // XP/hr
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "XP/hr", intFmt.format(xpPerHourLive), labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "XP/hr", intFmt.format(xpPerHourLive), labelColor, valueYellow);
 
-        // 5) ETL
+        // ETL
         curY += lineGap;
         String etlText = (currentLevel >= 99) ? "MAXED" : intFmt.format(Math.round(etl));
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "ETL", etlText, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "ETL", etlText, labelColor, labelColor);
 
-        // 6) TTL
+        // TTL
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "TTL", ttlText, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "TTL", ttlText, labelColor, labelColor);
 
-        // 7) Level progress
+        // Level progress
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Level progress", levelProgressText, labelColor, valueGreen,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Level progress", levelProgressText, labelColor, valueGreen);
 
-        // 8) Current level
+        // Current level
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Current level", currentLevelText, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Current level", currentLevelText, labelColor, labelColor);
 
-        // 9) Task
+        // Task
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Task", String.valueOf(task), labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Task", String.valueOf(task), labelColor, labelColor);
 
-        // 10) Version
+        // Version
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Version", scriptVersion, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, labelColor, labelColor);
 
-        // 11) Mode (two-stall mode only)
+        // Mode (two-stall mode only)
         if (twoStallMode) {
             curY += lineGap;
             String modeText = atOreStall ? "Ore Stall" : "Cannonball Stall";
-            drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                    "Mode", "Two Stall (" + modeText + ")", labelColor, turquoise.getRGB(),
-                    FONT_VALUE_BOLD, FONT_LABEL);
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "Mode", "Two Stall (" + modeText + ")", labelColor, valueYellow);
         }
     }
 
-    private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
-                              String label, String value, int labelColor, int valueColor,
-                              Font labelFont, Font valueFont) {
-        c.drawText(label, innerX + paddingX, y, labelColor, labelFont);
-        int valW = c.getFontMetrics(valueFont).stringWidth(value);
-        int valX = innerX + innerWidth - paddingX - valW;
-        c.drawText(value, valX, y, valueColor, valueFont);
+    private void drawStatLine(Canvas c, int x, int width, int padding, int yPos,
+                              String leftText, String rightText, int leftCol, int rightCol) {
+        c.drawText(leftText, x + padding, yPos, leftCol, FONT_LABEL);
+        int rightWidth = c.getFontMetrics(FONT_LABEL).stringWidth(rightText);
+        c.drawText(rightText, x + width - padding - rightWidth, yPos, rightCol, FONT_LABEL);
     }
 
     private String formatRuntime(long millis) {
@@ -522,53 +597,4 @@ public class TidalsCannonballThiever extends Script {
         }
     }
 
-    private void ensureLogoLoaded() {
-        if (logoImage != null || logoLoadAttempted) return;
-        logoLoadAttempted = true;
-
-        try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
-            if (in == null) {
-                log(getClass(), "Logo '/logo.png' not found in resources.");
-                return;
-            }
-
-            BufferedImage src = ImageIO.read(in);
-            if (src == null) {
-                log(getClass(), "Failed to decode logo.png");
-                return;
-            }
-
-            // Convert to ARGB with premultiplied alpha
-            BufferedImage argb = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = argb.createGraphics();
-            g.setComposite(AlphaComposite.Src);
-            g.drawImage(src, 0, 0, null);
-            g.dispose();
-
-            int w = argb.getWidth();
-            int h = argb.getHeight();
-            int[] px = new int[w * h];
-            argb.getRGB(0, 0, w, h, px, 0, w);
-
-            // Premultiply alpha
-            for (int i = 0; i < px.length; i++) {
-                int p = px[i];
-                int a = (p >>> 24) & 0xFF;
-                if (a == 0) { px[i] = 0; continue; }
-                int r = (p >>> 16) & 0xFF;
-                int gch = (p >>> 8) & 0xFF;
-                int b = p & 0xFF;
-                r = (r * a + 127) / 255;
-                gch = (gch * a + 127) / 255;
-                b = (b * a + 127) / 255;
-                px[i] = (a << 24) | (r << 16) | (gch << 8) | b;
-            }
-
-            logoImage = new Image(px, w, h);
-            log(getClass(), "Logo loaded: " + w + "x" + h);
-
-        } catch (Exception e) {
-            log(getClass(), "Error loading logo: " + e.getMessage());
-        }
-    }
 }

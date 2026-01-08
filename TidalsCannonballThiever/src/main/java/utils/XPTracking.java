@@ -5,7 +5,6 @@ import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
 
 import static main.TidalsCannonballThiever.lastXpGain;
-import static main.TidalsCannonballThiever.cannonballsStolen;
 
 import java.util.Map;
 
@@ -54,20 +53,29 @@ public class XPTracking {
         return tracker.timeToNextLevelString();
     }
 
-    public void checkXP() {
+    /**
+     * Check if XP was gained since last check
+     * @return true if XP increased (successful steal)
+     */
+    public boolean checkXPAndReturnIfGained() {
         XPTracker tracker = getThievingTracker();
-        if (tracker == null) return;
+        if (tracker == null) return false;
 
         double currentXp = tracker.getXpGained();
 
-        // only reset timer when XP actually increases (new xp drop)
+        // Check if XP actually increased (new xp drop = successful steal)
         if (currentXp > lastKnownXp) {
             lastXpGain.reset();
-            // estimate cannonballs stolen (roughly 36 xp per steal)
-            double xpGained = currentXp - lastKnownXp;
-            int steals = (int) Math.round(xpGained / 36.0);
-            cannonballsStolen += Math.max(1, steals);
             lastKnownXp = currentXp;
+            return true;
         }
+        return false;
+    }
+    
+    /**
+     * Legacy method for backwards compatibility
+     */
+    public void checkXP() {
+        checkXPAndReturnIfGained();
     }
 }

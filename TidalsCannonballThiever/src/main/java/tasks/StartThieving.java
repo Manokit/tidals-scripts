@@ -28,6 +28,13 @@ public class StartThieving extends Task {
     // track if we've done initial positioning (only need exact tile once)
     private static boolean initialPositionDone = false;
 
+    /**
+     * Reset static state - call this from onStart() to ensure fresh state on script restart
+     */
+    public static void resetStaticState() {
+        initialPositionDone = false;
+    }
+
     private WorldPosition getThievingTile() {
         return twoStallMode ? THIEVING_TILE_TWO_STALL : THIEVING_TILE_SINGLE;
     }
@@ -76,18 +83,12 @@ public class StartThieving extends Task {
                 return false;
             }
             
-            // CRITICAL: check guard BEFORE marking positioning done
-            // if guard is in danger zone, wait for them to pass first
-            if (guardTracker.isAnyGuardInDangerZone()) {
-                task = "Waiting for guard (setup)";
-                script.log("THIEVE", "At position but guard in danger zone - waiting...");
-                return false; // retreat task will handle it, or wait task
-            }
-            
-            // also wait if guard is about to arrive (early warning active)
+            // CRITICAL: For initial setup, use STRICT guard check (no timer!)
+            // Don't start if ANY guard is in patrol zone 1864-1867
+            // isSafeToReturn() is stricter than isAnyGuardInDangerZone() (no timer delay)
             if (!guardTracker.isSafeToReturn()) {
-                task = "Guard nearby (setup)";
-                script.log("THIEVE", "At position but guard nearby - waiting for them to pass...");
+                task = "Waiting for guard (setup)";
+                script.log("THIEVE", "At position but guard in patrol zone - waiting for them to pass...");
                 return false;
             }
             

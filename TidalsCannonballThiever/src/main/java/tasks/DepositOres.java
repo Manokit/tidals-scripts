@@ -20,7 +20,7 @@ import static main.TidalsCannonballThiever.*;
  */
 public class DepositOres extends Task {
     // deposit box position
-    private static final WorldPosition DEPOSIT_BOX_TILE = new WorldPosition(1871, 3302, 0);
+    private static final WorldPosition DEPOSIT_BOX_TILE = new WorldPosition(1872, 3301, 0);
     
     // cannonball stall position for return (two-stall mode)
     private static final WorldPosition CANNONBALL_STALL_TILE = new WorldPosition(1867, 3295, 0);
@@ -80,7 +80,8 @@ public class DepositOres extends Task {
     @Override
     public boolean execute() {
         task = "Depositing ores";
-        currentlyThieving = false;
+        currentlyThieving = false;  // Allow breaks/hops/AFKs during deposit run
+        doingDepositRun = true;     // Flag for canBreak/canHop/canAFK
         script.log("DEPOSIT", "Inventory full - heading to deposit box!");
 
         // dismiss dialogue if present
@@ -94,30 +95,37 @@ public class DepositOres extends Task {
             }
         }
 
-        // Click deposit box directly - walker will path there automatically
-        RSObject depositBox = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank deposit box");
-        if (depositBox == null) {
-            script.log("DEPOSIT", "Can't find deposit box!");
+        // Walk to deposit box area first - breaks/hops/AFKs allowed during walk
+        script.log("DEPOSIT", "Walking to deposit box...");
+        script.getWalker().walkTo(DEPOSIT_BOX_TILE, exactTileConfig);
+        
+        // Wait until near deposit box - allow interrupts (ignoreTasks=false)
+        script.pollFramesUntil(() -> isNearDepositBox(), 8000, false);
+        
+        // Humanized delay after arriving
+        script.pollFramesHuman(() -> false, script.random(300, 600));
+
+        // Find and click deposit box using MENU ENTRY to avoid misclicks
+        if (!openDepositBoxWithMenu()) {
+            script.log("DEPOSIT", "Failed to open deposit box, retrying...");
+            doingDepositRun = false;
             return false;
         }
-        
-        // Walk to and interact with deposit box (click it directly, game paths us there)
-        script.log("DEPOSIT", "Clicking deposit box...");
-        Polygon boxPoly = depositBox.getConvexHull();
-        if (boxPoly != null) {
-            script.getFinger().tap(boxPoly);
-        }
-        
-        // Wait until we're near and interface opens
-        script.pollFramesUntil(() -> isNearDepositBox() || isDepositInterfaceOpen(), 8000);
 
-        // wait for deposit interface to open
-        script.pollFramesUntil(() -> isDepositInterfaceOpen(), 3000);
+        // Wait for deposit interface to open
+        script.pollFramesUntil(() -> isDepositInterfaceOpen(), 5000);
         script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        if (!isDepositInterfaceOpen()) {
+            script.log("DEPOSIT", "Deposit interface didn't open, retrying...");
+            doingDepositRun = false;
+            return false;
+        }
 
         // deposit all
         if (!depositAll()) {
             script.log("DEPOSIT", "Failed to deposit, retrying...");
+            doingDepositRun = false;
             return false;
         }
 
@@ -130,13 +138,51 @@ public class DepositOres extends Task {
 
         script.log("DEPOSIT", "Ores deposited! Returning to cannonball stall...");
 
-        // walk back to cannonball stall - exact tile positioning
+        // Walk back to cannonball stall - breaks/hops/AFKs allowed during walk
         script.getWalker().walkTo(CANNONBALL_STALL_TILE, exactTileConfig);
-        script.pollFramesUntil(() -> isAtCannonballStallExact(), 8000);
+        
+        // Wait until at stall - allow interrupts (ignoreTasks=false)
+        script.pollFramesUntil(() -> isAtCannonballStallExact(), 8000, false);
+        
+        // Humanized delay after arriving
+        script.pollFramesHuman(() -> false, script.random(300, 600));
 
         atOreStall = false;
+        doingDepositRun = false;  // Clear flag - back to normal thieving
         script.log("DEPOSIT", "Back at cannonball stall!");
         return true;
+    }
+    
+    /**
+     * Open deposit box using menu entry to avoid misclicks
+     */
+    private boolean openDepositBoxWithMenu() {
+        WorldPosition myPos = script.getWorldPosition();
+        if (myPos == null) return false;
+
+        RSObject depositBox = script.getObjectManager().getClosestObject(myPos, "Bank deposit box");
+        if (depositBox == null) {
+            script.log("DEPOSIT", "Can't find deposit box!");
+            return false;
+        }
+
+        Polygon boxPoly = depositBox.getConvexHull();
+        if (boxPoly == null) {
+            script.log("DEPOSIT", "Deposit box hull null");
+            return false;
+        }
+
+        // Use menu entry "Deposit" to ensure we click the right thing
+        script.log("DEPOSIT", "Opening deposit box via menu...");
+        boolean tapped = script.getFinger().tap(boxPoly, "Deposit");
+        
+        if (tapped) {
+            script.log("DEPOSIT", "Deposit action sent!");
+            return true;
+        }
+        
+        script.log("DEPOSIT", "Failed to send Deposit action");
+        return false;
     }
 
     private boolean isInventoryFull() {
@@ -179,7 +225,7 @@ public class DepositOres extends Task {
         int x = (int) pos.getX();
         int y = (int) pos.getY();
         // within 2 tiles of deposit box
-        return Math.abs(x - 1871) <= 2 && Math.abs(y - 3302) <= 2;
+        return Math.abs(x - 1872) <= 2 && Math.abs(y - 3301) <= 2;
     }
 
     private boolean openDepositBox() {
@@ -213,17 +259,16 @@ public class DepositOres extends Task {
 
     private boolean depositAll() {
         try {
-            // count ores before depositing to track stolen count
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(ORE_IDS);
-            int oreCount = (inv != null) ? inv.getAmount() : 0;
-            
             // deposit ALL items (empty set = ignore nothing)
             boolean result = script.getWidgetManager().getDepositBox().depositAll(Set.of());
             
-            // increment stolen count
-            if (result && oreCount > 0) {
-                oresStolen += oreCount;
-                script.log("DEPOSIT", "Deposited " + oreCount + " ores (total: " + oresStolen + ")");
+            if (result) {
+                script.log("DEPOSIT", "Deposited all items!");
+                
+                // Reset inventory snapshot so next thieving session starts fresh
+                if (script instanceof main.TidalsCannonballThiever) {
+                    ((main.TidalsCannonballThiever) script).resetInventorySnapshot();
+                }
             }
             
             return result;
