@@ -14,14 +14,12 @@ public class XPTracking {
         this.core = core;
     }
 
-    // internal helper to retrieve a specific tracker
     private XPTracker getTracker(SkillType skill) {
         Map<SkillType, XPTracker> trackers = core.getXPTrackers();
         if (trackers == null) return null;
         return trackers.get(skill);
     }
 
-    // crafting-specific methods
     public XPTracker getCraftingTracker() {
         return getTracker(SkillType.CRAFTING);
     }
@@ -50,7 +48,6 @@ public class XPTracking {
         return tracker.timeToNextLevelString();
     }
 
-    // fletching-specific methods (for bolt tips)
     public XPTracker getFletchingTracker() {
         return getTracker(SkillType.FLETCHING);
     }
@@ -80,12 +77,8 @@ public class XPTracking {
     }
 
     public void checkXP() {
-        // called in onNewFrame() - no actual method call needed
-        // xp trackers update automatically
-        XPTracker tracker = getCraftingTracker();
-        if (tracker == null) return;
-        
-        // could add custom logic here if needed
-        double currentXp = tracker.getXpGained();
+        // trackers update on access
+        getCraftingTracker();
+        getFletchingTracker();
     }
 }

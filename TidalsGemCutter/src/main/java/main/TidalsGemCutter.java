@@ -83,10 +83,8 @@ public class TidalsGemCutter extends Script {
     private final XPTracking xpTracking;
     private int xpGained = 0;
 
-    // Logo image (optional)
     private com.osmb.api.visual.image.Image logoImage = null;
 
-    // Map uncut gems to cut gems
     private static final Map<Integer, Integer> UNCUT_TO_CUT = Map.of(
             ItemID.UNCUT_SAPPHIRE, ItemID.SAPPHIRE,
             ItemID.UNCUT_EMERALD, ItemID.EMERALD,
@@ -94,7 +92,6 @@ public class TidalsGemCutter extends Script {
             ItemID.UNCUT_DIAMOND, ItemID.DIAMOND
     );
 
-    // Map cut gems to bolt tips
     private static final Map<Integer, Integer> CUT_TO_BOLT_TIPS = Map.of(
             ItemID.SAPPHIRE, ItemID.SAPPHIRE_BOLT_TIPS,
             ItemID.EMERALD, ItemID.EMERALD_BOLT_TIPS,
@@ -194,18 +191,14 @@ public class TidalsGemCutter extends Script {
         makeBoltTips = ui.isMakeBoltTips();
         useBankedGems = ui.isUseBankedGems();
 
-        // Calculate bolt tip ID if making bolt tips
         if (makeBoltTips) {
             selectedBoltTipID = CUT_TO_BOLT_TIPS.getOrDefault(selectedCutGemID, 0);
         }
 
-        // Debug logging
-        log("INFO", "Selected UNCUT gem ID: " + selectedUncutGemID);
-        log("INFO", "Selected CUT gem ID: " + selectedCutGemID);
-        log("INFO", "Make bolt tips: " + makeBoltTips);
-        log("INFO", "Use banked gems: " + useBankedGems);
+        log("INFO", "uncut: " + selectedUncutGemID + ", cut: " + selectedCutGemID);
+        log("INFO", "bolt tips: " + makeBoltTips + ", banked gems: " + useBankedGems);
         if (makeBoltTips) {
-            log("INFO", "Selected BOLT TIP ID: " + selectedBoltTipID);
+            log("INFO", "bolt tip id: " + selectedBoltTipID);
         }
 
         if (selectedCutGemID == 0) {
@@ -291,7 +284,7 @@ public class TidalsGemCutter extends Script {
         double hours = Math.max(1e-9, elapsed / 3_600_000.0);
         String runtime = formatRuntime(elapsed);
 
-        // ==== Live XP via built-in tracker (Crafting for gems, Fletching for bolt tips) ====
+        // xp tracking
         String ttlText = "-";
         double etl = 0.0;
         double xpGainedLive = 0.0;
@@ -299,7 +292,6 @@ public class TidalsGemCutter extends Script {
         double levelProgressFraction = 0.0;
 
         if (xpTracking != null) {
-            // Use Fletching tracker for bolt tips, Crafting for normal gem cutting
             XPTracker tracker = makeBoltTips ? xpTracking.getFletchingTracker() : xpTracking.getCraftingTracker();
             if (tracker != null) {
                 xpGainedLive = tracker.getXpGained();
@@ -315,7 +307,6 @@ public class TidalsGemCutter extends Script {
                     currentLevel++;
                 }
 
-                // Handle level 99 specially
                 if (currentLevel >= MAX_LEVEL) {
                     ttlText = "MAXED";
                     etl = 0;
@@ -335,14 +326,12 @@ public class TidalsGemCutter extends Script {
         int xpGainedInt = (int) Math.round(xpGainedLive);
         xpGained = xpGainedInt;
 
-        // Current level text with (+N)
         if (startLevel <= 0) startLevel = currentLevel;
         int levelsGained = Math.max(0, currentLevel - startLevel);
         String currentLevelText = (levelsGained > 0)
                 ? (currentLevel + " (+" + levelsGained + ")")
                 : String.valueOf(currentLevel);
 
-        // Percent text (dot decimal)
         double pct = Math.max(0, Math.min(100, levelProgressFraction * 100.0));
         String levelProgressText;
         if (currentLevel >= 99) {
@@ -353,19 +342,18 @@ public class TidalsGemCutter extends Script {
                     : String.format(java.util.Locale.US, "%.1f%%", pct);
         }
 
-        // === Formatting with dots ===
         java.text.DecimalFormat intFmt = new java.text.DecimalFormat("#,###");
         java.text.DecimalFormatSymbols sym = new java.text.DecimalFormatSymbols();
         sym.setGroupingSeparator('.');
         intFmt.setDecimalFormatSymbols(sym);
 
-        // === Ocean Theme Colors (Clean & Modern) ===
-        final Color oceanDeep = new Color(15, 52, 96);           // Deep ocean blue background
-        final Color turquoise = new Color(64, 224, 208);         // Turquoise for labels
-        final Color seafoamGreen = new Color(152, 251, 152);     // Seafoam green for progress
-        final Color oceanAccent = new Color(100, 149, 237);      // Cornflower blue for highlights
+        // colors
+        final Color oceanDeep = new Color(15, 52, 96);
+        final Color turquoise = new Color(64, 224, 208);
+        final Color seafoamGreen = new Color(152, 251, 152);
+        final Color oceanAccent = new Color(100, 149, 237);
 
-        // === Panel + layout ===
+        // layout
         final int x = 5;
         final int baseY = 40;
         final int width = 260;
@@ -384,15 +372,13 @@ public class TidalsGemCutter extends Script {
         int innerY = baseY;
         int innerWidth = width;
 
-        // load logo first so we can account for its height
         ensureLogoLoaded();
         int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        int totalLines = 11;  // added gems cut line
+        int totalLines = 11;
         int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 10;
         int innerHeight = Math.max(230, contentHeight);
 
-        // clean ocean panel
         c.fillRect(innerX - borderThickness, innerY - borderThickness,
                 innerWidth + (borderThickness * 2),
                 innerHeight + (borderThickness * 2),
@@ -402,57 +388,48 @@ public class TidalsGemCutter extends Script {
 
         int curY = innerY + topGap;
 
-        // logo at top (centered)
         if (logoImage != null) {
             int logoX = innerX + (innerWidth - logoImage.width) / 2;
             c.drawAtOn(logoImage, logoX, curY);
             curY += logoImage.height + logoBottomGap;
         }
 
-        // 1) Runtime
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Runtime", runtime, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 2) XP gained (live)
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "XP gained", intFmt.format(xpGainedInt), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 3) XP/hr (live)
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "XP/hr", intFmt.format(xpPerHour), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 4) ETL
         curY += lineGap;
         String etlText = (currentLevel >= 99) ? "MAXED" : intFmt.format(Math.round(etl));
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "ETL", etlText, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 5) TTL
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "TTL", ttlText, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 6) Level progress
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Level progress", levelProgressText, labelColor, valueGreen,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 7) Current level
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Current level", currentLevelText, labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 8) Item type (gem or bolt tips)
         curY += lineGap;
         String itemName;
         String itemLabel;
@@ -467,7 +444,6 @@ public class TidalsGemCutter extends Script {
                 itemLabel, itemName, labelColor, valueBlue,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 9) Items crafted (gems cut or bolt tips made)
         curY += lineGap;
         int itemsPerHour = (int) Math.round(craftCount / hours);
         String itemsCraftedText = intFmt.format(craftCount) + " (" + intFmt.format(itemsPerHour) + "/hr)";
@@ -476,13 +452,11 @@ public class TidalsGemCutter extends Script {
                 craftLabel, itemsCraftedText, labelColor, valueGreen,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 10) Task
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Task", String.valueOf(task), labelColor, valueWhite,
                 FONT_VALUE_BOLD, FONT_LABEL);
 
-        // 11) Version
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Version", scriptVersion, labelColor, valueWhite,
@@ -515,7 +489,6 @@ public class TidalsGemCutter extends Script {
                 return;
             }
 
-            // Convert to ARGB with premultiplied alpha
             BufferedImage argb = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = argb.createGraphics();
             g.setComposite(AlphaComposite.Src);
@@ -527,7 +500,7 @@ public class TidalsGemCutter extends Script {
             int[] px = new int[w * h];
             argb.getRGB(0, 0, w, h, px, 0, w);
 
-            // Premultiply alpha
+            // premultiply alpha
             for (int i = 0; i < px.length; i++) {
                 int p = px[i];
                 int a = (p >>> 24) & 0xFF;
@@ -552,10 +525,9 @@ public class TidalsGemCutter extends Script {
     private void sendWebhookInternal() {
         ByteArrayOutputStream baos = null;
         try {
-            // Only proceed if we have a painted frame
             Image source = lastCanvasFrame.get();
             if (source == null) {
-                log("WEBHOOK", "ℹ No painted frame available; skipping webhook.");
+                log("WEBHOOK", "no frame, skipping");
                 return;
             }
 
@@ -564,14 +536,11 @@ public class TidalsGemCutter extends Script {
             ImageIO.write(buffered, "png", baos);
             byte[] imageBytes = baos.toByteArray();
 
-            // Runtime for description
             long elapsed = System.currentTimeMillis() - startTime;
             String runtime = formatRuntime(elapsed);
 
-            // Username (or anonymous)
             String displayUser = (webhookShowUser && user != null) ? user : "anonymous";
 
-            // Next webhook local time
             long nextMillis = System.currentTimeMillis() + (webhookIntervalMinutes * 60_000L);
             ZonedDateTime nextLocal = ZonedDateTime.ofInstant(
                     Instant.ofEpochMilli(nextMillis),
@@ -605,7 +574,6 @@ public class TidalsGemCutter extends Script {
 
                     .append("} ] }");
 
-            // Send multipart/form-data
             String boundary = "----WebBoundary" + System.currentTimeMillis();
             HttpURLConnection conn = (HttpURLConnection) new URL(webhookUrl).openConnection();
             conn.setRequestMethod("POST");
@@ -613,13 +581,11 @@ public class TidalsGemCutter extends Script {
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 
             try (OutputStream out = conn.getOutputStream()) {
-                // payload_json
                 out.write(("--" + boundary + "\r\n").getBytes());
                 out.write("Content-Disposition: form-data; name=\"payload_json\"\r\n\r\n".getBytes());
                 out.write(json.toString().getBytes(StandardCharsets.UTF_8));
                 out.write("\r\n".getBytes());
 
-                // image file
                 out.write(("--" + boundary + "\r\n").getBytes());
                 out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + imageFilename + "\"\r\n").getBytes());
                 out.write("Content-Type: image/png\r\n\r\n".getBytes());
@@ -635,7 +601,7 @@ public class TidalsGemCutter extends Script {
 
             if (code == 200 || code == 204) {
                 lastWebhookSent = now;
-                log("WEBHOOK", "✅ Webhook sent.");
+                log("WEBHOOK", "sent");
             } else if (code == 429) {
                 long backoffMs = 30_000L;
                 String ra = conn.getHeaderField("Retry-After");
@@ -646,13 +612,13 @@ public class TidalsGemCutter extends Script {
                     } catch (NumberFormatException ignored) {}
                 }
                 nextWebhookEarliestMs = now + backoffMs + 250;
-                log("WEBHOOK", "⚠ 429 rate-limited. Backing off ~" + backoffMs + "ms");
+                log("WEBHOOK", "rate limited, backing off " + backoffMs + "ms");
             } else {
-                log("WEBHOOK", "⚠ Webhook failed. HTTP " + code);
+                log("WEBHOOK", "failed, http " + code);
             }
 
         } catch (Exception e) {
-            log("WEBHOOK", "❌ Error: " + e.getMessage());
+            log("WEBHOOK", "error: " + e.getMessage());
         } finally {
             try { if (baos != null) baos.close(); } catch (IOException ignored) {}
             webhookInFlight.set(false);
