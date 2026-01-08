@@ -32,6 +32,7 @@
 ### 🔧 API References
 
 **Core APIs:**
+- **`docs/ScriptCore.md`** - ScriptCore interface documentation
 - **`docs/ItemManager.md`** - Item management and searching (NEW)
 - **`docs/PixelAnalyzer_API.md`** - Visual analysis and color detection (NEW)
 - **`docs/Deposit-box.md`** - Deposit box API (NEW)
@@ -41,7 +42,6 @@
 
 **JSON API References:**
 - **`docs/Finger.json`** - Complete Finger API methods
-- **`docs/ScriptCore.json`** - ScriptCore interface documentation
 - **`docs/Minimap.json`** - Minimap API reference
 - **`docs/com.osmb.api.walker.json`** - Walker API
 - **`docs/com.osmb.api.walker.WalkConfig.json`** - WalkConfig options
