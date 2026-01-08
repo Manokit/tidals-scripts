@@ -427,16 +427,6 @@ public class GuardTracker {
         return false;
     }
 
-    // Keep old methods for backwards compatibility but they now delegate
-    public boolean isSafeAtCannonballStall() {
-        return isCannonballStallSafe();
-    }
-
-    public boolean isSafeAtOreStall() {
-        // ore stall is "safe" as long as guard isn't right there
-        return !isGuardNearOreStall();
-    }
-
     // === HIGHLIGHT-BASED PIXEL DETECTION METHODS ===
     // These detect guard movement 10-20x faster than tile-based methods!
 

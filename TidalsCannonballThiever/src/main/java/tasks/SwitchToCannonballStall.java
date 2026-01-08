@@ -60,8 +60,6 @@ public class SwitchToCannonballStall extends Task {
         // If this was an XP-based switch, mark it to prevent backup guard detection from psyching us out
         if (wasXpBasedSwitch) {
             guardTracker.markXpBasedSwitch();
-            // Count this as a completed cycle (4 CB + 2 ore)
-            PrepareForBreak.incrementCycleCount();
         }
 
         // Reset CB cycle counter and guard tracking for fresh detection

@@ -45,21 +45,6 @@ public class PrepareForBreak extends Task {
     }
     
     /**
-     * Increment cycle count - called when a full cycle completes (4 CB + 2 ore)
-     * Kept for compatibility with SwitchToCannonballStall
-     */
-    public static void incrementCycleCount() {
-        // No longer used for break timing (using ProfileManager now)
-    }
-    
-    /**
-     * Reset cycle count - kept for compatibility
-     */
-    public static void resetCycleCount() {
-        // No longer used for break timing (using ProfileManager now)
-    }
-    
-    /**
      * Get number of nearby players (white dots on minimap)
      */
     private int getNearbyPlayerCount() {

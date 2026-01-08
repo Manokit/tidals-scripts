@@ -6,7 +6,7 @@ import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.ui.chatbox.dialogue.Dialogue;
-import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+
 import com.osmb.api.utils.UIResult;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
@@ -90,26 +90,6 @@ public class DepositOres extends Task {
         }
     }
     
-    /**
-     * Public static method so other tasks can check for inventory full dialogue
-     */
-    public static boolean checkInventoryFullDialogue(Script script) {
-        try {
-            Dialogue dialogue = script.getWidgetManager().getDialogue();
-            if (dialogue == null || !dialogue.isVisible()) return false;
-            
-            UIResult<String> textResult = dialogue.getText();
-            if (textResult == null || !textResult.isFound()) return false;
-            
-            String text = textResult.get().toLowerCase();
-            return text.contains("inventory is too full") || 
-                   text.contains("inventory is full") ||
-                   text.contains("can't carry any more");
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     @Override
     public boolean execute() {
         task = "Depositing ores";

@@ -32,7 +32,7 @@ import java.awt.*;
         author = "Tidalus"
 )
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.2";
+    public static final String scriptVersion = "1.1";
 
     public static int screenWidth = 0;
     public static int screenHeight = 0;
@@ -91,12 +91,9 @@ public class TidalsCannonballThiever extends Script {
     public static int startLevel = 1;
 
     public static XPTracking xpTracking;
-    private int xpGained = 0;
 
     // Guard tracker
     public static GuardTracker guardTracker;
-
-
 
     // UI
     private ScriptUI scriptUI;
@@ -383,7 +380,6 @@ public class TidalsCannonballThiever extends Script {
 
         int xpPerHourLive = (int) Math.round(xpGainedLive / hours);
         int xpGainedInt = (int) Math.round(xpGainedLive);
-        xpGained = xpGainedInt;
 
         // Totals & rates
         int cannonballsHr = (int) Math.round(cannonballsStolen / hours);
