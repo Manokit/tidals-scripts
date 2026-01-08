@@ -35,7 +35,7 @@ import java.util.function.Predicate;
         name = "TidalsGoldSuperheater",
         description = "Superheats gold ore into gold bars using magic",
         skillCategory = SkillCategory.MAGIC,
-        version = 1.0,
+        version = 1.1,
         author = "Tidaleus"
 )
 public class TidalsGoldSuperheater extends Script {

@@ -97,7 +97,18 @@ public class Process extends Task {
                     2000);
             }
 
-            script.submitTask(() -> false, script.random(1200, 1800));
+            // normal 2-3 tick delay, 10% chance of extra pause
+            int delay = script.random(1200, 1800);
+            if (script.random(10) == 0) {
+                delay += script.random(600, 1200);
+            }
+            
+            // ~20% chance to use human delay (logs the ⏳ message)
+            if (script.random(5) == 0) {
+                script.pollFramesHuman(() -> false, delay);
+            } else {
+                script.submitTask(() -> false, delay);
+            }
         }
 
         return false;
