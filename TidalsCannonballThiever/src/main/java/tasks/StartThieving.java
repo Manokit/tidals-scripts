@@ -34,6 +34,13 @@ public class StartThieving extends Task {
     public static void resetStaticState() {
         initialPositionDone = false;
     }
+    
+    /**
+     * Reset positioning flag - call after breaks/world hops to ensure fresh guard cycle
+     */
+    public static void resetAfterBreak() {
+        initialPositionDone = false;
+    }
 
     private WorldPosition getThievingTile() {
         return twoStallMode ? THIEVING_TILE_TWO_STALL : THIEVING_TILE_SINGLE;
@@ -83,17 +90,26 @@ public class StartThieving extends Task {
                 return false;
             }
             
-            // CRITICAL: For initial setup, use STRICT guard check (no timer!)
-            // Don't start if ANY guard is in patrol zone 1864-1867
-            // isSafeToReturn() is stricter than isAnyGuardInDangerZone() (no timer delay)
-            if (!guardTracker.isSafeToReturn()) {
-                task = "Waiting for guard (setup)";
-                script.log("THIEVE", "At position but guard in patrol zone - waiting for them to pass...");
-                return false;
+            // CRITICAL: For initial setup, use STRICT guard check
+            // Two-stall mode: Must actually SEE guard past stall (x >= 1868)
+            // Single-stall mode: No guard in patrol zone 1864-1867
+            if (twoStallMode) {
+                // Stricter check - require seeing guard PAST the stall
+                if (!guardTracker.isCannonballStallSafe()) {
+                    task = "Waiting for guard cycle";
+                    script.log("THIEVE", "Waiting to see guard pass stall (x >= 1868)...");
+                    return false;
+                }
+            } else {
+                if (!guardTracker.isSafeToReturn()) {
+                    task = "Waiting for guard (setup)";
+                    script.log("THIEVE", "At position but guard in patrol zone - waiting for them to pass...");
+                    return false;
+                }
             }
             
             initialPositionDone = true;
-            script.log("THIEVE", "Initial positioning complete - guard clear!");
+            script.log("THIEVE", "Initial positioning complete - starting fresh cycle!");
         }
 
         // STEP 2: instant danger check - NO DELAYS, speed is critical

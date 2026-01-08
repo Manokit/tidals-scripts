@@ -99,6 +99,10 @@ public class PrepareForBreak extends Task {
         // Reset cycle count after break check
         resetCycleCount();
         
+        // Reset StartThieving positioning flag so we wait for a fresh guard cycle
+        // This ensures we see the guard pass before starting after a break
+        StartThieving.resetAfterBreak();
+        
         return true;
     }
     
