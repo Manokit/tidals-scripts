@@ -76,8 +76,10 @@ public class TidalsGoldSuperheater extends Script {
     public static int currentSmithingLevel = 1;
     public static int startSmithingLevel = 0;
 
-    private static final Font FONT_TITLE = new Font("Arial", Font.BOLD, 14);
-    private static final Font FONT_LABEL = new Font("Arial", Font.PLAIN, 12);
+    private static final Font FONT_LABEL = new Font("Arial", Font.BOLD, 12);
+    private static final Font FONT_VALUE = new Font("Arial", Font.BOLD, 12);
+
+    private Image logoImage = null;
 
     private final XPTracking xpTracking;
     private int magicXpGained = 0;
@@ -287,104 +289,169 @@ public class TidalsGoldSuperheater extends Script {
         sym.setGroupingSeparator('.');
         intFmt.setDecimalFormatSymbols(sym);
 
-        // colors
-        final Color oceanDeep = new Color(15, 52, 96, 240);
-        final Color oceanDark = new Color(10, 35, 65, 240);
-        final Color turquoise = new Color(64, 224, 208);
-        final Color seafoamGreen = new Color(152, 251, 152);
-        final Color oceanAccent = new Color(100, 149, 237);
-        final Color oceanBorder = new Color(0, 0, 0);
-        final Color goldColor = new Color(255, 215, 0);
+        // colors - dark teal theme with gold accents
+        final Color bgColor = new Color(22, 49, 52);             // #163134 - dark teal background
+        final Color borderColor = new Color(40, 75, 80);         // lighter teal border
+        final Color accentGold = new Color(255, 215, 0);         // gold accent
+        final Color accentYellow = new Color(255, 235, 130);     // lighter gold/yellow
+        final Color textLight = new Color(238, 237, 233);        // #eeede9 - off-white text
+        final Color textMuted = new Color(170, 185, 185);        // muted teal-gray for labels
+        final Color valueGreen = new Color(180, 230, 150);       // soft green for magic xp
+        final Color valueBlue = new Color(130, 180, 220);        // soft blue for smithing xp
 
         // layout
-        final int x = 10;
-        final int baseY = 50;
-        final int width = 240;
-        final int paddingX = 12;
-        final int topGap = 8;
-        final int lineGap = 18;
-        final int titleHeight = 40;
-
-        final int labelColor = Color.WHITE.getRGB();
-        final int valueYellow = turquoise.getRGB();
-        final int valueGreen = seafoamGreen.getRGB();
-        final int valueGold = goldColor.getRGB();
-        final int valueBlue = oceanAccent.getRGB();
+        final int x = 5;
+        final int baseY = 40;
+        final int width = 220;
+        final int borderThickness = 2;
+        final int paddingX = 10;                // side padding
+        final int topGap = 6;                   // top padding
+        final int lineGap = 16;                 // line padding
+        final int logoBottomGap = 8;            // logo bottom padding
 
         int innerX = x;
         int innerY = baseY;
         int innerWidth = width;
 
-        int totalLines = 14;
-        int innerHeight = titleHeight + (totalLines * lineGap) + topGap + 18;
+        ensureLogoLoaded();
+        int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        c.fillRect(innerX - 2, innerY - 2, innerWidth + 4, innerHeight + 4, oceanBorder.getRGB(), 1);
-        c.fillRect(innerX, innerY, innerWidth, innerHeight, oceanDeep.getRGB(), 1);
-        c.fillRect(innerX, innerY, innerWidth, titleHeight, oceanDark.getRGB(), 1);
+        int totalLines = 12;
+        int separatorCount = 3;
+        int separatorOverhead = separatorCount * 12;  // separator padding (per separator)
+        int bottomPadding = 1;                       // bottom padding
+        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + separatorOverhead + bottomPadding;
+        int innerHeight = Math.max(200, contentHeight);
 
-        String title = "Tidals Gold Superheater";
-        int titleX = innerX + (innerWidth / 2) - (c.getFontMetrics(FONT_TITLE).stringWidth(title) / 2);
-        int titleY = innerY + 26;
-        c.drawText(title, titleX, titleY, valueYellow, FONT_TITLE);
+        // outer border
+        c.fillRect(innerX - borderThickness, innerY - borderThickness,
+                innerWidth + (borderThickness * 2),
+                innerHeight + (borderThickness * 2),
+                borderColor.getRGB(), 1);
 
-        int sepY = innerY + titleHeight;
-        c.fillRect(innerX, sepY, innerWidth, 1, oceanBorder.getRGB(), 1);
+        // main background
+        c.fillRect(innerX, innerY, innerWidth, innerHeight, bgColor.getRGB(), 1);
+        c.drawRect(innerX, innerY, innerWidth, innerHeight, borderColor.getRGB());
 
-        int curY = innerY + titleHeight + topGap + lineGap;
+        int curY = innerY + topGap;
 
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Runtime", runtime, labelColor, labelColor);
+        // draw logo centered
+        if (logoImage != null) {
+            int logoX = innerX + (innerWidth - logoImage.width) / 2;
+            c.drawAtOn(logoImage, logoX, curY);
+            curY += logoImage.height + logoBottomGap;
+        }
+
+        // separator after logo
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, accentGold.getRGB(), 1);
+        curY += 16;  // post-logo separator padding
+
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Runtime", runtime, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
         int barsPerHour = (int) Math.round(barsCreated / hours);
         String barsText = intFmt.format(barsCreated) + " (" + intFmt.format(barsPerHour) + "/hr)";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Bars created", barsText, labelColor, valueGold);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Bars created", barsText, textMuted.getRGB(), accentGold.getRGB());
 
-        curY += lineGap / 2 + 4;
-        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, oceanBorder.getRGB(), 1);
-        curY += lineGap / 2 + 4;
+        // separator before magic section
+        curY += lineGap - 4;  // pre-separator padding
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
+        curY += 16;  // post-separator padding
 
-        curY += lineGap;
         String magicXpText = intFmt.format(magicXpGainedInt) + " (" + intFmt.format(magicXpPerHour) + "/hr)";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Magic XP", magicXpText, labelColor, valueGreen);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Magic XP", magicXpText, textMuted.getRGB(), valueGreen.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Magic Lvl", currentMagicLevelText, labelColor, labelColor);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Magic Lvl", currentMagicLevelText, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Magic TTL", magicTtlText, labelColor, labelColor);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Magic TTL", magicTtlText, textMuted.getRGB(), textLight.getRGB());
 
-        curY += lineGap / 2 + 4;
-        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, oceanBorder.getRGB(), 1);
-        curY += lineGap / 2 + 4;
+        // separator before smithing section
+        curY += lineGap - 4;  // pre-separator padding
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
+        curY += 16;  // post-separator padding
 
-        curY += lineGap;
         String smithingXpText = intFmt.format(smithingXpGainedInt) + " (" + intFmt.format(smithingXpPerHour) + "/hr)";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith XP", smithingXpText, labelColor, valueBlue);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith XP", smithingXpText, textMuted.getRGB(), valueBlue.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith Lvl", currentSmithingLevelText, labelColor, labelColor);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith Lvl", currentSmithingLevelText, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith TTL", smithingTtlText, labelColor, labelColor);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith TTL", smithingTtlText, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
         String gauntletsText = hasGoldsmithGauntlets ? "Yes (56.2 xp)" : "No (22.5 xp)";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Goldsmith", gauntletsText, labelColor, hasGoldsmithGauntlets ? valueGold : labelColor);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Goldsmith", gauntletsText, textMuted.getRGB(), hasGoldsmithGauntlets ? accentGold.getRGB() : textLight.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Task", String.valueOf(task), labelColor, labelColor);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Task", String.valueOf(task), textMuted.getRGB(), textLight.getRGB());
 
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, labelColor, labelColor);
+        // separator before version
+        curY += lineGap - 4;  // pre-separator padding
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
+        curY += 16;  // post-separator padding
+
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, textMuted.getRGB(), textMuted.getRGB());
 
         try { lastCanvasFrame.set(c.toImageCopy()); } catch (Exception ignored) {}
     }
 
-    private void drawStatLine(Canvas c, int x, int width, int padding, int yPos,
-                              String leftText, String rightText, int leftCol, int rightCol) {
-        c.drawText(leftText, x + padding, yPos, leftCol, FONT_LABEL);
-        int rightWidth = c.getFontMetrics(FONT_LABEL).stringWidth(rightText);
-        c.drawText(rightText, x + width - padding - rightWidth, yPos, rightCol, FONT_LABEL);
+    private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
+                              String label, String value, int labelColor, int valueColor) {
+        c.drawText(label, innerX + paddingX, y, labelColor, FONT_LABEL);
+        int valW = c.getFontMetrics(FONT_VALUE).stringWidth(value);
+        int valX = innerX + innerWidth - paddingX - valW;
+        c.drawText(value, valX, y, valueColor, FONT_VALUE);
+    }
+
+    private void ensureLogoLoaded() {
+        if (logoImage != null) return;
+
+        try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
+            if (in == null) {
+                log(getClass(), "logo '/logo.png' not found in resources");
+                return;
+            }
+
+            BufferedImage src = ImageIO.read(in);
+            if (src == null) {
+                log(getClass(), "failed to decode logo.png");
+                return;
+            }
+
+            BufferedImage argb = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = argb.createGraphics();
+            g.setComposite(AlphaComposite.Src);
+            g.drawImage(src, 0, 0, null);
+            g.dispose();
+
+            int w = argb.getWidth();
+            int h = argb.getHeight();
+            int[] px = new int[w * h];
+            argb.getRGB(0, 0, w, h, px, 0, w);
+
+            // premultiply alpha
+            for (int i = 0; i < px.length; i++) {
+                int p = px[i];
+                int a = (p >>> 24) & 0xFF;
+                if (a == 0) { px[i] = 0; continue; }
+                int r = (p >>> 16) & 0xFF;
+                int gch = (p >>> 8) & 0xFF;
+                int b = p & 0xFF;
+                r = (r * a + 127) / 255;
+                gch = (gch * a + 127) / 255;
+                b = (b * a + 127) / 255;
+                px[i] = (a << 24) | (r << 16) | (gch << 8) | b;
+            }
+
+            logoImage = new Image(px, w, h);
+            log(getClass(), "logo loaded: " + w + "x" + h);
+
+        } catch (Exception e) {
+            log(getClass(), "error loading logo: " + e.getMessage());
+        }
     }
 
     private void sendWebhookInternal() {

@@ -525,7 +525,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 int fungusGained = Math.min(FUNGUS_PER_LOG, slotsRemaining);
                 cachedInventoryCount += fungusGained;
                 collectedCount++;
-                itemsCollected += fungusGained;
                 script.log(getClass(), "picked log " + (i + 1) + "/" + logsToCollect + " (+" + fungusGained + ", inv: " + cachedInventoryCount + "/" + INVENTORY_SIZE + ")");
             } else {
                 script.log(getClass(), "failed to tap log at " + logPos.getX() + "," + logPos.getY());
@@ -681,11 +680,24 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         // wait for bank to load
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
+        // count fungus in inventory before depositing
+        ItemGroupResult invBeforeDeposit = script.getWidgetManager().getInventory().search(Set.of(MORT_MYRE_FUNGUS));
+        int fungusToBank = 0;
+        if (invBeforeDeposit != null && invBeforeDeposit.contains(MORT_MYRE_FUNGUS)) {
+            fungusToBank = invBeforeDeposit.getAmount(MORT_MYRE_FUNGUS);
+        }
+
         // deposit all except ardougne cloak
         Set<Integer> keepItems = toIntegerSet(ARDOUGNE_CLOAKS);
         script.getWidgetManager().getBank().depositAll(keepItems);
 
         script.pollFramesHuman(() -> false, script.random(300, 600));
+
+        // track banked items
+        if (fungusToBank > 0) {
+            itemsBanked += fungusToBank;
+            script.log(getClass(), "banked " + fungusToBank + " fungus (total: " + itemsBanked + ")");
+        }
 
         // sync cached inventory count after deposit
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());

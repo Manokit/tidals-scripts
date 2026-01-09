@@ -38,8 +38,8 @@ public class TidalsSecondaryCollector extends Script {
     public static boolean allowAFK = true;  // prevents afk/hop during bloom collection
 
     // stats
-    public static int itemsCollected = 0;
     public static int bloomCasts = 0;
+    public static int itemsBanked = 0;
     public static int bankTrips = 0;
     public static long startTime = System.currentTimeMillis();
 
@@ -190,25 +190,23 @@ public class TidalsSecondaryCollector extends Script {
         double hours = Math.max(1e-9, elapsed / 3_600_000.0);
         String runtime = formatRuntime(elapsed);
 
-        int itemsPerHour = (int) Math.round(itemsCollected / hours);
-
-        // colors - off-white theme to match logo background
-        final Color bgColor = new Color(238, 237, 233);       // #eeede9 - logo background
-        final Color borderColor = new Color(90, 75, 60);      // dark brown border
-        final Color accentColor = new Color(139, 90, 43);     // fungus brown accent
-        final Color textDark = new Color(45, 40, 35);         // dark text
-        final Color textMuted = new Color(100, 90, 80);       // muted text for labels
-        final Color valueHighlight = new Color(85, 60, 30);   // darker brown for values
+        // colors - dark brown theme to match fungus
+        final Color bgColor = new Color(47, 27, 16);          // #2f1b10 - dark brown background
+        final Color borderColor = new Color(78, 52, 36);      // lighter brown border
+        final Color accentColor = new Color(205, 170, 125);   // golden tan accent
+        final Color textLight = new Color(238, 237, 233);     // #eeede9 - off-white text
+        final Color textMuted = new Color(180, 165, 145);     // muted tan for labels
+        final Color valueHighlight = new Color(230, 190, 130); // warm gold for highlights
 
         // layout
         final int x = 5;
         final int baseY = 40;
         final int width = 220;
         final int borderThickness = 2;
-        final int paddingX = 10;
-        final int topGap = 6;
-        final int lineGap = 16;
-        final int logoBottomGap = 8;
+        final int paddingX = 10;                // side padding
+        final int topGap = 6;                   // top padding
+        final int lineGap = 16;                 // line padding
+        final int logoBottomGap = 8;            // logo bottom padding
 
         int innerX = x;
         int innerY = baseY;
@@ -217,8 +215,11 @@ public class TidalsSecondaryCollector extends Script {
         ensureLogoLoaded();
         int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        int totalLines = 8;
-        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 16;
+        int totalLines = 7;
+        int separatorCount = 1;
+        int separatorOverhead = separatorCount * 12;  // separator padding (per separator)
+        int bottomPadding = 20;                       // bottom padding
+        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + separatorOverhead + bottomPadding;
         int innerHeight = Math.max(200, contentHeight);
 
         // outer border
@@ -244,39 +245,36 @@ public class TidalsSecondaryCollector extends Script {
 
         // thin separator after logo
         c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, accentColor.getRGB(), 1);
-        curY += 16;
+        curY += 16;  // post-logo separator padding
 
         java.text.DecimalFormat fmt = new java.text.DecimalFormat("#,###");
 
         // stats
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Runtime", runtime, textMuted.getRGB(), textDark.getRGB());
-
-        curY += lineGap;
-        String itemsText = fmt.format(itemsCollected) + " (" + fmt.format(itemsPerHour) + "/hr)";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Collected", itemsText, textMuted.getRGB(), accentColor.getRGB());
+                "Runtime", runtime, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Bloom Casts", String.valueOf(bloomCasts), textMuted.getRGB(), textDark.getRGB());
+                "Bloom Casts", String.valueOf(bloomCasts), textMuted.getRGB(), textLight.getRGB());
+
+        curY += lineGap;
+        int bankedPerHour = (int) Math.round(itemsBanked / hours);
+        String bankedText = fmt.format(itemsBanked) + " (" + fmt.format(bankedPerHour) + "/hr)";
+        drawStatLine(c, innerX, innerWidth, paddingX, curY,
+                "Banked", bankedText, textMuted.getRGB(), valueHighlight.getRGB());
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Bank Trips", String.valueOf(bankTrips), textMuted.getRGB(), textDark.getRGB());
+                "Bank Trips", String.valueOf(bankTrips), textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "State", currentState.name(), textMuted.getRGB(), valueHighlight.getRGB());
-
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Status", statusMessage, textMuted.getRGB(), textDark.getRGB());
+                "Status", statusMessage, textMuted.getRGB(), textLight.getRGB());
 
         // separator before version
-        curY += lineGap - 4;
-        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, new Color(200, 195, 185).getRGB(), 1);
-        curY += 12;
+        curY += lineGap - 4;  // pre-separator padding
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
+        curY += 16;  // post-separator padding
 
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Version", SCRIPT_VERSION, textMuted.getRGB(), textMuted.getRGB());
