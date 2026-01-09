@@ -428,16 +428,14 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         if (!onExactTile) {
             script.log(getClass(), "not on 4-log tile (" + pos.getX() + ", " + pos.getY() + "), walking...");
+            // simple walk with no expensive breakCondition, just reach the tile
             WalkConfig config = new WalkConfig.Builder()
-                    .breakCondition(() -> {
-                        WorldPosition p = script.getWorldPosition();
-                        return p != null
-                            && p.getX() == FOUR_LOG_TILE.getX()
-                            && p.getY() == FOUR_LOG_TILE.getY();
-                    })
                     .breakDistance(0)
+                    .timeout(5000)
                     .build();
             script.getWalker().walkTo(FOUR_LOG_TILE, config);
+            // short wait after walking to let position settle
+            script.pollFramesHuman(() -> false, script.random(200, 400));
             return 600;
         }
 
@@ -908,10 +906,24 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                     RSObject a = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
                     return a != null && a.getWorldPosition().distanceTo(script.getWorldPosition()) <= 3;
                 })
-                .breakDistance(3)
+                .breakDistance(2)
+                .timeout(10000)
                 .build();
 
         script.getWalker().walkTo(KANDARIN_ALTAR, config);
+
+        // wait for position to settle after walking
+        script.pollFramesHuman(() -> false, script.random(400, 600));
+
+        // try to find and pray at altar after walking
+        altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
+        if (altar != null) {
+            script.log(getClass(), "found altar after walking, praying");
+            return prayAtAltar(altar);
+        }
+
+        // altar still not found - may need to look around
+        script.log(getClass(), "altar not visible, searching nearby");
         return 600;
     }
 
@@ -953,10 +965,23 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                     RSObject a = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
                     return a != null && a.getWorldPosition().distanceTo(script.getWorldPosition()) <= 3;
                 })
-                .breakDistance(3)
+                .breakDistance(2)
+                .timeout(15000)
                 .build();
 
         script.getWalker().walkTo(LUMBRIDGE_ALTAR, config);
+
+        // wait for position to settle after walking
+        script.pollFramesHuman(() -> false, script.random(400, 600));
+
+        // try to find and pray at altar after walking
+        altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
+        if (altar != null) {
+            script.log(getClass(), "found altar after walking, praying");
+            return prayAtAltar(altar);
+        }
+
+        script.log(getClass(), "lumbridge altar not visible, searching nearby");
         return 600;
     }
 
@@ -1035,25 +1060,20 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         script.log(getClass(), "walking to 4 log tile");
 
+        // use breakDistance only, avoid expensive breakCondition checks during walk
         WalkConfig config = new WalkConfig.Builder()
-                .breakCondition(() -> LOG_AREA.contains(script.getWorldPosition()))
                 .breakDistance(0)
+                .timeout(20000)
                 .build();
 
-        script.getWalker().walkTo(FOUR_LOG_TILE, config);
-
-        // wait until we arrive or timeout
-        boolean arrived = script.pollFramesUntil(() -> {
-            WorldPosition p = script.getWorldPosition();
-            return p != null && LOG_AREA.contains(p);
-        }, 15000);
+        boolean arrived = script.getWalker().walkTo(FOUR_LOG_TILE, config);
 
         if (arrived) {
             script.log(getClass(), "arrived at log area");
             return 0;
         }
 
-        script.log(getClass(), "still walking to log area");
+        script.log(getClass(), "walk incomplete, will retry");
         return 600;
     }
 

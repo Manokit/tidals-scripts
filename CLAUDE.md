@@ -96,7 +96,7 @@ Run `osmb list` to see all buildable scripts:
 - `docs/advanced-patterns.md` - Production patterns from Davy's scripts
 - `docs/advanced-techniques.md` - Ground items, agility, combat, health
 - `docs/specialized-patterns.md` - Altars, minigames, processing, smelting
-- `docs/Walker.md` - Getting to where you need to be
+- `docs/Walker.md` - Getting to where you need to be - **CRITICAL TO READ BEFORE WRITING ANY WALKING CODE, ESPECIALLY PITFALLS**
 
 **Examples:**
 - `examples/gem-cutting.md` - Gem cutting specifics

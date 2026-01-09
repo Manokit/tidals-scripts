@@ -654,6 +654,192 @@ WalkConfig escapeConfig = new WalkConfig.Builder()
 walker.walkTo(safeSpot, escapeConfig);
 ```
 
+## Common Pitfalls and Solutions
+
+### Pitfall 1: Walk-and-Return Loop (Not Interacting After Walking)
+
+**Problem:** Walking to an object, returning immediately, then the state machine calls walk again because the task isn't complete. This creates an infinite loop.
+
+```java
+// BAD - walks to altar but never prays, causing infinite loop
+private int walkToAltar() {
+    RSObject altar = script.getObjectManager().getClosestObject(pos, "Altar");
+    if (altar != null && altar.getWorldPosition().distanceTo(pos) <= 5) {
+        return prayAtAltar(altar);
+    }
+
+    script.getWalker().walkTo(ALTAR_POSITION, config);
+    return 600;  // BUG: returns without checking for altar after walking!
+}
+```
+
+**Solution:** After walking, always check for and interact with the target object.
+
+```java
+// GOOD - finds and interacts with altar after walking
+private int walkToAltar() {
+    RSObject altar = script.getObjectManager().getClosestObject(pos, "Altar");
+    if (altar != null && altar.getWorldPosition().distanceTo(pos) <= 5) {
+        return prayAtAltar(altar);
+    }
+
+    script.log(getClass(), "walking to altar");
+    WalkConfig config = new WalkConfig.Builder()
+            .breakDistance(2)
+            .timeout(10000)
+            .build();
+
+    script.getWalker().walkTo(ALTAR_POSITION, config);
+
+    // wait for position to settle after walking
+    script.pollFramesHuman(() -> false, script.random(400, 600));
+
+    // try to find and interact with altar after walking
+    altar = script.getObjectManager().getClosestObject(pos, "Altar");
+    if (altar != null) {
+        script.log(getClass(), "found altar after walking, praying");
+        return prayAtAltar(altar);
+    }
+
+    script.log(getClass(), "altar not visible, will retry");
+    return 600;
+}
+```
+
+---
+
+### Pitfall 2: Expensive breakCondition Lambdas
+
+**Problem:** breakCondition lambdas are called every frame during walking. Expensive operations cause lag spikes.
+
+```java
+// BAD - getWorldPosition() and getClosestObject() called every frame
+WalkConfig config = new WalkConfig.Builder()
+        .breakCondition(() -> {
+            RSObject altar = script.getObjectManager().getClosestObject(
+                script.getWorldPosition(), "Altar");  // expensive!
+            return altar != null &&
+                altar.getWorldPosition().distanceTo(script.getWorldPosition()) <= 3;
+        })
+        .build();
+```
+
+**Solution:** Use simple breakDistance when possible. Only use breakCondition for lightweight checks.
+
+```java
+// GOOD - use breakDistance instead of expensive breakCondition
+WalkConfig config = new WalkConfig.Builder()
+        .breakDistance(2)
+        .timeout(10000)
+        .build();
+
+script.getWalker().walkTo(ALTAR_POSITION, config);
+
+// check for object AFTER walking, not during
+RSObject altar = script.getObjectManager().getClosestObject(pos, "Altar");
+```
+
+---
+
+### Pitfall 3: Redundant Waiting After walkTo
+
+**Problem:** walkTo already waits until arrival or timeout. Adding pollFramesUntil after is redundant and slow.
+
+```java
+// BAD - redundant waiting, walkTo already handles this
+script.getWalker().walkTo(destination, config);
+
+// this is redundant! walkTo already waited
+boolean arrived = script.pollFramesUntil(() -> {
+    WorldPosition p = script.getWorldPosition();
+    return p != null && AREA.contains(p);
+}, 15000);
+```
+
+**Solution:** Use walkTo's return value to check arrival.
+
+```java
+// GOOD - use walkTo return value
+boolean arrived = script.getWalker().walkTo(destination, config);
+
+if (arrived) {
+    script.log(getClass(), "arrived at destination");
+    return 0;
+}
+
+script.log(getClass(), "walk incomplete, will retry");
+return 600;
+```
+
+---
+
+### Pitfall 4: No Timeout on WalkConfig
+
+**Problem:** Without a timeout, walks can hang indefinitely if pathing fails.
+
+```java
+// BAD - no timeout, can hang forever
+WalkConfig config = new WalkConfig.Builder()
+        .breakDistance(0)
+        .build();
+```
+
+**Solution:** Always set a reasonable timeout.
+
+```java
+// GOOD - timeout prevents infinite hangs
+WalkConfig config = new WalkConfig.Builder()
+        .breakDistance(0)
+        .timeout(20000)  // 20 second timeout
+        .build();
+```
+
+---
+
+### Complete Walk-to-Object Pattern
+
+This pattern handles all the pitfalls above:
+
+```java
+private int walkToAndInteract(WorldPosition targetPos, String objectName, String action) {
+    // check if already close enough to interact
+    RSObject target = script.getObjectManager().getClosestObject(
+        script.getWorldPosition(), objectName);
+
+    if (target != null && target.getWorldPosition().distanceTo(
+            script.getWorldPosition()) <= 5) {
+        return interactWith(target, action);
+    }
+
+    script.log(getClass(), "walking to " + objectName);
+
+    // simple config - no expensive breakConditions
+    WalkConfig config = new WalkConfig.Builder()
+            .breakDistance(2)
+            .timeout(15000)
+            .build();
+
+    script.getWalker().walkTo(targetPos, config);
+
+    // brief wait for position to settle
+    script.pollFramesHuman(() -> false, script.random(300, 500));
+
+    // find and interact after walking
+    target = script.getObjectManager().getClosestObject(
+        script.getWorldPosition(), objectName);
+
+    if (target != null) {
+        script.log(getClass(), "found " + objectName + " after walking");
+        return interactWith(target, action);
+    }
+
+    script.log(getClass(), objectName + " not found, will retry");
+    return 600;
+}
+```
+
+---
+
 ## Best Practices
 
 1. **Always set timeouts** - Prevents infinite walking if stuck
@@ -666,6 +852,8 @@ walker.walkTo(safeSpot, escapeConfig);
 8. **Monitor performance** - Keep callbacks lightweight
 9. **Test different configs** - Find what works best for your script
 10. **Cache configs** - Reuse configs instead of rebuilding every time
+11. **Interact after walking** - Don't just return 600 after walkTo
+12. **Avoid expensive breakConditions** - Use breakDistance when possible
 
 ## Related Classes
 
