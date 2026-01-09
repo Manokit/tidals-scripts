@@ -35,7 +35,7 @@ import java.util.Set;
         author = "Tidalus"
 )
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.1";
+    public static final String scriptVersion = "1.2";
 
     public static int screenWidth = 0;
     public static int screenHeight = 0;

@@ -39,7 +39,7 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class TidalsGoldSuperheater extends Script {
-    public static final String scriptVersion = "1.2";
+    public static final String scriptVersion = "1.3";
     private final String scriptName = "GoldSuperheater";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
