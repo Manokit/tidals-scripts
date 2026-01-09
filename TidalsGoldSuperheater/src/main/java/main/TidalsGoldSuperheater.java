@@ -39,7 +39,7 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class TidalsGoldSuperheater extends Script {
-    public static final String scriptVersion = "1.1";
+    public static final String scriptVersion = "1.2";
     private final String scriptName = "GoldSuperheater";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -82,6 +82,10 @@ public class TidalsGoldSuperheater extends Script {
     private final XPTracking xpTracking;
     private int magicXpGained = 0;
     private int smithingXpGained = 0;
+
+    public XPTracking getXpTracking() {
+        return xpTracking;
+    }
 
     public static final String[] BANK_NAMES = {"Bank", "Chest", "Bank booth", "Bank chest", "Grand Exchange booth", "Bank counter", "Bank table"};
     public static final String[] BANK_ACTIONS = {"bank", "open", "use"};
@@ -242,9 +246,21 @@ public class TidalsGoldSuperheater extends Script {
             }
         }
 
-        // smithing xp tracked manually
+        // smithing xp tracked manually, but use tracker for level/ttl calculations
         String smithingTtlText = "-";
         double smithingXpGainedLive = manualSmithingXp;
+
+        if (xpTracking != null) {
+            XPTracker smithingTracker = xpTracking.getSmithingTracker();
+            if (smithingTracker != null) {
+                smithingTtlText = smithingTracker.timeToNextLevelString();
+                currentSmithingLevel = smithingTracker.getLevel();
+
+                if (currentSmithingLevel >= 99) {
+                    smithingTtlText = "MAXED";
+                }
+            }
+        }
 
         int magicXpPerHour = (int) Math.round(magicXpGainedLive / hours);
         int magicXpGainedInt = (int) Math.round(magicXpGainedLive);
@@ -299,7 +315,7 @@ public class TidalsGoldSuperheater extends Script {
         int innerY = baseY;
         int innerWidth = width;
 
-        int totalLines = 13;
+        int totalLines = 14;
         int innerHeight = titleHeight + (totalLines * lineGap) + topGap + 18;
 
         c.fillRect(innerX - 2, innerY - 2, innerWidth + 4, innerHeight + 4, oceanBorder.getRGB(), 1);
@@ -347,6 +363,9 @@ public class TidalsGoldSuperheater extends Script {
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith Lvl", currentSmithingLevelText, labelColor, labelColor);
+
+        curY += lineGap;
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Smith TTL", smithingTtlText, labelColor, labelColor);
 
         curY += lineGap;
         String gauntletsText = hasGoldsmithGauntlets ? "Yes (56.2 xp)" : "No (22.5 xp)";

@@ -8,11 +8,12 @@ import com.osmb.api.ui.spellbook.SpellNotFoundException;
 import com.osmb.api.ui.spellbook.StandardSpellbook;
 import com.osmb.api.script.Script;
 
+import main.TidalsGoldSuperheater;
+import utils.Task;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
-import utils.Task;
 
 import static main.TidalsGoldSuperheater.*;
 
@@ -85,7 +86,13 @@ public class Process extends Task {
             script.getFinger().tap(bounds);
 
             barsCreated++;
-            manualSmithingXp += hasGoldsmithGauntlets ? SMITHING_XP_WITH_GAUNTLETS : SMITHING_XP_NO_GAUNTLETS;
+            double smithXp = hasGoldsmithGauntlets ? SMITHING_XP_WITH_GAUNTLETS : SMITHING_XP_NO_GAUNTLETS;
+            manualSmithingXp += smithXp;
+
+            // update custom smithing tracker for ttl calculation
+            if (script instanceof TidalsGoldSuperheater) {
+                ((TidalsGoldSuperheater) script).getXpTracking().addSmithingXp(smithXp);
+            }
 
             // handle level up
             DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();

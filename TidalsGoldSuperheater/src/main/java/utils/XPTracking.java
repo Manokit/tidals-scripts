@@ -10,6 +10,9 @@ public class XPTracking {
 
     private final ScriptCore core;
 
+    // custom smithing tracker - superheat doesn't show smithing xp drops
+    private XPTracker customSmithingTracker;
+
     public XPTracking(ScriptCore core) {
         this.core = core;
     }
@@ -48,8 +51,25 @@ public class XPTracking {
         return tracker.timeToNextLevelString();
     }
 
+    // initialize custom smithing tracker with starting level
+    // uses xp table lookup since we can't read exact xp from game
+    public void initSmithingTracker(int startingLevel) {
+        // create temp tracker to lookup xp for level, then create real tracker
+        XPTracker temp = new XPTracker(core, 0);
+        int startingXp = temp.getExperienceForLevel(startingLevel);
+        customSmithingTracker = new XPTracker(core, startingXp);
+    }
+
+    // increment smithing xp manually when superheating
+    public void addSmithingXp(double xp) {
+        if (customSmithingTracker != null) {
+            customSmithingTracker.incrementXp(xp);
+        }
+    }
+
     public XPTracker getSmithingTracker() {
-        return getTracker(SkillType.SMITHING);
+        // use custom tracker since superheat doesn't show smithing xp drops
+        return customSmithingTracker;
     }
 
     public double getSmithingXpGained() {

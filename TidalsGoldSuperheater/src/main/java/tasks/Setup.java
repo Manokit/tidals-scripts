@@ -8,6 +8,7 @@ import com.osmb.api.ui.component.tabs.skill.SkillsTabComponent;
 import com.osmb.api.ui.tabs.Tab;
 import com.osmb.api.script.Script;
 
+import main.TidalsGoldSuperheater;
 import utils.Task;
 
 import java.util.Set;
@@ -113,6 +114,12 @@ public class Setup extends Task {
         startSmithingLevel = smithing.getLevel();
         currentSmithingLevel = smithing.getLevel();
         script.log(getClass(), "smithing: " + currentSmithingLevel);
+
+        // initialize custom smithing tracker for ttl calculation
+        if (script instanceof TidalsGoldSuperheater) {
+            ((TidalsGoldSuperheater) script).getXpTracking().initSmithingTracker(currentSmithingLevel);
+            script.log(getClass(), "smithing tracker initialized");
+        }
         
         // check level req
         if (currentMagicLevel < 43) {
