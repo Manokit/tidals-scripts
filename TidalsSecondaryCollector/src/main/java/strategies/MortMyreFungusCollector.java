@@ -52,10 +52,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final int CRAFTING_CAPE_T = 9781;
     private static final int[] CRAFTING_CAPES = {CRAFTING_CAPE, CRAFTING_CAPE_T};
 
-    private static final int[] DUELING_RINGS = {
-            2566, 2564, 2562, 2560, 2558, 2556, 2554, 2552
-    };
-
     // prayer restoration
     private static final int ARDOUGNE_CLOAK_1 = 13121;
     private static final int ARDOUGNE_CLOAK_2 = 13122;
@@ -95,6 +91,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         new WorldPosition(3668, 3255, 0)
     };
     private static final WorldPosition CRAFTING_GUILD_BANK_CHEST = new WorldPosition(2936, 3280, 0);
+    private static final WorldPosition VER_SINHAZA_BANK_TILE = new WorldPosition(3651, 3211, 0);
     private static final WorldPosition KANDARIN_ALTAR = new WorldPosition(2605, 3211, 0);
     private static final WorldPosition LUMBRIDGE_ALTAR = new WorldPosition(3241, 3208, 0);
 
@@ -102,11 +99,20 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final int REGION_MORT_MYRE_1 = 14642;
     private static final int REGION_MORT_MYRE_2 = 14643;
 
+    // prayer restoration areas
+    private static final RectangleArea MONASTERY_AREA = new RectangleArea(2601, 3207, 10, 14, 0);
+
     // track which bloom tool we found during setup
     private int equippedBloomToolId = 0;
-    
+
     // track detected prayer method: "ardy_inventory", "ardy_equipped", or "lumbridge"
     private String detectedPrayerMethod = "lumbridge";
+
+    // cached inventory count for efficient collection (avoids tab switching)
+    // each log pickup gives exactly 2 fungus, so we can track without checking inventory
+    private int cachedInventoryCount = -1;  // -1 = not initialized, sync on first bank/trip
+    private static final int FUNGUS_PER_LOG = 2;
+    private static final int INVENTORY_SIZE = 28;
 
     public MortMyreFungusCollector(Script script) {
         this.script = script;
@@ -121,11 +127,21 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return State.RESTORING_PRAYER;
         }
 
-        // priority 2: check if inventory full
-        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-        if (inv != null && inv.isFull()) {
-            script.log(getClass(), "inventory full, need to bank");
-            return State.BANKING;
+        // priority 2: check if inventory full (use cached count if available)
+        // only bank when truly full (0 slots) - we can still pick with 1 slot to not waste it
+        if (cachedInventoryCount >= 0) {
+            int availableSlots = INVENTORY_SIZE - cachedInventoryCount;
+            if (availableSlots <= 0) {
+                script.log(getClass(), "inventory full (cached: " + cachedInventoryCount + "), need to bank");
+                return State.BANKING;
+            }
+        } else {
+            // fallback to actual check if cache not initialized
+            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+            if (inv != null && inv.isFull()) {
+                script.log(getClass(), "inventory full, need to bank");
+                return State.BANKING;
+            }
         }
 
         // priority 3: check if at collection area
@@ -180,34 +196,22 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         }
         script.log(getClass(), "drakan's medallion: found");
 
-        // 3. check banking method (at least one required)
-        boolean hasBankingMethod = false;
-        String bankingMethodUsed = "";
+        // 3. determine banking method (ver sinhaza via drakan's medallion is always available)
+        String bankingMethodUsed = "ver sinhaza (drakan's medallion)";
 
-        UIResult<ItemSearchResult> craftingCape = script.getWidgetManager().getEquipment().findItem(CRAFTING_CAPES);
-        if (craftingCape.isFound()) {
-            hasBankingMethod = true;
-            bankingMethodUsed = "crafting cape";
-        }
-
-        if (!hasBankingMethod) {
-            UIResult<ItemSearchResult> duelingRing = script.getWidgetManager().getEquipment().findItem(DUELING_RINGS);
-            if (duelingRing.isFound()) {
-                hasBankingMethod = true;
-                bankingMethodUsed = "ring of dueling";
+        // check for crafting cape (best option)
+        try {
+            for (int capeId : CRAFTING_CAPES) {
+                UIResult<ItemSearchResult> cape = script.getWidgetManager().getEquipment().findItem(capeId);
+                if (cape != null && cape.isFound()) {
+                    bankingMethodUsed = "crafting cape";
+                    break;
+                }
             }
+        } catch (Exception e) {
+            script.log(getClass(), "error checking crafting cape: " + e.getMessage());
         }
 
-        if (!hasBankingMethod && hasVarrockMediumDiary) {
-            hasBankingMethod = true;
-            bankingMethodUsed = "varrock teleport (ge)";
-        }
-
-        if (!hasBankingMethod) {
-            script.log(getClass(), "ERROR: no banking method available");
-            script.log(getClass(), "need: crafting cape, ring of dueling, or varrock medium diary");
-            return false;
-        }
         script.log(getClass(), "banking method: " + bankingMethodUsed);
 
         // 4. check prayer restoration method
@@ -306,7 +310,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             for (int cloakId : ARDOUGNE_CLOAKS) {
                 UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(cloakId);
                 if (ardyCloak.isFound()) {
-                    boolean success = RetryUtils.equipmentInteract(script,cloakId, "Monastery Teleport", "pre-trip ardy cloak (equipped)");
+                    boolean success = RetryUtils.equipmentInteract(script,cloakId, "Kandarin Monastery", "pre-trip ardy cloak (equipped)");
                     if (success) {
                         script.pollFramesHuman(() -> false, script.random(2000, 3000));
                         walkToAltarAndPray();
@@ -383,7 +387,16 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
     @Override
     public int collect() {
-        // check prayer before every bloom
+        // initialize cached inventory count if not set (first trip without banking)
+        if (cachedInventoryCount < 0) {
+            script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+            script.pollFramesUntil(() -> false, script.random(150, 250));
+            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+            cachedInventoryCount = (inv != null) ? (INVENTORY_SIZE - inv.getFreeSlots()) : 0;
+            script.log(getClass(), "initialized cached inventory count: " + cachedInventoryCount);
+        }
+
+        // check prayer before every bloom (uses minimap orbs, no tab switch needed)
         Integer prayer = script.getWidgetManager().getMinimapOrbs().getPrayerPoints();
         if (prayer == null) {
             script.log(getClass(), "can't read prayer, retrying");
@@ -395,10 +408,11 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 0;
         }
 
-        // check inventory
-        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-        if (inv != null && inv.isFull()) {
-            script.log(getClass(), "inventory full, switching to bank");
+        // check inventory using cached count (no tab switch needed)
+        // only switch to bank when truly full - we can pick with 1 slot to not waste it
+        int availableSlots = INVENTORY_SIZE - cachedInventoryCount;
+        if (availableSlots <= 0) {
+            script.log(getClass(), "inventory full (cached: " + cachedInventoryCount + "), switching to bank");
             return 0;
         }
 
@@ -409,7 +423,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 600;
         }
 
-        boolean onExactTile = pos.getX() == FOUR_LOG_TILE.getX() 
+        boolean onExactTile = pos.getX() == FOUR_LOG_TILE.getX()
                 && pos.getY() == FOUR_LOG_TILE.getY();
 
         if (!onExactTile) {
@@ -417,8 +431,8 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             WalkConfig config = new WalkConfig.Builder()
                     .breakCondition(() -> {
                         WorldPosition p = script.getWorldPosition();
-                        return p != null 
-                            && p.getX() == FOUR_LOG_TILE.getX() 
+                        return p != null
+                            && p.getX() == FOUR_LOG_TILE.getX()
                             && p.getY() == FOUR_LOG_TILE.getY();
                     })
                     .breakDistance(0)
@@ -427,7 +441,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 600;
         }
 
-        // open equipment tab
+        // ensure equipment tab is open (stay here for bloom + collection)
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
         script.pollFramesUntil(() -> false, script.random(150, 250));
 
@@ -440,7 +454,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         // disable afk/hop for entire bloom + collection cycle
         allowAFK = false;
-        boolean bloomSuccess = RetryUtils.equipmentInteract(script,equippedBloomToolId, "Bloom", "casting bloom (prayer: " + prayer + ")");
+        boolean bloomSuccess = RetryUtils.equipmentInteract(script, equippedBloomToolId, "Bloom", "casting bloom (prayer: " + prayer + ")");
 
         if (!bloomSuccess) {
             allowAFK = true;
@@ -452,105 +466,80 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         // wait for bloom animation (~3 ticks = 1800ms), ignoreTasks to prevent random tab opens
         script.pollFramesUntil(() -> false, script.random(1800, 2000), true);
 
-        // switch to inventory for pickup
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesUntil(() -> false, script.random(100, 200), true);
-
-        // collect fungus
+        // collect fungus (stays on equipment tab - no inventory checking needed)
         return collectGroundFungus();
     }
 
     private int collectGroundFungus() {
-        // step 1: detect which log positions have fungus and cache them
+        // detect which log positions have fungus
         List<WorldPosition> fungusPositions = detectFungusPositions();
-        
+
         if (fungusPositions.isEmpty()) {
             allowAFK = true;
             script.log(getClass(), "no fungus detected, re-enabling afk/hop");
             return script.random(300, 500);
         }
-        
-        script.log(getClass(), "detected fungus on " + fungusPositions.size() + " log(s), ignoring breaks/hops/afk until done");
-        
+
+        // calculate how many logs we can pick based on available slots
+        // use ceiling division - if we have 1 slot left, still pick to fill it
+        int availableSlots = INVENTORY_SIZE - cachedInventoryCount;
+        int maxPickups = (availableSlots + FUNGUS_PER_LOG - 1) / FUNGUS_PER_LOG;  // ceiling division
+        int logsToCollect = Math.min(fungusPositions.size(), maxPickups);
+
+        script.log(getClass(), "detected " + fungusPositions.size() + " log(s), can pick " + logsToCollect + " (slots: " + availableSlots + ")");
+
         int collectedCount = 0;
-        
-        // step 2: tap each cached position quickly using animation detection
-        // ignoreTasks = true to prevent breaks/hops/afk during collection
-        for (WorldPosition logPos : fungusPositions) {
-            // check inventory before each pickup
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-            if (inv != null && inv.isFull()) {
-                script.log(getClass(), "inventory full during collection");
-                break;
-            }
-            
-            // check prayer
+
+        // tap each log position quickly - no inventory verification needed
+        // each pickup gives exactly 2 fungus, so we just update cached count
+        for (int i = 0; i < logsToCollect; i++) {
+            WorldPosition logPos = fungusPositions.get(i);
+
+            // check prayer via minimap orbs (no tab switch)
             Integer prayer = script.getWidgetManager().getMinimapOrbs().getPrayerPoints();
             if (prayer != null && prayer < 6) {
                 script.log(getClass(), "low prayer during collection, stopping");
                 break;
             }
-            
+
             // get tile polygon for this log position
             Polygon tilePoly = script.getSceneProjector().getTileCube(logPos, 50);
             if (tilePoly == null) {
                 script.log(getClass(), "can't get tile poly for " + logPos.getX() + "," + logPos.getY());
                 continue;
             }
-            
-            // cache fungus count before attempting to pick
-            ItemGroupResult invBefore = script.getWidgetManager().getInventory().search(Set.of(MORT_MYRE_FUNGUS));
-            int countBefore = (invBefore != null) ? invBefore.getAmount(MORT_MYRE_FUNGUS) : 0;
 
-            // attempt to pick with retries
-            int maxAttempts = 3;
-            boolean picked = false;
-
-            for (int attempt = 1; attempt <= maxAttempts && !picked; attempt++) {
-                script.log(getClass(), "attempt " + attempt + " - picking fungus at " + logPos.getX() + "," + logPos.getY());
-
-                // tap the tile with Pick action
-                boolean tapped = script.getFinger().tap(tilePoly, "Pick");
-
+            // tap the tile with Pick action (retry up to 3 times)
+            boolean tapped = false;
+            for (int attempt = 1; attempt <= 3 && !tapped; attempt++) {
+                tapped = script.getFinger().tap(tilePoly, "Pick");
                 if (!tapped) {
-                    script.log(getClass(), "tap failed, retrying...");
-                    script.pollFramesUntil(() -> false, script.random(300, 500), true);
-                    continue;
-                }
-
-                // wait for item to appear in inventory (pick animation ~1 tick)
-                script.pollFramesUntil(() -> false, script.random(800, 1000), true);
-
-                // check if fungus count increased
-                ItemGroupResult invAfter = script.getWidgetManager().getInventory().search(Set.of(MORT_MYRE_FUNGUS));
-                int countAfter = (invAfter != null) ? invAfter.getAmount(MORT_MYRE_FUNGUS) : 0;
-
-                if (countAfter > countBefore) {
-                    picked = true;
-                    collectedCount++;
-                    itemsCollected++;
-                    script.log(getClass(), "picked fungus (count: " + countAfter + ")");
-                } else {
-                    script.log(getClass(), "count unchanged (" + countBefore + " -> " + countAfter + "), retrying...");
+                    script.pollFramesUntil(() -> false, script.random(200, 300), true);
                 }
             }
 
-            if (!picked) {
-                script.log(getClass(), "failed to pick fungus after " + maxAttempts + " attempts, moving on");
+            if (tapped) {
+                // wait for pick animation (~1 tick = 600ms)
+                script.pollFramesUntil(() -> false, script.random(600, 800), true);
+
+                // update cached count - get min of 2 and remaining slots (handles partial fill)
+                int slotsRemaining = INVENTORY_SIZE - cachedInventoryCount;
+                int fungusGained = Math.min(FUNGUS_PER_LOG, slotsRemaining);
+                cachedInventoryCount += fungusGained;
+                collectedCount++;
+                itemsCollected += fungusGained;
+                script.log(getClass(), "picked log " + (i + 1) + "/" + logsToCollect + " (+" + fungusGained + ", inv: " + cachedInventoryCount + "/" + INVENTORY_SIZE + ")");
+            } else {
+                script.log(getClass(), "failed to tap log at " + logPos.getX() + "," + logPos.getY());
             }
         }
-        
-        if (collectedCount == 0) {
-            script.log(getClass(), "no fungus picked up");
-        } else {
-            script.log(getClass(), "collected " + collectedCount + " fungus");
-        }
-        
+
+        script.log(getClass(), "picked " + collectedCount + " log(s), inventory now " + cachedInventoryCount + "/" + INVENTORY_SIZE);
+
         // re-enable afk/hop after collection complete
         allowAFK = true;
-        script.log(getClass(), "collection cycle complete, re-enabling afk/hop");
 
-        // occasional human delay after collection cycle for anti-ban
+        // occasional human delay after collection cycle
         if (script.random(0, 3) == 0) {
             script.pollFramesHuman(() -> false, script.random(200, 400));
         }
@@ -700,10 +689,13 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         script.pollFramesHuman(() -> false, script.random(300, 600));
 
-        // verify deposit
-        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(MORT_MYRE_FUNGUS));
-        if (inv != null && inv.contains(MORT_MYRE_FUNGUS)) {
-            script.log(getClass(), "warning: fungus still in inventory after deposit");
+        // sync cached inventory count after deposit
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+        if (inv != null) {
+            cachedInventoryCount = INVENTORY_SIZE - inv.getFreeSlots();
+            script.log(getClass(), "synced cached inventory count: " + cachedInventoryCount);
+        } else {
+            cachedInventoryCount = 0;
         }
 
         // close bank
@@ -720,25 +712,19 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.log(getClass(), "teleporting to bank");
 
         // priority 1: crafting cape
-        UIResult<ItemSearchResult> craftingCape = script.getWidgetManager().getEquipment().findItem(CRAFTING_CAPES);
-        if (craftingCape.isFound()) {
-            return useCraftingCapeTeleport();
+        try {
+            for (int capeId : CRAFTING_CAPES) {
+                UIResult<ItemSearchResult> cape = script.getWidgetManager().getEquipment().findItem(capeId);
+                if (cape != null && cape.isFound()) {
+                    return useCraftingCapeTeleport();
+                }
+            }
+        } catch (Exception e) {
+            script.log(getClass(), "error checking crafting cape: " + e.getMessage());
         }
 
-        // priority 2: ring of dueling
-        UIResult<ItemSearchResult> duelingRing = script.getWidgetManager().getEquipment().findItem(DUELING_RINGS);
-        if (duelingRing.isFound()) {
-            return useDuelingRingTeleport();
-        }
-
-        // priority 3: varrock teleport to ge
-        if (hasVarrockMediumDiary) {
-            return useVarrockTeleport();
-        }
-
-        script.log(getClass(), "ERROR: no banking teleport available");
-        script.stop();
-        return 0;
+        // priority 2: ver sinhaza bank (drakan's medallion - always available)
+        return useVerSinhazaBanking();
     }
 
     private int useCraftingCapeTeleport() {
@@ -803,101 +789,45 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         return handleBankInterface();
     }
 
-    private int useDuelingRingTeleport() {
-        script.log(getClass(), "using ring of dueling teleport");
+    private int useVerSinhazaBanking() {
+        script.log(getClass(), "using ver sinhaza bank (drakan's medallion)");
 
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
         script.pollFramesHuman(() -> false, script.random(200, 400));
 
-        // find which ring we have
-        int ringId = 0;
-        for (int id : DUELING_RINGS) {
-            if (script.getWidgetManager().getEquipment().findItem(id).isFound()) {
-                ringId = id;
-                break;
-            }
-        }
-
-        if (ringId == 0) {
-            script.log(getClass(), "ring of dueling not found");
-            return 600;
-        }
-
-        boolean success = RetryUtils.equipmentInteract(script,ringId, "Castle Wars", "ring of dueling teleport");
+        // teleport to ver sinhaza
+        boolean success = RetryUtils.equipmentInteract(script, DRAKANS_MEDALLION, "Ver Sinhaza", "drakan's medallion teleport");
         if (!success) {
             return 600;
         }
 
         script.pollFramesHuman(() -> false, script.random(2000, 3000));
 
-        // bank should be nearby at castle wars
-        RSObject bankChest = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank chest");
-        if (bankChest != null) {
-            return openBank(bankChest);
-        }
+        // walk to bank area
+        script.log(getClass(), "walking to ver sinhaza bank");
+        WalkConfig config = new WalkConfig.Builder()
+                .breakCondition(() -> {
+                    RSObject bank = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank booth");
+                    return bank != null && bank.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+                })
+                .breakDistance(3)
+                .build();
 
-        script.log(getClass(), "looking for ferox bank chest");
-        return 600;
-    }
+        script.getWalker().walkTo(VER_SINHAZA_BANK_TILE, config);
 
-    private int useVarrockTeleport() {
-        script.log(getClass(), "using varrock teleport to ge");
+        // wait for arrival
+        script.pollFramesUntil(() -> {
+            RSObject bank = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank booth");
+            return bank != null && bank.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+        }, 15000);
 
-        try {
-            boolean success = script.getWidgetManager().getSpellbook().selectSpell(
-                    StandardSpellbook.VARROCK_TELEPORT,
-                    null
-            );
-
-            if (!success) {
-                script.log(getClass(), "failed to cast varrock teleport");
-                return 600;
-            }
-
-            // wait for menu
-            boolean menuAppeared = script.pollFramesUntil(() -> {
-                DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
-                return type == DialogueType.TEXT_OPTION;
-            }, script.random(3000, 5000));
-
-            if (!menuAppeared) {
-                script.log(getClass(), "varrock teleport menu didn't appear");
-                return 600;
-            }
-
-            // select grand exchange
-            boolean selected = script.getWidgetManager().getDialogue().selectOption("Grand Exchange");
-            if (!selected) {
-                script.log(getClass(), "failed to select grand exchange option");
-                return 600;
-            }
-
-            script.pollFramesHuman(() -> false, script.random(2000, 3000));
-            return walkToGEBank();
-
-        } catch (Exception e) {
-            script.log(getClass(), "error casting varrock teleport: " + e.getMessage());
-            return 600;
-        }
-    }
-
-    private int walkToGEBank() {
-        RSObject bankBooth = script.getObjectManager().getClosestObject(
-                script.getWorldPosition(),
-                "Bank booth", "Grand Exchange booth"
-        );
-
-        if (bankBooth != null && bankBooth.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5) {
+        // find and open bank
+        RSObject bankBooth = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank booth");
+        if (bankBooth != null) {
             return openBank(bankBooth);
         }
 
-        script.log(getClass(), "walking to ge bank");
-        if (bankBooth != null) {
-            WalkConfig config = new WalkConfig.Builder()
-                    .breakDistance(3)
-                    .build();
-            script.getWalker().walkTo(bankBooth.getWorldPosition(), config);
-        }
+        script.log(getClass(), "ver sinhaza bank booth not found");
         return 600;
     }
 
@@ -907,6 +837,13 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         RSObject altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
         if (altar != null && altar.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5) {
             return prayAtAltar(altar);
+        }
+
+        // check if already at monastery area - skip teleport and just walk
+        WorldPosition pos = script.getWorldPosition();
+        if (pos != null && MONASTERY_AREA.contains(pos)) {
+            script.log(getClass(), "already at monastery area, walking to altar");
+            return walkToKandarinAltar();
         }
 
         // priority 1: ardougne cloak (free teleport)
@@ -946,7 +883,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         for (int cloakId : ARDOUGNE_CLOAKS) {
             UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(cloakId);
             if (ardyCloak.isFound()) {
-                boolean success = RetryUtils.equipmentInteract(script,cloakId, "Monastery Teleport", "ardougne cloak (equipped)");
+                boolean success = RetryUtils.equipmentInteract(script,cloakId, "Kandarin Monastery", "ardougne cloak (equipped)");
                 if (success) {
                     script.pollFramesHuman(() -> false, script.random(2000, 3000));
                     return true;

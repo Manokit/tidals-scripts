@@ -49,6 +49,39 @@ cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities
 
 ---
 
+## 🔨 Building Scripts
+
+Use the `osmb build` command to build scripts. This command handles Java environment setup and deployment automatically.
+
+### Build Commands
+```bash
+# build a specific script by name (recommended for Claude Code)
+osmb build TidalsGemCutter
+osmb build TidalsSecondaryCollector
+
+# build all scripts at once
+osmb build all
+
+# interactive menu (for manual use)
+osmb build
+```
+
+### Available Scripts
+Run `osmb list` to see all buildable scripts:
+- TidalsCannonballThiever
+- TidalsGemCutter
+- TidalsGoldSuperheater
+- TidalsSecondaryCollector
+
+**When to build:**
+- After making changes to a script's source code
+- After updating TidalsUtilities.jar (rebuild dependent scripts)
+- Before testing changes in the OSMB client
+
+**Build output location:** `<script-dir>/jar/<ScriptName>.jar`
+
+---
+
 ## 📚 Documentation Index
 
 **Core References:**
