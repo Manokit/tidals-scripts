@@ -2,11 +2,14 @@
 
 > **CRITICAL: OSMB is a COLOR BOT** - It uses visual/pixel detection, NOT injection. You cannot access game memory directly. All detection is done through screen analysis, color matching, and OCR.
 
+**CRITICAL: NEVER ASSUSME A METHOD EXISTS. ALWAYS REFER TO ONE OF THE CORE REFERENCES, OR ANYTHING IN THE DOCS DIR, EXAMPLES DIR, OR OTHER TIDALS SCRIPTS FOR DIRECTION AND CLARIFICATION**
+
 ## 📚 Documentation Index
 
 **Core References:**
 - `docs/api-reference.md` - Complete API methods and imports
 - `docs/critical-concepts.md` - Color bot fundamentals (MUST READ)
+- `docs/Common-menu-entries.md` - Exact menu action strings for .interact() calls
 - `docs/banking-patterns.md` - Banking, inventory, deposits
 - `docs/walking-npcs.md` - Walking, NPC interaction, objects
 - `docs/ui-widgets.md` - Dialogue, equipment, minimap, overlays
@@ -104,13 +107,26 @@ if (response != null && response.getAction().equalsIgnoreCase("Open")) {
 ```
 → **See `docs/critical-concepts.md` for details**
 
-### 5. Verify Interactions with tapGetResponse
+### 5. Use Direct tap() for Interactions - Avoid Double-Tap Bug
 ```java
-MenuEntry response = getFinger().tapGetResponse(true, objectPoly);
-if (response != null && response.getAction().equalsIgnoreCase("Mine")) {
-    log("Successfully clicked mine action");
+// WRONG - causes double interaction (tap then menu open)
+MenuEntry response = getFinger().tapGetResponse(true, bounds);
+if (response != null && response.getAction().contains("Pick")) {
+    getFinger().tap(bounds, response.getAction()); // BUG: taps again!
+}
+
+// CORRECT - when you know the action, just tap directly
+getFinger().tap(bounds, "Pick");  // opens menu and selects in one step
+
+// CORRECT - when you need to verify first, don't tap after
+MenuEntry response = getFinger().tapGetResponse(true, bounds);
+if (response != null && response.getAction().contains("Pick")) {
+    // menu is already open from tapGetResponse, action was selected
+    log("Picked item");
 }
 ```
+**Rule: When speed isn't critical, prefer direct `tap(shape, "Action")` - it's safer and cleaner.**
+
 → **See `docs/walking-npcs.md` for interaction patterns**
 
 ### 6. State Machine Pattern

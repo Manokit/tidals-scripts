@@ -170,6 +170,29 @@ if (visibility >= 0.5) {
 
 ---
 
+### 11. Double-Tap Bug with tapGetResponse
+```java
+// WRONG - Causes double interaction (opens menu, then taps again)
+MenuEntry response = getFinger().tapGetResponse(true, bounds);
+if (response != null && response.getAction().contains("Pick")) {
+    getFinger().tap(bounds, response.getAction()); // BUG: taps again after menu already open!
+}
+
+// CORRECT - When you know the action, just tap directly (opens menu + selects in one step)
+getFinger().tap(bounds, "Pick");
+
+// CORRECT - When you need to verify what's there first, don't tap after
+MenuEntry response = getFinger().tapGetResponse(true, bounds);
+if (response != null && response.getAction().contains("Pick")) {
+    // menu is already open, action was checked - don't tap again
+    log("Found pickable item");
+}
+```
+
+**Rule**: When speed isn't critical, prefer direct `tap(shape, "Action")`. It's safer, cleaner, and avoids the double-tap bug. Only use `tapGetResponse` when you genuinely need to check what action is available before deciding what to do.
+
+---
+
 ## Debug Logging Best Practices
 
 ### Comprehensive Debug Pattern

@@ -443,6 +443,154 @@ private boolean openBankSafely() {
 
 ---
 
+## Inventory Count Verification Pattern
+
+More reliable than animation detection for verifying actions succeeded.
+
+```java
+private static final int TARGET_ITEM_ID = 2970; // e.g., Mort Myre Fungus
+
+private boolean pickItemWithVerification(Polygon tilePoly) {
+    // cache count before action
+    ItemGroupResult invBefore = script.getWidgetManager().getInventory()
+        .search(Set.of(TARGET_ITEM_ID));
+    int countBefore = (invBefore != null) ? invBefore.getAmount(TARGET_ITEM_ID) : 0;
+
+    // attempt with retries
+    int maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        script.log(getClass(), "attempt " + attempt);
+
+        boolean tapped = script.getFinger().tap(tilePoly, "Pick");
+        if (!tapped) {
+            script.pollFramesUntil(() -> false, script.random(300, 500), true);
+            continue;
+        }
+
+        // wait for item to appear in inventory
+        script.pollFramesUntil(() -> false, script.random(800, 1000), true);
+
+        // verify count increased
+        ItemGroupResult invAfter = script.getWidgetManager().getInventory()
+            .search(Set.of(TARGET_ITEM_ID));
+        int countAfter = (invAfter != null) ? invAfter.getAmount(TARGET_ITEM_ID) : 0;
+
+        if (countAfter > countBefore) {
+            script.log(getClass(), "picked successfully (count: " + countAfter + ")");
+            return true;
+        }
+        script.log(getClass(), "count unchanged, retrying...");
+    }
+    return false;
+}
+```
+
+**Benefits**:
+- More reliable than animation detection
+- Works even if animation is subtle or missed
+- Provides exact count feedback for logging
+- Fast feedback loop for retries
+
+---
+
+## Direct Object Interaction from Distance
+
+Tap objects using known tile positions - game auto-paths the player.
+
+```java
+// hardcode the exact tile position of the object
+private static final WorldPosition BANK_CHEST_TILE = new WorldPosition(2936, 3280, 0);
+
+private boolean useBankFromDistance() {
+    // try tile position first (more reliable)
+    Polygon chestPoly = script.getSceneProjector().getTileCube(BANK_CHEST_TILE, 60);
+
+    // fallback to object manager if tile not visible
+    if (chestPoly == null) {
+        script.log(getClass(), "tile not visible, trying object manager");
+        RSObject bankChest = script.getObjectManager()
+            .getClosestObject(script.getWorldPosition(), "Bank chest");
+        if (bankChest != null) {
+            chestPoly = bankChest.getConvexHull();
+        }
+    }
+
+    if (chestPoly == null) {
+        script.log(getClass(), "bank chest not visible");
+        return false;
+    }
+
+    // tap and let game auto-path
+    script.getFinger().tap(chestPoly, "Use");
+
+    // wait for bank to open (generous timeout for walking)
+    return script.pollFramesUntil(() ->
+        script.getWidgetManager().getBank().isVisible(),
+        10000
+    );
+}
+```
+
+**Benefits**:
+- No janky custom walking logic needed
+- Game handles pathfinding correctly
+- Works even when object is off-screen (if tile is known)
+- Cleaner than walk → interact patterns
+
+**Use Cases**:
+- Banking after teleports
+- Interacting with altars
+- Any fixed-position object you tap repeatedly
+
+---
+
+## Full Cycle AFK Prevention
+
+For multi-step operations that must complete without interruption.
+
+```java
+// in main script class
+public static boolean allowAFK = true;
+
+@Override
+public boolean canAFK() {
+    return allowAFK;
+}
+
+// in strategy/task class
+public int collect() {
+    // disable before starting cycle
+    allowAFK = false;
+    script.log(getClass(), "starting collection, afk/hop disabled");
+
+    try {
+        // cast bloom
+        boolean bloomSuccess = castBloom();
+        if (!bloomSuccess) {
+            return 600;
+        }
+
+        // collect all items (may take multiple pickups)
+        collectAllItems();
+
+    } finally {
+        // ALWAYS re-enable even on errors/early exits
+        allowAFK = true;
+        script.log(getClass(), "collection complete, afk/hop re-enabled");
+    }
+
+    return script.random(50, 150);
+}
+```
+
+**Key Points**:
+- Set `allowAFK = false` before multi-step operation starts
+- Set `allowAFK = true` at ALL exit points (including errors)
+- Use try/finally for guaranteed cleanup
+- Combine with `ignoreTasks = true` in pollFramesUntil for extra safety
+
+---
+
 ## Best Practices from Production Scripts
 
 1. **Use Task pattern** for complex scripts (3+ states)
@@ -455,6 +603,9 @@ private boolean openBankSafely() {
 8. **Filter objects** by multiple criteria, not just name
 9. **Verify polygon safety** before tapping
 10. **Add idle detection** to walking sequences
+11. **Use inventory count verification** instead of animation detection
+12. **Tap distant objects directly** - let game auto-path
+13. **Always re-enable AFK** at all exit points (use try/finally)
 
 ---
 
