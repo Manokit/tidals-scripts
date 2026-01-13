@@ -48,7 +48,7 @@ public class MonitorThieving extends Task {
         }
     }
     
-    // switch after 4 xp drops or guard detection
+    // switch after 4 xp drops or guard detection - whichever comes first
     private boolean monitorCannonballStall() {
         boolean shouldSwitch = script.pollFramesUntil(() -> {
             if (isInventoryFull()) {
@@ -56,22 +56,27 @@ public class MonitorThieving extends Task {
                 currentlyThieving = false;
                 return true;
             }
-            
+
+            // always track XP drops
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkCbXpDrop(currentXp);
-            
+
+            // check XP-based switch (4 thieves done)
             if (guardTracker.shouldSwitchToOreByXp()) {
                 return true;
             }
-            
-            if (guardTracker.isInXpSwitchCooldown()) {
-                return false;
+
+            // movement-based detection always works (guard actively walking towards us)
+            if (guardTracker.shouldSwitchToOre()) {
+                return true;
             }
-            
-            if (guardTracker.isWatchingAtCBTile()) {
-                return guardTracker.shouldSwitchToOre();
+
+            // position-based fallback respects cooldown (guard might be near but walking away)
+            if (!guardTracker.isInXpSwitchCooldown() && guardTracker.isGuardPastWatchTile()) {
+                return true;
             }
-            return guardTracker.shouldSwitchToOre() || guardTracker.isGuardPastWatchTile();
+
+            return false;
         }, 500);
         
         if (shouldSwitch) {

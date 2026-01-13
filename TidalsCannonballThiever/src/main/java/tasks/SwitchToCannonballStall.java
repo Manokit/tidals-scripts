@@ -41,14 +41,12 @@ public class SwitchToCannonballStall extends Task {
     public boolean execute() {
         task = "Switching to cannonball stall";
         currentlyThieving = false;
-        
+
         int oreThieves = guardTracker.getOreXpDropCount();
-        boolean wasXpBasedSwitch = guardTracker.shouldSwitchToCbByXp();
         script.log("SWITCH", "Returning to cannonball stall! (did " + oreThieves + " ore thieves)");
 
-        if (wasXpBasedSwitch) {
-            guardTracker.markXpBasedSwitch();
-        }
+        // always set cooldown when switching from ore to CB to prevent immediate switch-back
+        guardTracker.markXpBasedSwitch();
 
         guardTracker.resetCbCycle();
         guardTracker.resetGuardTracking();

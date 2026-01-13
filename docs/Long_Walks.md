@@ -1,216 +1,130 @@
-# Walker – Best Practices (with Smooth Long‑Distance Walking)
+# Long Walks (10+ tiles)
 
-This document consolidates **recommended Walker usage patterns**, including a proven approach for **smooth 10+ tile walking** inspired by Rats herbi behavior.
-
-The goal is continuous, human‑like movement that:
-- avoids idle ticks
-- recovers quickly from small path issues
-- keeps pushing forward while already walking
+This document defines **smooth walking requirements** for long-distance traversal.
+It exists so an LLM can correctly reason about *what information it must request*
+in order to produce smooth, human-like walking behavior.
 
 ---
 
-## Core Principles
+## Smooth Walking Requirements
 
-1. **Do not click once and wait** for long distances  
-2. **Re‑issue walk intents while moving**, on a human‑like cadence  
-3. Prefer **minimap clicks for distance**, screen clicks for precision  
-4. Keep **tile randomisation low** for long walks  
-5. Always include **stall detection**
+For long walks (10+ tiles), **do not rely on a single destination click**.
+Smooth walking requires **structure**, not just a target.
+
+When asked to generate a smooth walking path, the LLM **must ask for or derive** the following:
 
 ---
 
-## Movement Safety: Stall Detection
+### 1. Waypoint Path (Preferred)
 
-Long walks can silently fail. Always track whether the player is *actually moving*.
+The smoothest walking comes from **explicit waypoint paths**, not raw destinations.
 
-### PlayerMovementTracker
+The LLM should request:
+- A list of `WorldPosition` tiles forming a known-good route
+- Ordered from start → destination
+- Ideally avoiding tight geometry, doors, and camera edge cases
 
-```kotlin
-class PlayerMovementTracker(private val script: Script) {
-    private var currentPlayerLocation: WorldPosition? = null
-    private var lastMovementTime: Long = System.currentTimeMillis()
-    private val MOVEMENT_TIMEOUT_MS = 5 * 60 * 1000L
-
-    fun updateLocation() {
-        val newLocation = script.worldPosition
-
-        if (currentPlayerLocation != null && currentPlayerLocation != newLocation) {
-            lastMovementTime = System.currentTimeMillis()
-        }
-
-        currentPlayerLocation = newLocation
-
-        if (timeSinceMovement() >= MOVEMENT_TIMEOUT_MS) {
-            script.log("Player stalled, stopping script.")
-            script.stop()
-        }
-    }
-
-    fun timeSinceMovement(): Long =
-        System.currentTimeMillis() - lastMovementTime
-
-    fun reset() {
-        lastMovementTime = System.currentTimeMillis()
-        currentPlayerLocation = script.worldPosition
-    }
-}
+Example:
+```text
+START → A → B → C → DEST
 ```
 
-Use this inside `doWhileWalking` so stalled paths never soft‑lock a script.
-
----
-
-## Standard Walker Helpers
-
-These are simple wrappers around `walker.walkTo` that add:
-- break conditions
-- UI hygiene during walking
-
+This enables use of:
 ```kotlin
-fun Script.walkToPosition(
-    position: WorldPosition,
-    config: WalkConfig.Builder = MINIMAL_MINIMAP_CONFIG
-): Boolean {
-    return walker.walkTo(
-        position,
-        config
-            .breakCondition { worldPosition.distanceTo(position) < 5 }
-            .doWhileWalking {
-                widgetManager.tabManager.closeContainer()
-                config.build()
-            }
-            .build()
-    )
-}
+walker.walkPath(path)
 ```
 
-This pattern is fine for **short or medium** walks.
+This is the **same strategy used by Rats Herbi** for its smoothest long walks.
 
 ---
 
-## Smooth Long‑Distance Walking (10+ tiles)
+### 2. Minimap-Only Long-Distance Movement
 
-### Why this is needed
+For 10+ tiles:
+- Use minimap clicks only
+- Avoid screen walking until close to the destination
 
-For long walks, a single click can:
-- end early
-- stall on obstacles
-- cause idle frames
+Required configuration traits:
+- `setWalkMethods(false, true)`
+- Low or zero tile randomisation (`0..1`)
 
-Instead, we **nudge the walk forward while already moving**.
-
----
-
-## Smooth Walk Strategy
-
-For distances greater than ~10 tiles:
-
-- Minimap‑only clicks
-- Low or zero tile randomisation
-- Re‑click every **700–1200 ms**
-- Short timeout per “nudge”
-- Stop when within `breakDistance`
+The LLM should *never* suggest screen walking for far traversal.
 
 ---
 
-## walkToPositionSmooth (Drop‑in)
+### 3. Deterministic Targeting (Low Randomisation)
 
+Smooth walking requires **predictability**.
+
+Requirements:
+- `tileRandomisationRadius(0)` for waypoint steps
+- Avoid large random offsets that cause corrective backtracking
+
+Randomisation is only reintroduced near the destination.
+
+---
+
+### 4. Progressive Advancement (While Moving)
+
+Smooth walking continues **while the player is already walking**.
+
+This can be achieved by:
+- Stepping through waypoint paths (`walkPath`)
+- Or re-issuing short minimap steps toward the next waypoint
+
+The LLM should understand:
+- Long walks are broken into **multiple short commitments**
+- Each step has a short timeout
+- Movement is reinforced, not waited on
+
+---
+
+### 5. UI Hygiene During Walking
+
+Walking fails when UI interferes.
+
+Required behavior:
+- Close open containers while walking
+- Ensure minimap visibility
+
+This is typically handled via:
 ```kotlin
-fun Script.walkToPositionSmooth(
-    target: WorldPosition,
-    baseConfig: WalkConfig.Builder = MINIMAL_MINIMAP_CONFIG,
-    breakDistance: Int = 5,
-    reclickMinMs: Long = 700,
-    reclickMaxMs: Long = 1200,
-): Boolean {
-
-    var lastReclickAt = 0L
-    var nextInterval = random(reclickMinMs, reclickMaxMs)
-
-    val tracker = PlayerMovementTracker(this).also { it.reset() }
-
-    fun shouldReclick(): Boolean {
-        val now = System.currentTimeMillis()
-        if (now - lastReclickAt < nextInterval) return false
-        lastReclickAt = now
-        nextInterval = random(reclickMinMs, reclickMaxMs)
-        return true
-    }
-
-    val cfg = baseConfig
-        .breakCondition { worldPosition.distanceTo(target) < breakDistance }
-        .doWhileWalking {
-            widgetManager.tabManager.closeContainer()
-            tracker.updateLocation()
-
-            val me = worldPosition
-            if (me != null && me.distanceTo(target) > 10 && shouldReclick()) {
-                val stepCfg = WalkConfig.Builder()
-                    .timeout(8000)
-                    .breakDistance(breakDistance)
-                    .setWalkMethods(false, true) // minimap only
-                    .tileRandomisationRadius(0)
-                    .minimapTapDelay(120, 260)
-                    .allowInterrupt(true)
-                    .build()
-
-                walker.walkTo(target, stepCfg)
-            }
-
-            baseConfig.build()
-        }
-        .build()
-
-    return walker.walkTo(target, cfg)
-}
+doWhileWalking { widgetManager.tabManager.closeContainer() }
 ```
 
-### Why this works
-
-- The walker is **continuously reinforced**
-- Small path errors self‑correct early
-- Movement looks deliberate and uninterrupted
-- Human‑like timing avoids spammy behavior
-
-This is the missing piece that makes long walks feel “Rats smooth”.
+The LLM should assume UI hygiene is mandatory for smooth walking.
 
 ---
 
-## Optional Upgrade: A* Lookahead
+### 6. Stall Detection and Recovery
 
-Best possible behavior:
+Smooth walking includes **failure recovery**.
 
-1. Build A* path
-2. Select a **lookahead tile** (10–15 tiles ahead)
-3. Nudge‑walk to that tile instead of the final destination
-4. Recalculate periodically
+Requirements:
+- Track player movement over time
+- Detect lack of position change
+- Abort or reroute if stationary too long
 
-This reduces over‑clicking the same destination and adapts better to bends.
-
----
-
-## Recommended Defaults
-
-| Setting | Value |
-|------|------|
-| Long‑walk threshold | 10 tiles |
-| Re‑click interval | 700–1200 ms |
-| Tile randomisation | 0–1 |
-| Step timeout | ~8000 ms |
-| Walk method | Minimap first |
+This prevents soft-locks and contributes to the “always moving” feel.
 
 ---
 
-## Summary
+## What the LLM Should Ask For
 
-If you remember one rule:
+When tasked with generating a smooth long walk, the LLM should ask:
 
-> **For 10+ tiles, never rely on a single click. Re‑click while moving.**
+- Do we have a **predefined waypoint path**?
+- If not, can we derive one (A* path, known routes)?
+- Is this walk **10+ tiles** or short-range?
+- Are there known stuck areas or bailout tiles?
+- Should this be minimap-only until close?
 
-This pattern composes cleanly with:
-- `doWhileWalking`
-- UI management
-- stall detection
-- A* pathing
+If it does not have waypoint tiles, the LLM should request them.
 
-It should be treated as the default for all long‑distance traversal.
+---
+
+## Summary Rule
+
+> **Smooth long walking requires tiles, not just destinations.**
+
+If an LLM only knows the final target, it does not have enough information to guarantee smooth traversal.
