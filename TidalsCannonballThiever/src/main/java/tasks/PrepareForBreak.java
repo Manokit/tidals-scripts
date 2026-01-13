@@ -141,6 +141,7 @@ public class PrepareForBreak extends Task {
             if (guardTracker != null) {
                 guardTracker.resetCbCycle();
                 guardTracker.resetGuardTracking();
+                guardTracker.enableGuardSync(); // wait to see guard leave before starting
             }
 
         } catch (Exception e) {

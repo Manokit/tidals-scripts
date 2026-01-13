@@ -100,7 +100,11 @@ public class GuardTracker {
     
     private long lastXpBasedSwitchTime = 0;
     private static final long XP_SWITCH_COOLDOWN_MS = 5000;
-    
+
+    // guard sync: after reset, wait to see guard leave CB stall before starting
+    private boolean needsGuardSync = false;
+    private boolean sawGuardAtCbStall = false;
+
     private static final int CB_STALL_PLAYER_X = 1867;
     private static final int CB_STALL_PLAYER_Y = 3295;
 
@@ -787,5 +791,54 @@ public class GuardTracker {
     
     public void clearXpSwitchCooldown() {
         lastXpBasedSwitchTime = 0;
+    }
+
+    // guard sync: wait to see guard leave CB stall (1867 → 1868+) before starting
+    public void enableGuardSync() {
+        needsGuardSync = true;
+        sawGuardAtCbStall = false;
+        script.log("SYNC", "Guard sync enabled - waiting to see guard leave CB stall");
+    }
+
+    public void disableGuardSync() {
+        needsGuardSync = false;
+        sawGuardAtCbStall = false;
+    }
+
+    public boolean needsGuardSync() {
+        return needsGuardSync;
+    }
+
+    // returns true when guard has been seen at CB stall (1867) and then moved away (1868+)
+    public boolean isGuardSyncComplete() {
+        if (!needsGuardSync) return true; // no sync needed
+
+        List<WorldPosition> npcPositions = findAllNPCPositions();
+
+        for (WorldPosition npcPos : npcPositions) {
+            if (npcPos == null || npcPos.getPlane() != 0) continue;
+
+            int x = (int) npcPos.getX();
+            int y = (int) npcPos.getY();
+
+            if (y != PATROL_Y) continue;
+
+            // step 1: see guard at CB stall (x=1867)
+            if (x == 1867 && !sawGuardAtCbStall) {
+                sawGuardAtCbStall = true;
+                script.log("SYNC", "Guard at CB stall (x=1867) - watching for departure...");
+                return false;
+            }
+
+            // step 2: after seeing guard at stall, wait for them to leave (x >= 1868)
+            if (sawGuardAtCbStall && x >= 1868) {
+                script.log("SYNC", "Guard left CB stall (x=" + x + ") - sync complete, GO!");
+                needsGuardSync = false;
+                sawGuardAtCbStall = false;
+                return true;
+            }
+        }
+
+        return false;
     }
 }

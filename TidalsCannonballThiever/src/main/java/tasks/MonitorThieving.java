@@ -98,19 +98,24 @@ public class MonitorThieving extends Task {
                 currentlyThieving = false;
                 return true;
             }
-            
+
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkOreXpDrop(currentXp);
-            
+
+            // primary: switch after 2 ore XP drops
             if (guardTracker.shouldSwitchToCbByXp()) {
                 return true;
             }
-            
+
+            // emergency only: guard actively moving toward ore stall
             if (guardTracker.shouldSwitchToCannonball()) {
                 return true;
             }
-            
-            return guardTracker.isCannonballStallSafe();
+
+            // no position backup - if we got 4 CB thieves, we have time for 2 ore thieves
+            // the guard just passed, walking away from us
+
+            return false;
         }, 500);
         
         if (shouldSwitch) {

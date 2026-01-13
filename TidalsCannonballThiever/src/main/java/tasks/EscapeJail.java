@@ -94,18 +94,22 @@ public class EscapeJail extends Task {
                 script.log("JAIL", "Lock picked successfully! Escaping...");
             }
 
+            // reset escape attempts now that we're out of the cell
+            // pathing back to stall is a separate concern
+            escapeAttempts = 0;
+
             script.pollFramesHuman(() -> false, script.random(600, 1000));
             boolean pathed = pathBackToStall();
 
             if (pathed) {
                 script.log("JAIL", "Escaped and back at stall!");
-                escapeAttempts = 0;
 
                 // reset thieving cycle state so first drop assumption works again
                 StartThieving.resetForNewCycle();
                 if (guardTracker != null) {
                     guardTracker.resetCbCycle();
                     guardTracker.resetGuardTracking();
+                    guardTracker.enableGuardSync(); // wait to see guard leave before starting
                 }
 
                 return true;

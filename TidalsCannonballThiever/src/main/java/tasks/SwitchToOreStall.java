@@ -45,13 +45,15 @@ public class SwitchToOreStall extends Task {
         currentlyThieving = false;
         script.log("SWITCH", "Switching to ore stall!");
 
-        guardTracker.resetOreCycle();
-        guardTracker.resetGuardTracking();
-
+        // click stall FIRST - only modify state after confirmed success
         if (!startOreThieving()) {
-            script.log("SWITCH", "Failed to click ore stall, retrying...");
+            script.log("SWITCH", "Failed to click ore stall after retries");
             return false;
         }
+
+        // state changes only after click confirmed
+        guardTracker.resetOreCycle();
+        guardTracker.resetGuardTracking();
 
         atOreStall = true;
         currentlyThieving = true;
@@ -59,14 +61,14 @@ public class SwitchToOreStall extends Task {
 
         // no assumption needed - xp tracker is already initialized from CB stealing
         // wait for actual XP drops: 1/2 on first, 2/2 on second, then switch back
-
-        script.pollFramesHuman(() -> false, script.random(600, 1000));
+        // no delay - timing critical for guard cycle
 
         script.log("SWITCH", "Ore stall started - waiting for 2 XP drops then return...");
         return true;
     }
 
     private boolean startOreThieving() {
+        // no delays - timing critical, poll cycle handles retry
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
 

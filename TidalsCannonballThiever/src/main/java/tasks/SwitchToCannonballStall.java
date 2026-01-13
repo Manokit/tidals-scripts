@@ -24,15 +24,14 @@ public class SwitchToCannonballStall extends Task {
             return true;
         }
         
+        // emergency only: guard actively moving toward ore stall
         if (guardTracker.shouldSwitchToCannonball()) {
-            script.log("SWITCH", "Ore guard moving - GO TO CANNONBALL NOW! (backup)");
+            script.log("SWITCH", "Ore guard moving - GO TO CANNONBALL NOW! (emergency)");
             return true;
         }
 
-        if (guardTracker.isCannonballStallSafe()) {
-            script.log("SWITCH", "Cannonball safe (tile check) - returning (backup)");
-            return true;
-        }
+        // no position backup - if we got 4 CB thieves, we have time for 2 ore thieves
+        // the guard just passed, walking away from us
 
         return false;
     }
@@ -45,16 +44,16 @@ public class SwitchToCannonballStall extends Task {
         int oreThieves = guardTracker.getOreXpDropCount();
         script.log("SWITCH", "Returning to cannonball stall! (did " + oreThieves + " ore thieves)");
 
-        // always set cooldown when switching from ore to CB to prevent immediate switch-back
-        guardTracker.markXpBasedSwitch();
-
-        guardTracker.resetCbCycle();
-        guardTracker.resetGuardTracking();
-
+        // click stall FIRST - only modify state after confirmed success
         if (!startCannonballThieving()) {
-            script.log("SWITCH", "Failed to click cannonball stall, retrying...");
+            script.log("SWITCH", "Failed to click cannonball stall after retries");
             return false;
         }
+
+        // state changes only after click confirmed
+        guardTracker.markXpBasedSwitch();
+        guardTracker.resetCbCycle();
+        guardTracker.resetGuardTracking();
 
         atOreStall = false;
         currentlyThieving = true;
@@ -68,6 +67,7 @@ public class SwitchToCannonballStall extends Task {
     }
 
     private boolean startCannonballThieving() {
+        // no delays - timing critical, poll cycle handles retry
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
 

@@ -147,6 +147,7 @@ public class DepositOres extends Task {
         if (guardTracker != null) {
             guardTracker.resetCbCycle();
             guardTracker.resetGuardTracking();
+            guardTracker.enableGuardSync(); // wait to see guard leave before starting
         }
 
         script.log("DEPOSIT", "Deposit run complete - back at cannonball stall!");
