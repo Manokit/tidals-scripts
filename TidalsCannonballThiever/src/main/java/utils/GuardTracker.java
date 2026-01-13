@@ -50,15 +50,18 @@ public class GuardTracker {
             new SingleThresholdComparator(15),
             ColorModel.HSL
     );
-    
-    private static final int MOVEMENT_THRESHOLD = 20;
-    
+
+    // movement detection thresholds
+    private static final int MOVEMENT_THRESHOLD = 4; // lowered from 10 for instant detection
+    private static final int VELOCITY_THRESHOLD = 2; // consecutive frames with rightward movement triggers switch
+    private static final int SETTLE_TIME_MS = 0; // immediate detection - no settle delay
+
     // watch tiles
     private static final int CB_WATCH_X = 1865;
     private static final int CB_WATCH_Y = 3295;
     private static final int ORE_WATCH_X = 1863;
     private static final int ORE_WATCH_Y = 3292;
-    
+
     private boolean watchingAtCBTile = false;
     private boolean watchingAtOreTile = false;
     private Point cbWatchStartCenter = null;
@@ -68,9 +71,15 @@ public class GuardTracker {
     private Point lastGuardCenter = null;
     private long lastGuardCheckTime = 0;
     private boolean guardMovingEast = false;
-    
-    private int oreThiefCount = 0;
-    private static final int MAX_ORE_THIEVES = 2;
+
+    // velocity tracking for instant detection
+    private Point cbLastFrameCenter = null;
+    private int consecutiveRightwardFrames = 0;
+
+    // logging state to prevent spam
+    private boolean lastCbSafeState = true; // only log on state change
+
+    // oreThiefCount removed - now using XP-based tracking (oreXpDropCount) only
     
     private long arrivedAtOreStallTime = 0;
     private boolean gotOreStallXpDrop = false;
@@ -83,10 +92,19 @@ public class GuardTracker {
     private static final int CB_THIEVES_PER_CYCLE = 4;
     private static final int ORE_THIEVES_PER_CYCLE = 2;
     private double lastKnownXpForCycle = -1;
+
+    // flag to prevent double-counting when assume + tracker both fire (CB only)
+    private boolean firstCbDropAssumed = false;
+    private long cbAssumeTimestamp = 0;
+    private static final long ASSUME_WINDOW_MS = 1500; // only skip if within 1.5 sec of assume
     
     private long lastXpBasedSwitchTime = 0;
     private static final long XP_SWITCH_COOLDOWN_MS = 5000;
-    
+
+    // guard sync: after reset, wait to see guard leave CB stall before starting
+    private boolean needsGuardSync = false;
+    private boolean sawGuardAtCbStall = false;
+
     private static final int CB_STALL_PLAYER_X = 1867;
     private static final int CB_STALL_PLAYER_Y = 3295;
 
@@ -252,8 +270,7 @@ public class GuardTracker {
         if (!twoStallMode) return isSafeToReturn();
 
         List<WorldPosition> npcPositions = findAllNPCPositions();
-        
-        boolean foundGuardOnPatrol = false;
+
         boolean guardPastStall = false;
 
         for (WorldPosition npcPos : npcPositions) {
@@ -263,13 +280,16 @@ public class GuardTracker {
             int y = (int) npcPos.getY();
 
             if (y != PATROL_Y) continue;
-            foundGuardOnPatrol = true;
 
             if (x >= EARLY_WARNING_X && x <= 1867) {
-                script.log("GUARD", "Cannonball NOT safe - guard at x=" + x);
+                // only log on state change to avoid spam
+                if (lastCbSafeState) {
+                    script.log("GUARD", "Cannonball NOT safe - guard at x=" + x);
+                    lastCbSafeState = false;
+                }
                 return false;
             }
-            
+
             if (x >= 1868) {
                 guardPastStall = true;
             }
@@ -278,10 +298,14 @@ public class GuardTracker {
         if (guardPastStall) {
             twoStallEarlyWarningStart = 0;
             twoStallCurrentDelay = 0;
-            script.log("GUARD", "Cannonball SAFE - guard at x>=1868!");
+            // only log on state change
+            if (!lastCbSafeState) {
+                script.log("GUARD", "Cannonball SAFE - guard at x>=1868!");
+                lastCbSafeState = true;
+            }
             return true;
         }
-        
+
         return false;
     }
 
@@ -356,77 +380,83 @@ public class GuardTracker {
 
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
-        
+
         int playerX = (int) myPos.getX();
         int playerY = (int) myPos.getY();
-        
+
+        // reset if not at CB stall
         if (playerX != CB_STALL_PLAYER_X || playerY != CB_STALL_PLAYER_Y) {
-            if (watchingAtCBTile || arrivedAtCBStallTime != 0) {
-                script.log("GUARD-PIXEL", "Not at CB stall yet - resetting watch state");
+            if (watchingAtCBTile) {
                 watchingAtCBTile = false;
                 cbWatchStartCenter = null;
                 cbWatchStartTime = 0;
-                arrivedAtCBStallTime = 0;
-                gotCBStallXpDrop = false;
+                cbLastFrameCenter = null;
+                consecutiveRightwardFrames = 0;
             }
             return false;
-        }
-        
-        if (arrivedAtCBStallTime == 0) {
-            arrivedAtCBStallTime = System.currentTimeMillis();
-            gotCBStallXpDrop = false;
-            script.log("GUARD-PIXEL", "Arrived at CB stall - waiting for XP drop before watching guard...");
-            return false;
-        }
-        
-        if (!gotCBStallXpDrop) {
-            if (lastXpGain.timeElapsed() < (System.currentTimeMillis() - arrivedAtCBStallTime)) {
-                gotCBStallXpDrop = true;
-                script.log("GUARD-PIXEL", "Got XP drop at CB stall - NOW can start watching guard!");
-            } else {
-                return false;
-            }
         }
 
+        // find guard at watch tile
         WorldPosition guardPos = findNPCAtTile(CB_WATCH_X, CB_WATCH_Y);
 
         if (guardPos != null) {
             Point currentCenter = getGuardHighlightCenter(guardPos);
-
             if (currentCenter == null) return false;
 
-            if (!watchingAtCBTile) {
+            // first time seeing guard at watch tile - capture baseline IMMEDIATELY
+            if (!watchingAtCBTile || cbWatchStartCenter == null) {
                 watchingAtCBTile = true;
                 cbWatchStartTime = System.currentTimeMillis();
-                cbWatchStartCenter = null;
-                script.log("GUARD-PIXEL", "Guard at CB watch tile (1865,3295) - waiting for settle...");
-                return false;
-            }
-
-            long elapsed = System.currentTimeMillis() - cbWatchStartTime;
-            if (elapsed < 300) return false;
-
-            if (cbWatchStartCenter == null) {
                 cbWatchStartCenter = currentCenter;
-                script.log("GUARD-PIXEL", "Guard settled at CB tile - NOW watching for movement...");
+                cbLastFrameCenter = currentCenter;
+                consecutiveRightwardFrames = 0;
+                script.log("GUARD-PIXEL", "Guard at watch tile! Baseline x=" + currentCenter.x + " - watching for rightward movement...");
                 return false;
             }
 
-            int dx = Math.abs(currentCenter.x - cbWatchStartCenter.x);
-            int dy = Math.abs(currentCenter.y - cbWatchStartCenter.y);
+            // check total displacement from baseline
+            int dxFromBaseline = currentCenter.x - cbWatchStartCenter.x;
 
-            if (dx > MOVEMENT_THRESHOLD || dy > MOVEMENT_THRESHOLD) {
-                script.log("GUARD-PIXEL", "GUARD MOVED! dx=" + dx + ", dy=" + dy + " pixels - SWITCH TO ORE!");
+            // instant detection: total displacement exceeds threshold
+            if (dxFromBaseline > MOVEMENT_THRESHOLD) {
+                script.log("GUARD-PIXEL", "GUARD MOVING RIGHT! dx=" + dxFromBaseline + "px - SWITCH NOW!");
                 return true;
+            }
+
+            // velocity detection: track frame-to-frame movement
+            if (cbLastFrameCenter != null) {
+                int frameDx = currentCenter.x - cbLastFrameCenter.x;
+
+                if (frameDx > 0) {
+                    // guard moved right this frame
+                    consecutiveRightwardFrames++;
+                    if (consecutiveRightwardFrames >= VELOCITY_THRESHOLD) {
+                        script.log("GUARD-PIXEL", "GUARD VELOCITY DETECTED! " + consecutiveRightwardFrames + " frames right - SWITCH NOW!");
+                        return true;
+                    }
+                } else if (frameDx < 0) {
+                    // guard moved left - reset velocity counter
+                    consecutiveRightwardFrames = 0;
+                }
+                // frameDx == 0 means no change, keep counter as-is
+            }
+            cbLastFrameCenter = currentCenter;
+
+            // if guard moved left significantly from baseline, update baseline
+            if (dxFromBaseline < -MOVEMENT_THRESHOLD) {
+                cbWatchStartCenter = currentCenter;
+                consecutiveRightwardFrames = 0;
             }
 
             return false;
         } else {
+            // guard not at watch tile
             if (watchingAtCBTile) {
-                script.log("GUARD-PIXEL", "Guard left CB watch tile - stopping watch");
                 watchingAtCBTile = false;
                 cbWatchStartCenter = null;
                 cbWatchStartTime = 0;
+                cbLastFrameCenter = null;
+                consecutiveRightwardFrames = 0;
             }
             return false;
         }
@@ -467,7 +497,7 @@ public class GuardTracker {
             if (lastXpGain.timeElapsed() < (System.currentTimeMillis() - arrivedAtOreStallTime)) {
                 gotOreStallXpDrop = true;
                 script.log("GUARD-PIXEL", "Got XP drop at ore stall - NOW can start watching guard!");
-                logAllNPCPositions();
+                // logAllNPCPositions();  // commented out to reduce log clutter
             } else {
                 return false;
             }
@@ -486,27 +516,22 @@ public class GuardTracker {
                 watchingAtOreTile = true;
                 oreWatchStartTime = System.currentTimeMillis();
                 oreWatchStartCenter = null;
-                script.log("GUARD-PIXEL", "NPC at tile (" + guardX + "," + guardY + ") - waiting for settle...");
+                script.log("GUARD-PIXEL", "NPC at tile (" + guardX + "," + guardY + ") - watching for movement...");
                 return false;
             }
 
             long elapsed = System.currentTimeMillis() - oreWatchStartTime;
-            if (elapsed < 300) return false;
+            if (elapsed < SETTLE_TIME_MS) return false;
 
             if (oreWatchStartCenter == null) {
                 oreWatchStartCenter = currentCenter;
-                script.log("GUARD-PIXEL", "NPC at (" + guardX + "," + guardY + ") settled");
+                script.log("GUARD-PIXEL", "NPC baseline captured at (" + guardX + "," + guardY + ")");
                 return false;
             }
 
-            int dx = Math.abs(currentCenter.x - oreWatchStartCenter.x);
-            int dy = Math.abs(currentCenter.y - oreWatchStartCenter.y);
-
-            if (dx > MOVEMENT_THRESHOLD || dy > MOVEMENT_THRESHOLD) {
-                script.log("GUARD-PIXEL", "NPC MOVED! dx=" + dx + " dy=" + dy);
-                return true;
-            }
-
+            // guard still at ore watch tile - don't switch yet
+            // the guard walks EAST from here towards CB, so any movement here is dangerous
+            // only switch when guard has LEFT this tile (handled in else branch below)
             return false;
         } else {
             if (watchingAtOreTile) {
@@ -632,22 +657,7 @@ public class GuardTracker {
         return !guardMovingEast && lastGuardCenter != null;
     }
 
-    public void resetOreThiefCount() {
-        oreThiefCount = 0;
-    }
-
-    public void incrementOreThiefCount() {
-        oreThiefCount++;
-        script.log("GUARD", "Ore thieve #" + oreThiefCount + " of " + MAX_ORE_THIEVES);
-    }
-
-    public boolean canDoMoreOreThieves() {
-        return oreThiefCount < MAX_ORE_THIEVES;
-    }
-
-    public int getOreThiefCount() {
-        return oreThiefCount;
-    }
+    // old oreThiefCount methods removed - now using XP-based tracking only
 
     public void resetGuardTracking() {
         lastGuardCenter = null;
@@ -663,6 +673,11 @@ public class GuardTracker {
         gotOreStallXpDrop = false;
         arrivedAtCBStallTime = 0;
         gotCBStallXpDrop = false;
+        // reset velocity tracking
+        cbLastFrameCenter = null;
+        consecutiveRightwardFrames = 0;
+        // reset logging state
+        lastCbSafeState = true;
     }
 
     public boolean checkCbXpDrop(double currentXp) {
@@ -671,10 +686,23 @@ public class GuardTracker {
             script.log("CYCLE", "CB XP tracking auto-initialized with: " + currentXp);
             return false;
         }
-        
+
         if (currentXp > lastKnownXpForCycle) {
             double xpGained = currentXp - lastKnownXpForCycle;
             lastKnownXpForCycle = currentXp;
+
+            // if we assumed the first drop and tracker also caught it within the window, skip incrementing
+            if (firstCbDropAssumed && cbXpDropCount == 1) {
+                long elapsed = System.currentTimeMillis() - cbAssumeTimestamp;
+                firstCbDropAssumed = false;  // clear flag either way
+                if (elapsed < ASSUME_WINDOW_MS) {
+                    script.log("CYCLE", "CB steal confirmed (already assumed 1/" + CB_THIEVES_PER_CYCLE + ")");
+                    return true;
+                }
+                // outside window - this is a new steal, count it
+                script.log("CYCLE", "XP drop outside assume window (" + elapsed + "ms) - counting as new steal");
+            }
+
             cbXpDropCount++;
             script.log("CYCLE", "CB steal #" + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE + " (+" + String.format("%.0f", xpGained) + " XP)");
             return true;
@@ -687,11 +715,11 @@ public class GuardTracker {
             lastKnownXpForCycle = currentXp;
             return false;
         }
-        
+
         if (currentXp > lastKnownXpForCycle) {
             lastKnownXpForCycle = currentXp;
             oreXpDropCount++;
-            script.log("CYCLE", "Extra stall (Ore) " + oreXpDropCount + "/" + ORE_THIEVES_PER_CYCLE);
+            script.log("CYCLE", "Ore steal #" + oreXpDropCount + "/" + ORE_THIEVES_PER_CYCLE);
             return true;
         }
         return false;
@@ -707,9 +735,23 @@ public class GuardTracker {
     
     public void resetCbCycle() {
         cbXpDropCount = 0;
+        firstCbDropAssumed = false;
         script.log("CYCLE", "CB cycle reset - starting fresh");
     }
-    
+
+    // used when assuming first xp drop occurred (tracker might not catch it)
+    public void assumeFirstCbDrop() {
+        // only assume if tracker hasn't already caught it
+        if (cbXpDropCount > 0) {
+            script.log("CYCLE", "Skip assume - tracker already caught first CB steal (" + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE + ")");
+            return;
+        }
+        cbXpDropCount = 1;
+        firstCbDropAssumed = true;
+        cbAssumeTimestamp = System.currentTimeMillis();
+        script.log("CYCLE", "Assumed first CB steal (1/" + CB_THIEVES_PER_CYCLE + ")");
+    }
+
     public void resetOreCycle() {
         oreXpDropCount = 0;
         script.log("CYCLE", "Ore cycle reset - starting fresh");
@@ -749,5 +791,54 @@ public class GuardTracker {
     
     public void clearXpSwitchCooldown() {
         lastXpBasedSwitchTime = 0;
+    }
+
+    // guard sync: wait to see guard leave CB stall (1867 → 1868+) before starting
+    public void enableGuardSync() {
+        needsGuardSync = true;
+        sawGuardAtCbStall = false;
+        script.log("SYNC", "Guard sync enabled - waiting to see guard leave CB stall");
+    }
+
+    public void disableGuardSync() {
+        needsGuardSync = false;
+        sawGuardAtCbStall = false;
+    }
+
+    public boolean needsGuardSync() {
+        return needsGuardSync;
+    }
+
+    // returns true when guard has been seen at CB stall (1867) and then moved away (1868+)
+    public boolean isGuardSyncComplete() {
+        if (!needsGuardSync) return true; // no sync needed
+
+        List<WorldPosition> npcPositions = findAllNPCPositions();
+
+        for (WorldPosition npcPos : npcPositions) {
+            if (npcPos == null || npcPos.getPlane() != 0) continue;
+
+            int x = (int) npcPos.getX();
+            int y = (int) npcPos.getY();
+
+            if (y != PATROL_Y) continue;
+
+            // step 1: see guard at CB stall (x=1867)
+            if (x == 1867 && !sawGuardAtCbStall) {
+                sawGuardAtCbStall = true;
+                script.log("SYNC", "Guard at CB stall (x=1867) - watching for departure...");
+                return false;
+            }
+
+            // step 2: after seeing guard at stall, wait for them to leave (x >= 1868)
+            if (sawGuardAtCbStall && x >= 1868) {
+                script.log("SYNC", "Guard left CB stall (x=" + x + ") - sync complete, GO!");
+                needsGuardSync = false;
+                sawGuardAtCbStall = false;
+                return true;
+            }
+        }
+
+        return false;
     }
 }

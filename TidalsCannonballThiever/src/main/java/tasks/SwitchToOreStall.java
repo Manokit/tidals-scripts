@@ -19,24 +19,24 @@ public class SwitchToOreStall extends Task {
         if (!twoStallMode) return false;
         if (!currentlyThieving || atOreStall) return false;
 
+        // switch on 4 XP drops
         if (guardTracker.shouldSwitchToOreByXp()) {
             script.log("SWITCH", "4 CB thieves done - switching to ore (XP cycle)");
             return true;
         }
-        
-        if (guardTracker.isInXpSwitchCooldown()) {
-            return false;
-        }
-        
-        if (guardTracker.isWatchingAtCBTile()) {
-            return guardTracker.shouldSwitchToOre();
-        }
-        
+
+        // movement-based detection always works (guard actively walking towards us)
         if (guardTracker.shouldSwitchToOre()) {
+            script.log("SWITCH", "Guard moving right - switching to ore (pixel detection)");
             return true;
         }
-        
-        return guardTracker.isGuardPastWatchTile();
+
+        // position-based fallback respects cooldown (guard might be near but walking away)
+        if (!guardTracker.isInXpSwitchCooldown() && guardTracker.isGuardPastWatchTile()) {
+            return true;
+        }
+
+        return false;
     }
 
     @Override
@@ -45,26 +45,30 @@ public class SwitchToOreStall extends Task {
         currentlyThieving = false;
         script.log("SWITCH", "Switching to ore stall!");
 
-        guardTracker.resetOreCycle();
-        guardTracker.resetOreThiefCount();
-        guardTracker.resetGuardTracking();
-
+        // click stall FIRST - only modify state after confirmed success
         if (!startOreThieving()) {
-            script.log("SWITCH", "Failed to click ore stall, retrying...");
+            script.log("SWITCH", "Failed to click ore stall after retries");
             return false;
         }
 
+        // state changes only after click confirmed
+        guardTracker.resetOreCycle();
+        guardTracker.resetGuardTracking();
+
         atOreStall = true;
         currentlyThieving = true;
-        guardTracker.incrementOreThiefCount();
-        
-        script.pollFramesHuman(() -> false, script.random(1500, 2000));
-        
-        script.log("SWITCH", "Ore thieve #1 done - monitoring for return opportunity...");
+        lastXpGain.reset();
+
+        // no assumption needed - xp tracker is already initialized from CB stealing
+        // wait for actual XP drops: 1/2 on first, 2/2 on second, then switch back
+        // no delay - timing critical for guard cycle
+
+        script.log("SWITCH", "Ore stall started - waiting for 2 XP drops then return...");
         return true;
     }
 
     private boolean startOreThieving() {
+        // no delays - timing critical, poll cycle handles retry
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
 

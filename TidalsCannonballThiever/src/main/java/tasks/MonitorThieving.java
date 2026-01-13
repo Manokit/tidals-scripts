@@ -48,7 +48,7 @@ public class MonitorThieving extends Task {
         }
     }
     
-    // switch after 4 xp drops or guard detection
+    // switch after 4 xp drops or guard detection - whichever comes first
     private boolean monitorCannonballStall() {
         boolean shouldSwitch = script.pollFramesUntil(() -> {
             if (isInventoryFull()) {
@@ -56,22 +56,27 @@ public class MonitorThieving extends Task {
                 currentlyThieving = false;
                 return true;
             }
-            
+
+            // always track XP drops
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkCbXpDrop(currentXp);
-            
+
+            // check XP-based switch (4 thieves done)
             if (guardTracker.shouldSwitchToOreByXp()) {
                 return true;
             }
-            
-            if (guardTracker.isInXpSwitchCooldown()) {
-                return false;
+
+            // movement-based detection always works (guard actively walking towards us)
+            if (guardTracker.shouldSwitchToOre()) {
+                return true;
             }
-            
-            if (guardTracker.isWatchingAtCBTile()) {
-                return guardTracker.shouldSwitchToOre();
+
+            // position-based fallback respects cooldown (guard might be near but walking away)
+            if (!guardTracker.isInXpSwitchCooldown() && guardTracker.isGuardPastWatchTile()) {
+                return true;
             }
-            return guardTracker.shouldSwitchToOre() || guardTracker.isGuardPastWatchTile();
+
+            return false;
         }, 500);
         
         if (shouldSwitch) {
@@ -93,19 +98,24 @@ public class MonitorThieving extends Task {
                 currentlyThieving = false;
                 return true;
             }
-            
+
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkOreXpDrop(currentXp);
-            
+
+            // primary: switch after 2 ore XP drops
             if (guardTracker.shouldSwitchToCbByXp()) {
                 return true;
             }
-            
+
+            // emergency only: guard actively moving toward ore stall
             if (guardTracker.shouldSwitchToCannonball()) {
                 return true;
             }
-            
-            return guardTracker.isCannonballStallSafe();
+
+            // no position backup - if we got 4 CB thieves, we have time for 2 ore thieves
+            // the guard just passed, walking away from us
+
+            return false;
         }, 500);
         
         if (shouldSwitch) {

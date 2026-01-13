@@ -20,13 +20,31 @@ public class StartThieving extends Task {
     private static final RectangleArea THIEVING_AREA_TWO_STALL = new RectangleArea(1862, 3293, 1869, 3297, 0);
 
     private static boolean initialPositionDone = false;
+    private static boolean firstDropAssumed = false;
+    private static boolean justCompletedGuardSync = false; // skip delays after sync
+    private static final int MAX_STEAL_ATTEMPTS = 3;
+
+    // cached config with timeout
+    private final WalkConfig minimapConfig;
 
     public static void resetStaticState() {
         initialPositionDone = false;
+        firstDropAssumed = false;
+        justCompletedGuardSync = false;
     }
-    
+
     public static void resetAfterBreak() {
+        // full reset for break/hop/afk - same as new cycle
         initialPositionDone = false;
+        firstDropAssumed = false;
+        justCompletedGuardSync = false;
+    }
+
+    // reset for new thieving cycle (after deposit, jail, etc.)
+    public static void resetForNewCycle() {
+        initialPositionDone = false;
+        firstDropAssumed = false;
+        justCompletedGuardSync = false;
     }
 
     private WorldPosition getThievingTile() {
@@ -39,6 +57,12 @@ public class StartThieving extends Task {
 
     public StartThieving(Script script) {
         super(script);
+        this.minimapConfig = new WalkConfig.Builder()
+                .disableWalkScreen(true)
+                .breakDistance(0)
+                .tileRandomisationRadius(0)
+                .timeout(10000)
+                .build();
     }
 
     @Override
@@ -57,24 +81,39 @@ public class StartThieving extends Task {
                 task = "Initial positioning";
                 script.log("THIEVE", "First run - walking to exact thieving tile via minimap...");
 
-                WalkConfig minimapOnly = new WalkConfig.Builder()
-                        .disableWalkScreen(true)
-                        .breakDistance(0)
-                        .tileRandomisationRadius(0)
-                        .build();
+                boolean walked = script.getWalker().walkTo(getThievingTile(), minimapConfig);
+                // skip humanised delay in two-stall mode - timing critical
+                if (!twoStallMode) {
+                    script.pollFramesHuman(() -> false, script.random(200, 400));
+                }
 
-                script.getWalker().walkTo(getThievingTile(), minimapOnly);
-                script.pollFramesUntil(() -> isAtExactThievingTile(), 5000);
-                script.pollFramesHuman(() -> false, script.random(200, 400));
+                if (!walked && !isAtExactThievingTile()) {
+                    script.log("THIEVE", "Walk failed, will retry");
+                }
                 return false;
             }
             
             // wait for guard to pass before starting
             if (twoStallMode) {
-                if (!guardTracker.isCannonballStallSafe()) {
-                    task = "Waiting for guard cycle";
-                    script.log("THIEVE", "Waiting to see guard pass stall (x >= 1868)...");
-                    return false;
+                // guard sync mode: wait to see guard leave CB stall (1867 → 1868+)
+                if (guardTracker.needsGuardSync()) {
+                    if (!guardTracker.isGuardSyncComplete()) {
+                        task = "Syncing with guard cycle";
+                        return false; // keep polling, isGuardSyncComplete() logs progress
+                    }
+                    // sync complete - start IMMEDIATELY, no delays
+                    initialPositionDone = true;
+                    justCompletedGuardSync = true; // flag to skip any delays
+                    script.log("THIEVE", "Guard sync complete - starting 4-2 cycle NOW!");
+                } else {
+                    // normal mode: just check if safe
+                    if (!guardTracker.isCannonballStallSafe()) {
+                        task = "Waiting for guard cycle";
+                        script.log("THIEVE", "Waiting to see guard pass stall (x >= 1868)...");
+                        return false;
+                    }
+                    initialPositionDone = true;
+                    script.log("THIEVE", "Initial positioning complete - starting fresh cycle!");
                 }
             } else {
                 if (!guardTracker.isSafeToReturn()) {
@@ -82,10 +121,9 @@ public class StartThieving extends Task {
                     script.log("THIEVE", "At position but guard in patrol zone - waiting for them to pass...");
                     return false;
                 }
+                initialPositionDone = true;
+                script.log("THIEVE", "Initial positioning complete - starting fresh cycle!");
             }
-            
-            initialPositionDone = true;
-            script.log("THIEVE", "Initial positioning complete - starting fresh cycle!");
         }
 
         // danger check
@@ -101,8 +139,8 @@ public class StartThieving extends Task {
 
         script.log("THIEVE", "Clear - starting to steal...");
 
-        // ~25% chance to add humanized delay
-        if (script.random(1, 100) <= 25) {
+        // skip delays in two-stall mode - timing critical
+        if (!twoStallMode && script.random(1, 100) <= 25) {
             script.pollFramesHuman(() -> false, script.random(80, 200));
             if (guardTracker.isAnyGuardInDangerZone()) {
                 script.log("THIEVE", "ABORT - Guard moved in during delay!");
@@ -139,30 +177,51 @@ public class StartThieving extends Task {
             return false;
         }
 
-        boolean tapped = script.getFinger().tap(stallPoly);
+        // tap with action and retries for reliability
+        boolean tapped = false;
+        for (int attempt = 1; attempt <= MAX_STEAL_ATTEMPTS; attempt++) {
+            script.log("THIEVE", "Steal attempt " + attempt + "/" + MAX_STEAL_ATTEMPTS);
+            tapped = script.getFinger().tap(stallPoly, "steal");
+            if (tapped) break;
+            // skip delay in two-stall mode - timing critical
+            if (!twoStallMode) {
+                script.pollFramesHuman(() -> false, script.random(200, 400));
+            }
+        }
 
         if (tapped) {
             script.log("THIEVE", "Clicked Cannonball stall!");
             currentlyThieving = true;
             lastXpGain.reset();
-            
+
             if (twoStallMode) {
-                if (!xpTracking.isInitialized()) {
-                    script.log("THIEVE", "XP tracking not initialized, initializing now...");
-                    xpTracking.initialize();
-                }
-                
                 double currentXp = xpTracking.getCurrentXp();
                 guardTracker.initXpTracking(currentXp);
                 guardTracker.resetCbCycle();
                 script.log("THIEVE", "Initialized XP cycle tracking (baseline: " + currentXp + ")");
             }
-            
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+
+            // on first stall tap, assume first xp drop (tracker might miss it)
+            // if tracker also catches it, the flag prevents double-counting
+            if (!firstDropAssumed) {
+                if (script instanceof main.TidalsCannonballThiever) {
+                    ((main.TidalsCannonballThiever) script).checkInventoryForChangesManual();
+                }
+                if (twoStallMode) {
+                    guardTracker.assumeFirstCbDrop();
+                }
+                firstDropAssumed = true;
+            }
+
+            // skip delay in two-stall mode - timing critical
+            if (!twoStallMode) {
+                script.pollFramesHuman(() -> false, script.random(200, 400));
+            }
+            justCompletedGuardSync = false;
             return true;
         }
 
-        script.log("THIEVE", "Failed to click stall, retrying...");
+        script.log("THIEVE", "Failed to click stall after " + MAX_STEAL_ATTEMPTS + " attempts");
         return false;
     }
 

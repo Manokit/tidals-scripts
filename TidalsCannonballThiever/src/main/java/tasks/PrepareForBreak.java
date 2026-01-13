@@ -136,7 +136,14 @@ public class PrepareForBreak extends Task {
             }
             
             StartThieving.resetAfterBreak();
-            
+
+            // reset guard tracking and xp cycle for clean restart
+            if (guardTracker != null) {
+                guardTracker.resetCbCycle();
+                guardTracker.resetGuardTracking();
+                guardTracker.enableGuardSync(); // wait to see guard leave before starting
+            }
+
         } catch (Exception e) {
             script.log("BREAK", "Error executing " + reason + ": " + e.getMessage());
         }

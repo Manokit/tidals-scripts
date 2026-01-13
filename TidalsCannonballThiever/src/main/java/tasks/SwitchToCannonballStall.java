@@ -24,15 +24,14 @@ public class SwitchToCannonballStall extends Task {
             return true;
         }
         
+        // emergency only: guard actively moving toward ore stall
         if (guardTracker.shouldSwitchToCannonball()) {
-            script.log("SWITCH", "Ore guard moving - GO TO CANNONBALL NOW! (backup)");
+            script.log("SWITCH", "Ore guard moving - GO TO CANNONBALL NOW! (emergency)");
             return true;
         }
 
-        if (guardTracker.isCannonballStallSafe()) {
-            script.log("SWITCH", "Cannonball safe (tile check) - returning (backup)");
-            return true;
-        }
+        // no position backup - if we got 4 CB thieves, we have time for 2 ore thieves
+        // the guard just passed, walking away from us
 
         return false;
     }
@@ -41,32 +40,34 @@ public class SwitchToCannonballStall extends Task {
     public boolean execute() {
         task = "Switching to cannonball stall";
         currentlyThieving = false;
-        
+
         int oreThieves = guardTracker.getOreXpDropCount();
-        boolean wasXpBasedSwitch = guardTracker.shouldSwitchToCbByXp();
         script.log("SWITCH", "Returning to cannonball stall! (did " + oreThieves + " ore thieves)");
 
-        if (wasXpBasedSwitch) {
-            guardTracker.markXpBasedSwitch();
-        }
-
-        guardTracker.resetCbCycle();
-        guardTracker.resetGuardTracking();
-        guardTracker.resetOreThiefCount();
-
+        // click stall FIRST - only modify state after confirmed success
         if (!startCannonballThieving()) {
-            script.log("SWITCH", "Failed to click cannonball stall, retrying...");
+            script.log("SWITCH", "Failed to click cannonball stall after retries");
             return false;
         }
+
+        // state changes only after click confirmed
+        guardTracker.markXpBasedSwitch();
+        guardTracker.resetCbCycle();
+        guardTracker.resetGuardTracking();
 
         atOreStall = false;
         currentlyThieving = true;
         lastXpGain.reset();
+
+        // no assumption needed - xp tracker is already initialized from previous stealing
+        // wait for actual XP drops: 1/4, 2/4, 3/4, 4/4, then switch to ore
+
         script.log("SWITCH", "Now thieving cannonball stall!");
         return true;
     }
 
     private boolean startCannonballThieving() {
+        // no delays - timing critical, poll cycle handles retry
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) return false;
 
