@@ -23,8 +23,9 @@ public class ReturnToThieving extends Task {
         return twoStallMode ? THIEVING_AREA_TWO_STALL : THIEVING_AREA_SINGLE;
     }
 
+    // cached configs with timeouts
     private final WalkConfig exactTileConfig;
-    private final WalkConfig singleStallConfig;
+    private final WalkConfig nearbyConfig;
 
     public ReturnToThieving(Script script) {
         super(script);
@@ -32,11 +33,13 @@ public class ReturnToThieving extends Task {
                 .disableWalkScreen(true)
                 .breakDistance(0)
                 .tileRandomisationRadius(0)
+                .timeout(15000)
                 .build();
-        this.singleStallConfig = new WalkConfig.Builder()
+        this.nearbyConfig = new WalkConfig.Builder()
                 .disableWalkScreen(true)
                 .breakDistance(2)
                 .tileRandomisationRadius(0)
+                .timeout(10000)
                 .build();
     }
 
@@ -62,31 +65,44 @@ public class ReturnToThieving extends Task {
     @Override
     public boolean execute() {
         task = "Walking to stall";
-        
+
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) {
             script.log("RETURN", "Position null, waiting...");
             return false;
         }
-        
+
+        WorldPosition target = getThievingTile();
+        WalkConfig config = twoStallMode ? exactTileConfig : nearbyConfig;
+
         if (isAtAnySafetyTile()) {
-            script.log("RETURN", "Moving to stall position (short distance)...");
-            if (!tapOnTile(getThievingTile())) {
-                script.log("RETURN", "Tile tap failed, using walker...");
-                WalkConfig config = twoStallMode ? exactTileConfig : singleStallConfig;
-                script.getWalker().walkTo(getThievingTile(), config);
+            script.log("RETURN", "Moving from safety tile to stall position...");
+            // try direct tile tap first for short distance
+            if (tapOnTile(target)) {
+                script.pollFramesHuman(() -> false, script.random(400, 600));
+                if (isAtThievingTile()) {
+                    script.log("RETURN", "Arrived via tile tap");
+                    return true;
+                }
             }
-            script.pollFramesUntil(() -> isAtThievingTile(), 3000);
+            // fall back to walker
+            script.log("RETURN", "Tile tap insufficient, using walker...");
         } else {
             script.log("RETURN", "Walking to thieving tile...");
-            WalkConfig config = twoStallMode ? exactTileConfig : singleStallConfig;
-            script.getWalker().walkTo(getThievingTile(), config);
-            int timeout = isInThievingArea() ? 3000 : 15000;
-            script.pollFramesUntil(() -> isAtThievingTile(), timeout);
         }
 
-        script.log("RETURN", "Arrived at stall position!");
-        return true;
+        boolean walked = script.getWalker().walkTo(target, config);
+
+        // brief settle time after walk
+        script.pollFramesHuman(() -> false, script.random(300, 500));
+
+        if (walked || isAtThievingTile()) {
+            script.log("RETURN", "Arrived at stall position");
+            return true;
+        }
+
+        script.log("RETURN", "Did not reach stall position, will retry");
+        return false;
     }
     
     private boolean tapOnTile(WorldPosition tile) {

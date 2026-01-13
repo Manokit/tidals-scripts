@@ -46,7 +46,6 @@ public class SwitchToOreStall extends Task {
         script.log("SWITCH", "Switching to ore stall!");
 
         guardTracker.resetOreCycle();
-        guardTracker.resetOreThiefCount();
         guardTracker.resetGuardTracking();
 
         if (!startOreThieving()) {
@@ -56,11 +55,14 @@ public class SwitchToOreStall extends Task {
 
         atOreStall = true;
         currentlyThieving = true;
-        guardTracker.incrementOreThiefCount();
-        
-        script.pollFramesHuman(() -> false, script.random(1500, 2000));
-        
-        script.log("SWITCH", "Ore thieve #1 done - monitoring for return opportunity...");
+        lastXpGain.reset();
+
+        // no assumption needed - xp tracker is already initialized from CB stealing
+        // wait for actual XP drops: 1/2 on first, 2/2 on second, then switch back
+
+        script.pollFramesHuman(() -> false, script.random(600, 1000));
+
+        script.log("SWITCH", "Ore stall started - waiting for 2 XP drops then return...");
         return true;
     }
 

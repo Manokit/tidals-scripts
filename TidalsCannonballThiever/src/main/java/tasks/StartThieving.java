@@ -20,13 +20,27 @@ public class StartThieving extends Task {
     private static final RectangleArea THIEVING_AREA_TWO_STALL = new RectangleArea(1862, 3293, 1869, 3297, 0);
 
     private static boolean initialPositionDone = false;
+    private static boolean firstDropAssumed = false;
+    private static final int MAX_STEAL_ATTEMPTS = 3;
+
+    // cached config with timeout
+    private final WalkConfig minimapConfig;
 
     public static void resetStaticState() {
         initialPositionDone = false;
+        firstDropAssumed = false;
     }
-    
+
     public static void resetAfterBreak() {
+        // full reset for break/hop/afk - same as new cycle
         initialPositionDone = false;
+        firstDropAssumed = false;
+    }
+
+    // reset for new thieving cycle (after deposit, jail, etc.)
+    public static void resetForNewCycle() {
+        initialPositionDone = false;
+        firstDropAssumed = false;
     }
 
     private WorldPosition getThievingTile() {
@@ -39,6 +53,12 @@ public class StartThieving extends Task {
 
     public StartThieving(Script script) {
         super(script);
+        this.minimapConfig = new WalkConfig.Builder()
+                .disableWalkScreen(true)
+                .breakDistance(0)
+                .tileRandomisationRadius(0)
+                .timeout(10000)
+                .build();
     }
 
     @Override
@@ -57,15 +77,12 @@ public class StartThieving extends Task {
                 task = "Initial positioning";
                 script.log("THIEVE", "First run - walking to exact thieving tile via minimap...");
 
-                WalkConfig minimapOnly = new WalkConfig.Builder()
-                        .disableWalkScreen(true)
-                        .breakDistance(0)
-                        .tileRandomisationRadius(0)
-                        .build();
-
-                script.getWalker().walkTo(getThievingTile(), minimapOnly);
-                script.pollFramesUntil(() -> isAtExactThievingTile(), 5000);
+                boolean walked = script.getWalker().walkTo(getThievingTile(), minimapConfig);
                 script.pollFramesHuman(() -> false, script.random(200, 400));
+
+                if (!walked && !isAtExactThievingTile()) {
+                    script.log("THIEVE", "Walk failed, will retry");
+                }
                 return false;
             }
             
@@ -139,30 +156,44 @@ public class StartThieving extends Task {
             return false;
         }
 
-        boolean tapped = script.getFinger().tap(stallPoly);
+        // tap with action and retries for reliability
+        boolean tapped = false;
+        for (int attempt = 1; attempt <= MAX_STEAL_ATTEMPTS; attempt++) {
+            script.log("THIEVE", "Steal attempt " + attempt + "/" + MAX_STEAL_ATTEMPTS);
+            tapped = script.getFinger().tap(stallPoly, "steal");
+            if (tapped) break;
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+        }
 
         if (tapped) {
             script.log("THIEVE", "Clicked Cannonball stall!");
             currentlyThieving = true;
             lastXpGain.reset();
-            
+
             if (twoStallMode) {
-                if (!xpTracking.isInitialized()) {
-                    script.log("THIEVE", "XP tracking not initialized, initializing now...");
-                    xpTracking.initialize();
-                }
-                
                 double currentXp = xpTracking.getCurrentXp();
                 guardTracker.initXpTracking(currentXp);
                 guardTracker.resetCbCycle();
                 script.log("THIEVE", "Initialized XP cycle tracking (baseline: " + currentXp + ")");
             }
-            
+
+            // on first stall tap, assume first xp drop (tracker might miss it)
+            // if tracker also catches it, the flag prevents double-counting
+            if (!firstDropAssumed) {
+                if (script instanceof main.TidalsCannonballThiever) {
+                    ((main.TidalsCannonballThiever) script).checkInventoryForChangesManual();
+                }
+                if (twoStallMode) {
+                    guardTracker.assumeFirstCbDrop();
+                }
+                firstDropAssumed = true;
+            }
+
             script.pollFramesHuman(() -> false, script.random(200, 400));
             return true;
         }
 
-        script.log("THIEVE", "Failed to click stall, retrying...");
+        script.log("THIEVE", "Failed to click stall after " + MAX_STEAL_ATTEMPTS + " attempts");
         return false;
     }
 

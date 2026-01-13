@@ -1,5 +1,6 @@
 package tasks;
 
+import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Rectangle;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
@@ -62,38 +63,19 @@ public class Setup extends Task {
 
         checkZoomLevel();
 
-        // wait for xp tracker
-        script.log("SETUP", "Waiting for XP tracker to initialize...");
-        
-        boolean xpTrackerReady = script.pollFramesUntil(() -> {
-            if (xpTracking == null) return false;
-            return xpTracking.getThievingTracker() != null;
-        }, 5000);
-        
-        if (!xpTrackerReady) {
-            script.log("SETUP", "WARNING: XP tracker not ready after 5s, continuing anyway...");
-        } else {
-            script.pollFramesHuman(() -> false, script.random(300, 500));
-            
-            if (xpTracking.initialize()) {
-                script.log("SETUP", "XP tracking initialized successfully");
-            } else {
-                script.log("SETUP", "WARNING: Failed to initialize XP tracking");
-            }
-        }
-        
+        // xp tracker initializes on first xp gain, no need to wait
         script.log("SETUP", "Setup complete! Starting cannonball thieving...");
         setupDone = true;
-        
+
         if (script instanceof main.TidalsCannonballThiever) {
             ((main.TidalsCannonballThiever) script).initializeInventorySnapshot();
         }
 
         return true;
     }
-    
+
     private static final int TARGET_ZOOM_LEVEL = 3;
-    
+
     private void checkZoomLevel() {
         try {
             boolean opened = script.getWidgetManager().getSettings().open();
@@ -101,13 +83,13 @@ public class Setup extends Task {
                 script.log("SETUP", "Could not open settings tab to check zoom");
                 return;
             }
-            
+
             script.pollFramesHuman(() -> false, script.random(200, 400));
             UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
             if (zoomResult != null && zoomResult.isFound()) {
                 int currentZoom = zoomResult.get();
                 script.log("SETUP", "Current zoom level: " + currentZoom);
-                
+
                 if (currentZoom != TARGET_ZOOM_LEVEL) {
                     script.log("SETUP", "Setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
                     boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
@@ -123,10 +105,10 @@ public class Setup extends Task {
                 script.log("SETUP", "Could not read zoom level, attempting to set anyway...");
                 script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
             }
-            
+
             script.getWidgetManager().getSettings().close();
             script.pollFramesHuman(() -> false, script.random(200, 400));
-            
+
         } catch (Exception e) {
             script.log("SETUP", "Error checking zoom level: " + e.getMessage());
         }

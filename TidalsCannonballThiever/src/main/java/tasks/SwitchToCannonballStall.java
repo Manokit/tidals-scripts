@@ -52,7 +52,6 @@ public class SwitchToCannonballStall extends Task {
 
         guardTracker.resetCbCycle();
         guardTracker.resetGuardTracking();
-        guardTracker.resetOreThiefCount();
 
         if (!startCannonballThieving()) {
             script.log("SWITCH", "Failed to click cannonball stall, retrying...");
@@ -62,6 +61,10 @@ public class SwitchToCannonballStall extends Task {
         atOreStall = false;
         currentlyThieving = true;
         lastXpGain.reset();
+
+        // no assumption needed - xp tracker is already initialized from previous stealing
+        // wait for actual XP drops: 1/4, 2/4, 3/4, 4/4, then switch to ore
+
         script.log("SWITCH", "Now thieving cannonball stall!");
         return true;
     }

@@ -6,6 +6,8 @@
 
 The Walker API provides pathfinding and navigation functionality for moving around the game world. It includes the `Walker` interface for executing walks and the `WalkConfig.Builder` for customizing walking behavior.
 
+If we're doing a long walk (> 10-13 tiles, please look at Long_Walks.md, utilizing nudges and whileMoving to reduce long delays)
+
 ---
 
 # Walker Interface

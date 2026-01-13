@@ -141,6 +141,14 @@ public class DepositOres extends Task {
 
         atOreStall = false;
         doingDepositRun = false;
+
+        // reset thieving cycle state so first drop assumption works again
+        StartThieving.resetForNewCycle();
+        if (guardTracker != null) {
+            guardTracker.resetCbCycle();
+            guardTracker.resetGuardTracking();
+        }
+
         script.log("DEPOSIT", "Deposit run complete - back at cannonball stall!");
         return true;
     }

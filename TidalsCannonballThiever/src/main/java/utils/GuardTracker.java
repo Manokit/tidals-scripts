@@ -69,8 +69,7 @@ public class GuardTracker {
     private long lastGuardCheckTime = 0;
     private boolean guardMovingEast = false;
     
-    private int oreThiefCount = 0;
-    private static final int MAX_ORE_THIEVES = 2;
+    // oreThiefCount removed - now using XP-based tracking (oreXpDropCount) only
     
     private long arrivedAtOreStallTime = 0;
     private boolean gotOreStallXpDrop = false;
@@ -83,6 +82,11 @@ public class GuardTracker {
     private static final int CB_THIEVES_PER_CYCLE = 4;
     private static final int ORE_THIEVES_PER_CYCLE = 2;
     private double lastKnownXpForCycle = -1;
+
+    // flag to prevent double-counting when assume + tracker both fire (CB only)
+    private boolean firstCbDropAssumed = false;
+    private long cbAssumeTimestamp = 0;
+    private static final long ASSUME_WINDOW_MS = 1500; // only skip if within 1.5 sec of assume
     
     private long lastXpBasedSwitchTime = 0;
     private static final long XP_SWITCH_COOLDOWN_MS = 5000;
@@ -632,22 +636,7 @@ public class GuardTracker {
         return !guardMovingEast && lastGuardCenter != null;
     }
 
-    public void resetOreThiefCount() {
-        oreThiefCount = 0;
-    }
-
-    public void incrementOreThiefCount() {
-        oreThiefCount++;
-        script.log("GUARD", "Ore thieve #" + oreThiefCount + " of " + MAX_ORE_THIEVES);
-    }
-
-    public boolean canDoMoreOreThieves() {
-        return oreThiefCount < MAX_ORE_THIEVES;
-    }
-
-    public int getOreThiefCount() {
-        return oreThiefCount;
-    }
+    // old oreThiefCount methods removed - now using XP-based tracking only
 
     public void resetGuardTracking() {
         lastGuardCenter = null;
@@ -671,10 +660,23 @@ public class GuardTracker {
             script.log("CYCLE", "CB XP tracking auto-initialized with: " + currentXp);
             return false;
         }
-        
+
         if (currentXp > lastKnownXpForCycle) {
             double xpGained = currentXp - lastKnownXpForCycle;
             lastKnownXpForCycle = currentXp;
+
+            // if we assumed the first drop and tracker also caught it within the window, skip incrementing
+            if (firstCbDropAssumed && cbXpDropCount == 1) {
+                long elapsed = System.currentTimeMillis() - cbAssumeTimestamp;
+                firstCbDropAssumed = false;  // clear flag either way
+                if (elapsed < ASSUME_WINDOW_MS) {
+                    script.log("CYCLE", "CB steal confirmed (already assumed 1/" + CB_THIEVES_PER_CYCLE + ")");
+                    return true;
+                }
+                // outside window - this is a new steal, count it
+                script.log("CYCLE", "XP drop outside assume window (" + elapsed + "ms) - counting as new steal");
+            }
+
             cbXpDropCount++;
             script.log("CYCLE", "CB steal #" + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE + " (+" + String.format("%.0f", xpGained) + " XP)");
             return true;
@@ -687,11 +689,11 @@ public class GuardTracker {
             lastKnownXpForCycle = currentXp;
             return false;
         }
-        
+
         if (currentXp > lastKnownXpForCycle) {
             lastKnownXpForCycle = currentXp;
             oreXpDropCount++;
-            script.log("CYCLE", "Extra stall (Ore) " + oreXpDropCount + "/" + ORE_THIEVES_PER_CYCLE);
+            script.log("CYCLE", "Ore steal #" + oreXpDropCount + "/" + ORE_THIEVES_PER_CYCLE);
             return true;
         }
         return false;
@@ -707,9 +709,23 @@ public class GuardTracker {
     
     public void resetCbCycle() {
         cbXpDropCount = 0;
+        firstCbDropAssumed = false;
         script.log("CYCLE", "CB cycle reset - starting fresh");
     }
-    
+
+    // used when assuming first xp drop occurred (tracker might not catch it)
+    public void assumeFirstCbDrop() {
+        // only assume if tracker hasn't already caught it
+        if (cbXpDropCount > 0) {
+            script.log("CYCLE", "Skip assume - tracker already caught first CB steal (" + cbXpDropCount + "/" + CB_THIEVES_PER_CYCLE + ")");
+            return;
+        }
+        cbXpDropCount = 1;
+        firstCbDropAssumed = true;
+        cbAssumeTimestamp = System.currentTimeMillis();
+        script.log("CYCLE", "Assumed first CB steal (1/" + CB_THIEVES_PER_CYCLE + ")");
+    }
+
     public void resetOreCycle() {
         oreXpDropCount = 0;
         script.log("CYCLE", "Ore cycle reset - starting fresh");
