@@ -14,7 +14,12 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.UUID;
 
 @ScriptDefinition(
         name = "TidalsSecondaryCollector",
@@ -26,6 +31,16 @@ import java.util.*;
 public class TidalsSecondaryCollector extends Script {
 
     public static final String SCRIPT_VERSION = "1.0";
+    private static final String SCRIPT_NAME = "SecondaryCollector";
+    private static final String SESSION_ID = UUID.randomUUID().toString();
+    private static long lastStatsSent = 0;
+    private static final long STATS_INTERVAL_MS = 600_000L; // 10 minutes
+
+    // track last sent values for incremental reporting
+    private static int lastSentBloomCasts = 0;
+    private static int lastSentItemsBanked = 0;
+    private static int lastSentBankTrips = 0;
+    private static long lastSentRuntime = 0;
 
     // ui settings - hardcoded for now, can add ui later
     public static SecondaryType selectedSecondary = SecondaryType.MORT_MYRE_FUNGUS;
@@ -105,6 +120,27 @@ public class TidalsSecondaryCollector extends Script {
 
     @Override
     public int poll() {
+        // send stats periodically
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastStatsSent >= STATS_INTERVAL_MS) {
+            long elapsed = nowMs - startTime;
+
+            // calculate increments since last send
+            int bloomIncrement = bloomCasts - lastSentBloomCasts;
+            int bankedIncrement = itemsBanked - lastSentItemsBanked;
+            int tripsIncrement = bankTrips - lastSentBankTrips;
+            long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
+
+            sendStats(bloomIncrement, bankedIncrement, tripsIncrement, runtimeIncrement);
+
+            // update last sent values
+            lastSentBloomCasts = bloomCasts;
+            lastSentItemsBanked = itemsBanked;
+            lastSentBankTrips = bankTrips;
+            lastSentRuntime = elapsed / 1000;
+            lastStatsSent = nowMs;
+        }
+
         // wait for setup to complete
         if (!setupComplete) {
             return doSetup();
@@ -347,6 +383,49 @@ public class TidalsSecondaryCollector extends Script {
             return String.format("%dd %02d:%02d:%02d", days, hours, minutes, secs);
         } else {
             return String.format("%02d:%02d:%02d", hours, minutes, secs);
+        }
+    }
+
+    private void sendStats(int bloomIncrement, int bankedIncrement, int tripsIncrement, long runtimeSecs) {
+        try {
+            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
+                return;
+            }
+
+            // skip if nothing to report
+            if (bloomIncrement == 0 && bankedIncrement == 0 && tripsIncrement == 0 && runtimeSecs == 0) {
+                return;
+            }
+
+            String json = String.format(
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":0,\"runtime\":%d,\"bloomCasts\":%d,\"itemsBanked\":%d,\"bankTrips\":%d}",
+                    SCRIPT_NAME,
+                    SESSION_ID,
+                    runtimeSecs,
+                    bloomIncrement,
+                    bankedIncrement,
+                    tripsIncrement
+            );
+
+            URL url = new URL(obf.Secrets.STATS_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                log("STATS", "Stats reported: blooms=" + bloomIncrement + ", banked=" + bankedIncrement + ", trips=" + tripsIncrement + ", runtime=" + runtimeSecs + "s");
+            }
+        } catch (Exception e) {
+            log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }
 }

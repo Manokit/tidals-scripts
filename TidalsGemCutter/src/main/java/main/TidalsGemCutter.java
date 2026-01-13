@@ -40,11 +40,17 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class TidalsGemCutter extends Script {
-    public static final String scriptVersion = "1.2";
+    public static final String scriptVersion = "1.3";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
     private static final long STATS_INTERVAL_MS = 600_000L;
+
+    // track last sent values for incremental reporting
+    private static int lastSentXp = 0;
+    private static int lastSentCraftCount = 0;
+    private static long lastSentRuntime = 0;
+
     public static boolean setupDone = false;
     public static boolean hasReqs;
     public static int selectedUncutGemID;  // Set from UI
@@ -265,7 +271,18 @@ public class TidalsGemCutter extends Script {
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastStatsSent >= STATS_INTERVAL_MS) {
             long elapsed = nowMs - startTime;
-            sendStats(0, xpGained, elapsed);
+
+            // calculate increments since last send
+            int xpIncrement = xpGained - lastSentXp;
+            int craftIncrement = craftCount - lastSentCraftCount;
+            long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
+
+            sendStats(xpIncrement, craftIncrement, runtimeIncrement);
+
+            // update last sent values
+            lastSentXp = xpGained;
+            lastSentCraftCount = craftCount;
+            lastSentRuntime = elapsed / 1000;
             lastStatsSent = nowMs;
         }
 
@@ -658,26 +675,33 @@ public class TidalsGemCutter extends Script {
         }
     }
 
-    private void sendStats(long gpEarned, long xpGained, long runtimeMs) {
+    private void sendStats(int xpIncrement, int craftIncrement, long runtimeSecs) {
         try {
-            String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":%d,\"xp\":%d,\"runtime\":%d}",
-                    scriptName,
-                    sessionId,
-                    gpEarned,
-                    xpGained,
-                    runtimeMs / 1000
-            );
-
-            // Only send if Secrets are configured
+            // only send if Secrets are configured
             if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
                 return;
             }
+
+            // skip if nothing to report
+            if (xpIncrement == 0 && craftIncrement == 0 && runtimeSecs == 0) {
+                return;
+            }
+
+            String json = String.format(
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"gemsCut\":%d}",
+                    scriptName,
+                    sessionId,
+                    xpIncrement,
+                    runtimeSecs,
+                    craftIncrement
+            );
 
             URL url = new URL(obf.Secrets.STATS_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
 
@@ -687,12 +711,12 @@ public class TidalsGemCutter extends Script {
 
             int code = conn.getResponseCode();
             if (code == 200) {
-                log("STATS", "Stats reported: xp=" + xpGained + ", runtime=" + (runtimeMs/1000) + "s");
+                log("STATS", "Stats reported: xp=" + xpIncrement + ", gems=" + craftIncrement + ", runtime=" + runtimeSecs + "s");
             } else {
                 log("STATS", "Failed to report stats, HTTP " + code);
             }
         } catch (Exception e) {
-            // Silently ignore if stats URL not configured
+            log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }
 }

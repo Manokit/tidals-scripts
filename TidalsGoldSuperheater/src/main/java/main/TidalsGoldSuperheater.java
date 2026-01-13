@@ -39,11 +39,17 @@ import java.util.function.Predicate;
         author = "Tidaleus"
 )
 public class TidalsGoldSuperheater extends Script {
-    public static final String scriptVersion = "1.3";
+    public static final String scriptVersion = "1.4";
     private final String scriptName = "GoldSuperheater";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
-    private static final long STATS_INTERVAL_MS = 600_000L;
+    private static final long STATS_INTERVAL_MS = 500_000L; //500000ms = 500 seconds = 8.33 minutes
+
+    // track last sent values for incremental reporting
+    private static int lastSentMagicXp = 0;
+    private static int lastSentSmithingXp = 0;
+    private static int lastSentBars = 0;
+    private static long lastSentRuntime = 0;
     
     public static boolean setupDone = false;
     public static boolean hasReqs = false;
@@ -200,7 +206,20 @@ public class TidalsGoldSuperheater extends Script {
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastStatsSent >= STATS_INTERVAL_MS) {
             long elapsed = nowMs - startTime;
-            sendStats(0, magicXpGained + smithingXpGained, elapsed);
+
+            // calculate increments since last send
+            int magicXpIncrement = magicXpGained - lastSentMagicXp;
+            int smithingXpIncrement = smithingXpGained - lastSentSmithingXp;
+            int barsIncrement = barsCreated - lastSentBars;
+            long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
+
+            sendStats(magicXpIncrement, smithingXpIncrement, barsIncrement, runtimeIncrement);
+
+            // update last sent values
+            lastSentMagicXp = magicXpGained;
+            lastSentSmithingXp = smithingXpGained;
+            lastSentBars = barsCreated;
+            lastSentRuntime = elapsed / 1000;
             lastStatsSent = nowMs;
         }
 
@@ -583,26 +602,40 @@ public class TidalsGoldSuperheater extends Script {
         }
     }
 
-    private void sendStats(long gpEarned, long xpGained, long runtimeMs) {
+    private void sendStats(int magicXp, int smithingXp, int bars, long runtimeSecs) {
         try {
-            String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":%d,\"xp\":%d,\"runtime\":%d}",
-                    scriptName,
-                    sessionId,
-                    gpEarned,
-                    xpGained,
-                    runtimeMs / 1000
-            );
-
             // Only send if Secrets are configured
             if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
+                log("STATS", "STATS_URL not configured, skipping");
                 return;
             }
+
+            // skip if nothing to report
+            if (magicXp == 0 && smithingXp == 0 && bars == 0 && runtimeSecs == 0) {
+                return;
+            }
+
+            log("STATS", "Sending stats to: " + obf.Secrets.STATS_URL);
+
+            // send magic + smithing as combined xp, but also include separate fields in metadata
+            int totalXp = magicXp + smithingXp;
+            String json = String.format(
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"barsCreated\":%d,\"magicXp\":%d,\"smithingXp\":%d}",
+                    scriptName,
+                    sessionId,
+                    totalXp,
+                    runtimeSecs,
+                    bars,
+                    magicXp,
+                    smithingXp
+            );
 
             URL url = new URL(obf.Secrets.STATS_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
 
@@ -612,12 +645,12 @@ public class TidalsGoldSuperheater extends Script {
 
             int code = conn.getResponseCode();
             if (code == 200) {
-                log("STATS", "Stats reported: xp=" + xpGained + ", runtime=" + (runtimeMs/1000) + "s");
+                log("STATS", "Stats reported: magic=" + magicXp + ", smith=" + smithingXp + ", bars=" + bars + ", runtime=" + runtimeSecs + "s");
             } else {
                 log("STATS", "Failed to report stats, HTTP " + code);
             }
         } catch (Exception e) {
-            // Silently ignore if stats URL not configured
+            log("STATS", "Error sending stats: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
 }

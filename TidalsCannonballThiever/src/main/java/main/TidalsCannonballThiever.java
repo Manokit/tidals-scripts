@@ -19,6 +19,10 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @ScriptDefinition(
         name = "TidalsCannonballThiever",
@@ -35,7 +40,17 @@ import java.util.Set;
         author = "Tidalus"
 )
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.2";
+    public static final String scriptVersion = "1.3";
+    private static final String SCRIPT_NAME = "CannonballThiever";
+    private static final String SESSION_ID = UUID.randomUUID().toString();
+    private static long lastStatsSent = 0;
+    private static final long STATS_INTERVAL_MS = 600_000L; // 10 minutes
+
+    // track last sent values for incremental reporting
+    private static int lastSentXp = 0;
+    private static int lastSentCannonballs = 0;
+    private static int lastSentOres = 0;
+    private static long lastSentRuntime = 0;
 
     public static int screenWidth = 0;
     public static int screenHeight = 0;
@@ -176,6 +191,29 @@ public class TidalsCannonballThiever extends Script {
 
     @Override
     public int poll() {
+        // send stats periodically
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastStatsSent >= STATS_INTERVAL_MS) {
+            long elapsed = nowMs - startTime;
+            int xpGained = xpTracking != null && xpTracking.getThievingTracker() != null
+                    ? (int) xpTracking.getThievingTracker().getXpGained() : 0;
+
+            // calculate increments since last send
+            int xpIncrement = xpGained - lastSentXp;
+            int cannonballIncrement = cannonballsStolen - lastSentCannonballs;
+            int oreIncrement = oresStolen - lastSentOres;
+            long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
+
+            sendStats(xpIncrement, cannonballIncrement, oreIncrement, runtimeIncrement);
+
+            // update last sent values
+            lastSentXp = xpGained;
+            lastSentCannonballs = cannonballsStolen;
+            lastSentOres = oresStolen;
+            lastSentRuntime = elapsed / 1000;
+            lastStatsSent = nowMs;
+        }
+
         for (Task task : tasks) {
             if (task.activate()) {
                 task.execute();
@@ -573,4 +611,46 @@ public class TidalsCannonballThiever extends Script {
         }
     }
 
+    private void sendStats(int xpIncrement, int cannonballIncrement, int oreIncrement, long runtimeSecs) {
+        try {
+            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
+                return;
+            }
+
+            // skip if nothing to report
+            if (xpIncrement == 0 && cannonballIncrement == 0 && oreIncrement == 0 && runtimeSecs == 0) {
+                return;
+            }
+
+            String json = String.format(
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"cannonballsStolen\":%d,\"oresStolen\":%d}",
+                    SCRIPT_NAME,
+                    SESSION_ID,
+                    xpIncrement,
+                    runtimeSecs,
+                    cannonballIncrement,
+                    oreIncrement
+            );
+
+            URL url = new URL(obf.Secrets.STATS_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                log("STATS", "Stats reported: xp=" + xpIncrement + ", cannonballs=" + cannonballIncrement + ", ores=" + oreIncrement + ", runtime=" + runtimeSecs + "s");
+            }
+        } catch (Exception e) {
+            log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
+        }
+    }
 }
