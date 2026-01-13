@@ -63,7 +63,9 @@ public class Setup extends Task {
 
         checkZoomLevel();
 
-        // xp tracker initializes on first xp gain, no need to wait
+        // initialize custom xp tracker with current level
+        xpTracking.initCustomTracker(thievingLevel);
+
         script.log("SETUP", "Setup complete! Starting cannonball thieving...");
         setupDone = true;
 

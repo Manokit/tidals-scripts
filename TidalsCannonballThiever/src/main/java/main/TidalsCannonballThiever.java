@@ -34,7 +34,7 @@ import java.util.UUID;
 
 @ScriptDefinition(name = "TidalsCannonballThiever", description = "Thieves cannonballs from Port Roberts stalls while avoiding guards", skillCategory = SkillCategory.THIEVING, version = 1.0, author = "Tidalus")
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.4";
+    public static final String scriptVersion = "1.5";
     private static final String SCRIPT_NAME = "CannonballThiever";
     private static final String SESSION_ID = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -254,9 +254,15 @@ public class TidalsCannonballThiever extends Script {
             }
         }
 
-        boolean xpGained = xpTracking.checkXPAndReturnIfGained();
+        if (!currentlyThieving || !setupDone || isAtSafetyTile())
+            return;
 
-        if (twoStallMode && setupDone && guardTracker != null && currentlyThieving) {
+        // check inventory for changes every frame when thieving
+        // this triggers addThievingXp() when items are gained
+        checkInventoryForChanges();
+
+        // cycle tracking in two-stall mode
+        if (twoStallMode && guardTracker != null) {
             double currentXp = xpTracking.getCurrentXp();
             if (atOreStall) {
                 guardTracker.checkOreXpDrop(currentXp);
@@ -265,13 +271,6 @@ public class TidalsCannonballThiever extends Script {
                 guardTracker.checkCbXpDrop(currentXp);
                 guardTracker.shouldSwitchToOre();
             }
-        }
-
-        if (!currentlyThieving || !setupDone || isAtSafetyTile())
-            return;
-
-        if (xpGained) {
-            checkInventoryForChanges();
         }
     }
 
@@ -306,6 +305,10 @@ public class TidalsCannonballThiever extends Script {
         return allIds;
     }
 
+    // thieving xp per steal at port roberts stalls
+    private static final double CANNONBALL_STALL_XP = 223.0;
+    private static final double ORE_STALL_XP = 191.0;
+
     private void checkInventoryForChanges() {
         try {
             Set<Integer> allIds = getAllTrackedItemIds();
@@ -313,6 +316,9 @@ public class TidalsCannonballThiever extends Script {
 
             if (inv == null)
                 return;
+
+            boolean cannonballGained = false;
+            boolean oreGained = false;
 
             for (Map.Entry<String, Integer> entry : CANNONBALL_TYPES.entrySet()) {
                 String type = entry.getKey();
@@ -326,6 +332,7 @@ public class TidalsCannonballThiever extends Script {
                     cannonballCounts.merge(type, gained, Integer::sum);
                     cannonballsStolen += gained;
                     log("LOOT", "+" + gained + " " + type + " (total: " + cannonballCounts.get(type) + ")");
+                    cannonballGained = true;
                 }
                 lastInventorySnapshot.put(itemId, currentCount);
             }
@@ -342,8 +349,19 @@ public class TidalsCannonballThiever extends Script {
                     oreCounts.merge(type, gained, Integer::sum);
                     oresStolen += gained;
                     log("LOOT", "+" + gained + " " + type + " (total: " + oreCounts.get(type) + ")");
+                    oreGained = true;
                 }
                 lastInventorySnapshot.put(itemId, currentCount);
+            }
+
+            // track XP based on which stall was stolen from
+            if (xpTracking != null) {
+                if (cannonballGained) {
+                    xpTracking.addThievingXp(CANNONBALL_STALL_XP);
+                }
+                if (oreGained) {
+                    xpTracking.addThievingXp(ORE_STALL_XP);
+                }
             }
 
         } catch (Exception e) {

@@ -687,6 +687,13 @@ public class GuardTracker {
             return false;
         }
 
+        // handle tracker reset on level-up: if XP suddenly dropped, re-baseline
+        if (currentXp < lastKnownXpForCycle) {
+            script.log("CYCLE", "Tracker reset detected (level up?) - re-baselining from " + lastKnownXpForCycle + " to " + currentXp);
+            lastKnownXpForCycle = currentXp;
+            return false;
+        }
+
         if (currentXp > lastKnownXpForCycle) {
             double xpGained = currentXp - lastKnownXpForCycle;
             lastKnownXpForCycle = currentXp;
@@ -712,6 +719,13 @@ public class GuardTracker {
     
     public boolean checkOreXpDrop(double currentXp) {
         if (lastKnownXpForCycle < 0) {
+            lastKnownXpForCycle = currentXp;
+            return false;
+        }
+
+        // handle tracker reset on level-up: if XP suddenly dropped, re-baseline
+        if (currentXp < lastKnownXpForCycle) {
+            script.log("CYCLE", "Tracker reset detected (level up?) - re-baselining from " + lastKnownXpForCycle + " to " + currentXp);
             lastKnownXpForCycle = currentXp;
             return false;
         }

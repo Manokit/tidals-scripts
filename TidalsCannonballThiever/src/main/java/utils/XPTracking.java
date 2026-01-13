@@ -14,35 +14,45 @@ public class XPTracking {
     private double lastKnownXp = -1.0;
     private boolean initialized = false;
 
+    // custom thieving tracker - OSMB's core.getXPTrackers() returns null
+    private XPTracker customThievingTracker;
+    private double customXpGained = 0.0;
+
     public XPTracking(ScriptCore core) {
         this.core = core;
     }
-    
-    public boolean initialize() {
-        XPTracker tracker = getThievingTracker();
-        if (tracker == null) {
-            return false;
-        }
-        
-        double currentXp = tracker.getXpGained();
-        lastKnownXp = currentXp;
+
+    // initialize custom tracker with starting level
+    public void initCustomTracker(int startingLevel) {
+        XPTracker temp = new XPTracker(core, 0);
+        int startingXp = temp.getExperienceForLevel(startingLevel);
+        customThievingTracker = new XPTracker(core, startingXp);
+        customXpGained = 0.0;
         initialized = true;
-        
         if (core instanceof com.osmb.api.script.Script) {
-            ((com.osmb.api.script.Script) core).log("XP", "XP tracking initialized. Current XP gained: " + currentXp);
+            ((com.osmb.api.script.Script) core).log("XP", "Custom tracker initialized for level " + startingLevel + " (startXp=" + startingXp + ")");
         }
-        
-        return true;
     }
-    
+
+    // increment xp manually when steal is detected
+    public void addThievingXp(double xp) {
+        customXpGained += xp;
+        if (customThievingTracker != null) {
+            customThievingTracker.incrementXp(xp);
+        }
+        lastXpGain.reset();
+        if (core instanceof com.osmb.api.script.Script) {
+            ((com.osmb.api.script.Script) core).log("XP", "Added " + xp + " XP (total gained: " + customXpGained + ")");
+        }
+    }
+
     public boolean isInitialized() {
         return initialized;
     }
-    
+
     public double getCurrentXp() {
-        XPTracker tracker = getThievingTracker();
-        if (tracker == null) return 0.0;
-        return tracker.getXpGained();
+        // return custom tracked XP
+        return customXpGained;
     }
 
     private XPTracker getTracker(SkillType skill) {
@@ -52,13 +62,16 @@ public class XPTracking {
     }
 
     public XPTracker getThievingTracker() {
+        // prefer custom tracker, fall back to OSMB tracker
+        if (customThievingTracker != null) {
+            return customThievingTracker;
+        }
         return getTracker(SkillType.THIEVING);
     }
 
     public double getThievingXpGained() {
-        XPTracker tracker = getThievingTracker();
-        if (tracker == null) return 0.0;
-        return tracker.getXpGained();
+        // return custom tracked XP for cycle detection
+        return customXpGained;
     }
 
     public int getThievingXpPerHour() {
@@ -80,26 +93,12 @@ public class XPTracking {
     }
 
     public boolean checkXPAndReturnIfGained() {
-        XPTracker tracker = getThievingTracker();
-        if (tracker == null) return false;
-
-        double currentXp = tracker.getXpGained();
-        
-        if (!initialized || lastKnownXp < 0) {
-            lastKnownXp = currentXp;
-            initialized = true;
-            return false;
-        }
-
-        if (currentXp > lastKnownXp) {
-            lastXpGain.reset();
-            lastKnownXp = currentXp;
-            return true;
-        }
+        // with custom tracking, we use addThievingXp() to track XP gains
+        // this method is now just for compatibility
         return false;
     }
-    
+
     public void checkXP() {
-        checkXPAndReturnIfGained();
+        // no-op with custom tracking
     }
 }
