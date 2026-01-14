@@ -23,10 +23,11 @@ Reliable search — finding items by name must work 100% of the time, regardless
 - ✓ Fill remaining inventory slots with searched item — v1.0
 - ✓ Return false/null when item not found (caller handles) — v1.0
 - ✓ Integrate with existing BankingUtils patterns — v1.0
+- ✓ Visual sprite-based search button activation — v1.1
 
 ### Active
 
-(None — v1.0 shipped)
+(None — v1.1 shipped)
 
 ### Out of Scope
 
@@ -64,8 +65,9 @@ Reliable search — finding items by name must work 100% of the time, regardless
 | Search box first, scroll fallback | Search is fastest for known items; scroll handles edge cases | ✓ Good |
 | Return null/false on not found | Let calling scripts decide behavior; don't force exception handling | ✓ Good |
 | Withdrawals only in v1 | Deposits already work fine with existing Bank methods; focus on the pain point | ✓ Good |
-| Keyboard shortcut over button click | No direct API for clicking BankButtonType buttons; keyboard approach is cleaner | ✓ Good |
-| Backspace key for activation | Safer than letter keys as it clears any partial search without adding characters | ✓ Good |
+| Keyboard shortcut over button click | No direct API for clicking BankButtonType buttons; keyboard approach is cleaner | ⚠️ Revisit — didn't work |
+| Backspace key for activation | Safer than letter keys as it clears any partial search without adding characters | ⚠️ Revisit — didn't activate search |
+| Sprite-based SEARCH button tap | Keyboard shortcuts don't activate search; visual tap using sprite ID 1043 works reliably | ✓ Good — v1.1 |
 | PhysicalKey.BACK over ESCAPE | OSMB PhysicalKey enum does not have ESCAPE; BACK is mobile equivalent | ✓ Good |
 | Sprite-based scroll detection | PixelAnalyzer.findSubImages() doesn't exist; sprite + ImageAnalyzer proven reliable | ✓ Good |
 | Continue batch on partial failure | Batch operations complete even if some items fail to withdraw | ✓ Good |
@@ -74,16 +76,16 @@ Reliable search — finding items by name must work 100% of the time, regardless
 ## Context
 
 **Current state:**
-- v1.0 shipped: BankSearchUtils complete with 1,445 LOC Java
+- v1.1 shipped: BankSearchUtils complete with 1,171 LOC Java
 - Tech stack: OSMB API (Bank, Keyboard, SpriteManager, ImageAnalyzer)
 - Utility location: `utilities/src/main/java/utilities/BankSearchUtils.java`
 - Supporting classes: BankScrollUtils, WithdrawalRequest, BatchWithdrawalResult
 
 **API methods delivered:**
-- openSearch(), typeSearch(), clearSearch(), isSearchActive()
+- openSearch() (now sprite-based), typeSearch(), clearSearch(), isSearchActive()
 - searchAndWithdraw(), searchAndFillInventory()
 - withdrawBatch() with List and varargs overloads
 - BankScrollUtils: scrollDown/Up, canScroll, scrollToTop/Bottom
 
 ---
-*Last updated: 2026-01-14 after v1.0 milestone*
+*Last updated: 2026-01-14 after v1.1 milestone*

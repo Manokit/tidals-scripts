@@ -5,21 +5,25 @@
 See: .planning/PROJECT.md (updated 2026-01-14)
 
 **Core value:** Reliable search — finding items by name must work 100% of the time
-**Current focus:** v1.1 Fix Search Opening
+**Current focus:** Complete (v1.1 shipped)
 
 ## Current Position
 
-Phase: 6 of 6 (Tap-Based Search Activation)
-Plan: 1 of 1 in current phase
-Status: Phase complete, milestone complete
-Last activity: 2026-01-14 — Completed 06-01-PLAN.md
+Phase: 6 of 6 (Complete)
+Plan: All plans complete
+Status: v1.1 shipped
+Last activity: 2026-01-14 — v1.1 milestone complete
 
 Progress: ██████████ 100% (8/8 plans)
 
-## v1.1 Context
+## v1.1 Summary
 
-**Problem:** openSearch() uses BACKSPACE keyboard shortcut which doesn't activate bank search
-**Fix:** Visual tap on SEARCH button using sprite-based detection (same pattern as BankScrollUtils)
+**Problem:** openSearch() used BACKSPACE keyboard shortcut which doesn't activate bank search
+**Fix:** Visual tap on SEARCH button using sprite-based detection (sprite ID 1043)
+
+**Shipped:**
+- Phase 6: Tap-Based Search Activation (1 plan)
+- openSearch() now uses proven sprite-based tap pattern
 
 ## v1.0 Summary
 
@@ -31,11 +35,10 @@ Progress: ██████████ 100% (8/8 plans)
 
 **Stats:**
 - 5 phases, 7 plans completed
-- 1,445 lines of Java
-- 0.70 hours total execution time
+- 1,171 lines of Java (combined)
 
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: Completed 06-01-PLAN.md (milestone v1.1 complete)
+Stopped at: v1.1 milestone complete
 Resume file: None

@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ [v1.0 MVP](milestones/v1.0-ROADMAP.md) (Phases 1-5) — SHIPPED 2026-01-14
-- ✅ **v1.1 Fix Search Opening** — Phase 6 — SHIPPED 2026-01-14
+- ✅ [v1.1 Fix Search Opening](milestones/v1.1-ROADMAP.md) (Phase 6) — SHIPPED 2026-01-14
 
 ## Overview
 
@@ -15,24 +15,14 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, and fill-to
 
 ---
 
-### ✅ v1.1 Fix Search Opening (Complete)
+<details>
+<summary>✅ v1.1 Fix Search Opening (Phase 6) — SHIPPED 2026-01-14</summary>
 
-**Milestone Goal:** Fix openSearch() to actually work by tapping the SEARCH button visually instead of using non-functional keyboard shortcuts.
+- [x] Phase 6: Tap-Based Search Activation (1/1 plan) — completed 2026-01-14
 
-#### Phase 6: Tap-Based Search Activation
+See [v1.1 archive](milestones/v1.1-ROADMAP.md) for full details.
 
-**Goal**: Replace keyboard shortcut with visual tap on SEARCH button
-**Depends on**: v1.0 complete
-**Research**: Unlikely (follows established sprite-based patterns from BankScrollUtils)
-**Plans**: 1 plan
-
-The current openSearch() uses BACKSPACE key which doesn't activate bank search. Fix by:
-1. Finding SEARCH button sprite/position (like BankScrollUtils finds scroll buttons)
-2. Tapping with Finger
-3. Verifying search activated
-
-Plans:
-- [x] 06-01: Sprite-based SEARCH button tap — completed 2026-01-14
+</details>
 
 <details>
 <summary>✅ v1.0 MVP (Phases 1-5) — SHIPPED 2026-01-14</summary>
