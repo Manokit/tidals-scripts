@@ -589,7 +589,7 @@ public class BankSearchUtils {
      * Searches for an item by name string and withdraws the first matching result.
      *
      * This method bypasses item ID lookup and searches by typing the name directly.
-     * After filtering, it scrolls through the filtered results to find and withdraw the item.
+     * After filtering, it uses tapGetResponse to verify the item matches before withdrawing.
      *
      * Use this when getItemManager().getItemName() is not working or when you
      * only know the item name, not the ID.
@@ -633,53 +633,87 @@ public class BankSearchUtils {
             action = "Withdraw-" + amount;
         }
 
-        // get bank bounds for tap location
-        com.osmb.api.shape.Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();
+        // scroll to top first to ensure we search from the beginning
+        BankScrollUtils.scrollToTopWithCheck(script, 20);
+        script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        // get bank bounds for calculating item slot positions
+        Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();
         if (bankBounds == null) {
             script.log(BankSearchUtils.class, "could not get bank bounds");
             clearSearch(script);
             return false;
         }
 
-        // scroll to top first to ensure we search from the beginning
-        script.log(BankSearchUtils.class, "scrolling to top of filtered results");
-        BankScrollUtils.scrollToTopWithCheck(script, 20);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        // search with verification via tapGetResponse
+        for (int scrollCount = 0; scrollCount <= MAX_SCROLL_ITERATIONS; scrollCount++) {
+            // find matching item using menu verification
+            Rectangle foundBounds = findMatchingItemByName(script, itemName);
 
-        // try to withdraw with scrolling
-        int maxScrollAttempts = 30;
-        for (int scrollCount = 0; scrollCount <= maxScrollAttempts; scrollCount++) {
-            // tap on the top-left item area (offset from bank bounds)
-            // bank item grid starts roughly 70px from left, 90px from top
-            int tapX = bankBounds.x + 90;
-            int tapY = bankBounds.y + 110;
-
-            script.log(BankSearchUtils.class, "attempt " + (scrollCount + 1) + " - tapping at " + tapX + ", " + tapY + " with action: " + action);
-
-            boolean success = script.getFinger().tap(tapX, tapY, new String[]{action});
-
-            if (success) {
-                script.log(BankSearchUtils.class, "withdraw tap succeeded for: " + itemName);
-                script.pollFramesHuman(() -> false, script.random(200, 400));
-                clearSearch(script);
-                return true;
+            if (foundBounds != null) {
+                // found verified item - withdraw
+                script.log(BankSearchUtils.class, "withdrawing verified item with action: " + action);
+                boolean success = script.getFinger().tap(foundBounds, new String[]{action});
+                if (success) {
+                    script.pollFramesHuman(() -> false, script.random(200, 400));
+                    clearSearch(script);
+                    return true;
+                }
+                // tap failed but item was found - try again
+                script.log(BankSearchUtils.class, "withdraw tap failed, retrying");
             }
 
-            // tap failed - check if we can scroll down for more items
-            if (!BankScrollUtils.canScrollDown(script)) {
-                script.log(BankSearchUtils.class, "reached bottom of filtered results - item not found: " + itemName);
+            // check if at bottom
+            if (BankScrollUtils.isAtBottom(script)) {
+                script.log(BankSearchUtils.class, "reached bottom of filtered results");
                 break;
             }
 
-            // scroll down and try again
-            script.log(BankSearchUtils.class, "item not visible, scrolling down");
+            // scroll down
             BankScrollUtils.scrollDown(script);
-            script.pollFramesHuman(() -> false, script.random(300, 500));
+            script.pollFramesHuman(() -> false, script.random(200, 400));
         }
 
-        script.log(BankSearchUtils.class, "withdraw failed for: " + itemName + " after scrolling through all results");
+        script.log(BankSearchUtils.class, "item not found after full scroll: " + itemName);
         clearSearch(script);
         return false;
+    }
+
+    /**
+     * Finds an item in visible bank by name match using tapGetResponse.
+     *
+     * Uses the first bank slot position (where bank search consolidates results)
+     * and verifies via menu that the entity name matches the expected item.
+     *
+     * @param script the script instance
+     * @param itemName the item name to search for
+     * @return Rectangle bounds if item found and verified, null otherwise
+     */
+    private static Rectangle findMatchingItemByName(Script script, String itemName) {
+        Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();
+        if (bankBounds == null) {
+            return null;
+        }
+
+        // first item slot position (bank search consolidates results to top-left)
+        int x = bankBounds.x + 90;
+        int y = bankBounds.y + 110;
+        Rectangle firstSlot = new Rectangle(x - 15, y - 15, 36, 32);
+
+        // verify via menu
+        MenuEntry entry = script.getFinger().tapGetResponse(true, firstSlot);
+        if (entry == null) {
+            return null;
+        }
+
+        String entityName = entry.getEntityName();
+        if (entityName != null && entityName.toLowerCase().contains(itemName.toLowerCase())) {
+            script.log(BankSearchUtils.class, "verified item at first slot: " + entityName);
+            return firstSlot;
+        }
+
+        script.log(BankSearchUtils.class, "first slot does not match: expected [" + itemName + "] got [" + entityName + "]");
+        return null;
     }
 
     /**
