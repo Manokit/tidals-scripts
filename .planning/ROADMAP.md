@@ -31,15 +31,15 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, fill-to-cap
 Plans:
 - [x] 10-01: Convert sprite taps to Rectangle bounds — completed 2026-01-14
 
-#### Phase 11: Humanized Typing
+#### Phase 11: Humanized Typing - COMPLETE
 
 **Goal**: Add random delays between characters when typing search queries
 **Depends on**: Phase 10
 **Research**: Unlikely (internal patterns)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 11-01: TBD
+- [x] 11-01: Add per-character typing delays — completed 2026-01-14
 
 #### Phase 12: Integration Testing
 
@@ -110,7 +110,7 @@ See [v1.0 archive](milestones/v1.0-ROADMAP.md) for full details.
 | 8. Item ID Screen Search | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 9. Robust Withdrawal Flow | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 10. Randomized Sprite Taps | v1.3 | 1/1 | Complete | 2026-01-14 |
-| 11. Humanized Typing | v1.3 | 0/? | Not started | - |
+| 11. Humanized Typing | v1.3 | 1/1 | Complete | 2026-01-14 |
 | 12. Integration Testing | v1.3 | 0/? | Not started | - |
 | 13. Utility Rebuild | v1.3 | 0/? | Not started | - |
 

@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-14)
 
 ## Current Position
 
-Phase: 10 of 13 (Randomized Sprite Taps)
+Phase: 11 of 13 (Humanized Typing)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-14 — Completed 10-01-PLAN.md
+Last activity: 2026-01-14 — Completed 11-01-PLAN.md
 
-Progress: █░░░░░░░░░ 8%
+Progress: ██░░░░░░░░ 16%
 
 ## Project Summary
 
@@ -25,19 +25,19 @@ Progress: █░░░░░░░░░ 8%
 - Verified withdrawal flow with tapGetResponse
 
 **v1.3 scope:**
-- Randomize tap coordinates within sprite bounds (search, scroll up, scroll down)
-- Add variable delays between characters when typing
+- Randomize tap coordinates within sprite bounds (search, scroll up, scroll down) - DONE
+- Add variable delays between characters when typing - DONE
 - Test with TidalsWithdrawer to verify humanization
 
 **Stats:**
 - 3 milestones shipped (v1.0, v1.1, v1.2)
-- 9 phases, 11 plans completed
-- 1,446 lines of Java
+- 10 phases, 12 plans completed
+- 1,460 lines of Java
 
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: Completed 10-01-PLAN.md (Phase 10 complete)
+Stopped at: Completed 11-01-PLAN.md (Phase 11 complete)
 Resume file: None
 
 ### Roadmap Evolution
