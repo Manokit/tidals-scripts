@@ -11,6 +11,9 @@ import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.visual.image.Image;
 import com.osmb.api.visual.image.ImageSearchResult;
 import com.osmb.api.visual.image.SearchableImage;
+import com.osmb.api.item.ItemSearchResult;
+import com.osmb.api.item.SearchableItem;
+import com.osmb.api.shape.Rectangle;
 
 import java.awt.Point;
 import java.util.Arrays;
@@ -585,7 +588,7 @@ public class BankSearchUtils {
      * Searches for an item by name string and withdraws the first matching result.
      *
      * This method bypasses item ID lookup and searches by typing the name directly.
-     * After filtering, it uses ItemManager.findLocation() to find and tap the first visible item.
+     * After filtering, it scrolls through the filtered results to find and withdraw the item.
      *
      * Use this when getItemManager().getItemName() is not working or when you
      * only know the item name, not the ID.
@@ -619,18 +622,6 @@ public class BankSearchUtils {
         // wait for bank to filter results
         script.pollFramesHuman(() -> false, script.random(400, 600));
 
-        // get all visible items in the filtered bank
-        ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Collections.emptySet());
-        if (bankItems == null) {
-            script.log(BankSearchUtils.class, "failed to get bank items after search");
-            clearSearch(script);
-            return false;
-        }
-
-        // check if any items are visible (getFreeSlots == total slots means empty)
-        int freeSlots = bankItems.getFreeSlots();
-        script.log(BankSearchUtils.class, "bank has " + freeSlots + " free slots after filtering");
-
         // determine withdraw action based on amount
         String action;
         if (amount == 0) {
@@ -641,8 +632,7 @@ public class BankSearchUtils {
             action = "Withdraw-" + amount;
         }
 
-        // tap on the center of the bank widget area where items appear
-        // this will hit whatever item shows after filtering
+        // get bank bounds for tap location
         com.osmb.api.shape.Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();
         if (bankBounds == null) {
             script.log(BankSearchUtils.class, "could not get bank bounds");
@@ -650,26 +640,45 @@ public class BankSearchUtils {
             return false;
         }
 
-        // tap on the top-left item area (offset from bank bounds)
-        // bank item grid starts roughly 70px from left, 90px from top
-        int tapX = bankBounds.x + 90;
-        int tapY = bankBounds.y + 110;
+        // scroll to top first to ensure we search from the beginning
+        script.log(BankSearchUtils.class, "scrolling to top of filtered results");
+        BankScrollUtils.scrollToTopWithCheck(script, 20);
+        script.pollFramesHuman(() -> false, script.random(200, 400));
 
-        script.log(BankSearchUtils.class, "tapping at " + tapX + ", " + tapY + " with action: " + action);
+        // try to withdraw with scrolling
+        int maxScrollAttempts = 30;
+        for (int scrollCount = 0; scrollCount <= maxScrollAttempts; scrollCount++) {
+            // tap on the top-left item area (offset from bank bounds)
+            // bank item grid starts roughly 70px from left, 90px from top
+            int tapX = bankBounds.x + 90;
+            int tapY = bankBounds.y + 110;
 
-        boolean success = script.getFinger().tap(tapX, tapY, new String[]{action});
+            script.log(BankSearchUtils.class, "attempt " + (scrollCount + 1) + " - tapping at " + tapX + ", " + tapY + " with action: " + action);
 
-        if (success) {
-            script.log(BankSearchUtils.class, "withdraw tap succeeded for: " + itemName);
-            script.pollFramesHuman(() -> false, script.random(200, 400));
-        } else {
-            script.log(BankSearchUtils.class, "withdraw tap failed for: " + itemName);
+            boolean success = script.getFinger().tap(tapX, tapY, new String[]{action});
+
+            if (success) {
+                script.log(BankSearchUtils.class, "withdraw tap succeeded for: " + itemName);
+                script.pollFramesHuman(() -> false, script.random(200, 400));
+                clearSearch(script);
+                return true;
+            }
+
+            // tap failed - check if we can scroll down for more items
+            if (!BankScrollUtils.canScrollDown(script)) {
+                script.log(BankSearchUtils.class, "reached bottom of filtered results - item not found: " + itemName);
+                break;
+            }
+
+            // scroll down and try again
+            script.log(BankSearchUtils.class, "item not visible, scrolling down");
+            BankScrollUtils.scrollDown(script);
+            script.pollFramesHuman(() -> false, script.random(300, 500));
         }
 
-        // clear search
+        script.log(BankSearchUtils.class, "withdraw failed for: " + itemName + " after scrolling through all results");
         clearSearch(script);
-
-        return success;
+        return false;
     }
 
     /**
@@ -719,5 +728,41 @@ public class BankSearchUtils {
         // hit max iterations
         script.log(BankSearchUtils.class, "hit max scroll iterations (" + MAX_SCROLL_ITERATIONS + ") - item not found");
         return false;
+    }
+
+    /**
+     * Finds an item visually in the visible bank area by its sprite.
+     *
+     * Uses ItemManager to create a SearchableItem from the item ID and searches
+     * the bank bounds for a visual match.
+     *
+     * @param script the script instance
+     * @param itemId the item ID to find
+     * @return ItemSearchResult with bounds if found, null if not visible
+     */
+    private static ItemSearchResult findItemInVisibleBank(Script script, int itemId) {
+        // check bank is visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot find item");
+            return null;
+        }
+
+        // get searchable item from item manager
+        SearchableItem[] searchableItems = script.getItemManager().getItem(itemId, false);
+        if (searchableItems == null || searchableItems.length == 0) {
+            script.log(BankSearchUtils.class, "could not get searchable item for id: " + itemId);
+            return null;
+        }
+
+        // get bank bounds
+        Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();
+        if (bankBounds == null) {
+            script.log(BankSearchUtils.class, "could not get bank bounds");
+            return null;
+        }
+
+        // search for item in bank bounds
+        ItemSearchResult result = script.getItemManager().findLocation(false, bankBounds, searchableItems[0]);
+        return result;
     }
 }
