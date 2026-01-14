@@ -6,6 +6,8 @@ import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -314,6 +316,83 @@ public class BankSearchUtils {
         }
 
         return success;
+    }
+
+    /**
+     * Withdraws multiple items in a single batch operation.
+     *
+     * This method processes each request in order, using searchAndWithdraw
+     * for each item. Partial failures are handled gracefully - if one item
+     * fails to withdraw, the method continues with remaining items.
+     *
+     * For efficiency, keepSearchOpen=true is used for all but the last item,
+     * avoiding repeated search clear/open cycles.
+     *
+     * @param script the script instance
+     * @param requests list of withdrawal requests to process
+     * @return BatchWithdrawalResult containing successful and failed requests
+     */
+    public static BatchWithdrawalResult withdrawBatch(Script script, List<WithdrawalRequest> requests) {
+        BatchWithdrawalResult result = new BatchWithdrawalResult();
+
+        // pre-condition: bank must be visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot withdraw batch");
+            // mark all requests as failed
+            for (WithdrawalRequest request : requests) {
+                result.addFailed(request);
+            }
+            return result;
+        }
+
+        // handle empty list
+        if (requests == null || requests.isEmpty()) {
+            script.log(BankSearchUtils.class, "no requests to process");
+            return result;
+        }
+
+        int totalRequests = requests.size();
+        script.log(BankSearchUtils.class, "processing batch withdrawal of " + totalRequests + " items");
+
+        // process each request
+        for (int i = 0; i < totalRequests; i++) {
+            WithdrawalRequest request = requests.get(i);
+            boolean isLastItem = (i == totalRequests - 1);
+
+            // use keepSearchOpen=true for all but last item (for efficiency)
+            // last item clears search to leave bank in clean state
+            boolean keepSearchOpen = !isLastItem;
+
+            script.log(BankSearchUtils.class, "withdrawing item " + (i + 1) + "/" + totalRequests +
+                    " (id: " + request.getItemId() + ", amount: " + request.getAmount() + ")");
+
+            boolean success = searchAndWithdraw(script, request.getItemId(), request.getAmount(), keepSearchOpen);
+
+            if (success) {
+                result.addSuccessful(request);
+            } else {
+                result.addFailed(request);
+            }
+        }
+
+        // log summary
+        script.log(BankSearchUtils.class, "batch withdrawal complete: " +
+                result.getSuccessCount() + "/" + totalRequests + " items succeeded");
+
+        return result;
+    }
+
+    /**
+     * Withdraws multiple items in a single batch operation.
+     *
+     * Convenience overload that accepts varargs for fluent API usage.
+     *
+     * @param script the script instance
+     * @param requests withdrawal requests to process
+     * @return BatchWithdrawalResult containing successful and failed requests
+     */
+    public static BatchWithdrawalResult withdrawBatch(Script script, WithdrawalRequest... requests) {
+        return withdrawBatch(script, Arrays.asList(requests));
     }
 
     /**
