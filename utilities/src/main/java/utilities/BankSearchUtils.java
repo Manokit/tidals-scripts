@@ -99,4 +99,40 @@ public class BankSearchUtils {
         DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
         return type == DialogueType.TEXT_SEARCH || type == DialogueType.ITEM_SEARCH;
     }
+
+    /**
+     * Types a search query into the bank search box.
+     *
+     * Pre-condition: Search box should be open (will attempt to open if not).
+     *
+     * @param script the script instance
+     * @param itemName the item name to search for
+     * @return true if typing completed successfully
+     */
+    public static boolean typeSearch(Script script, String itemName) {
+        // validate input
+        if (itemName == null || itemName.isEmpty()) {
+            script.log(BankSearchUtils.class, "cannot type search - item name is empty or null");
+            return false;
+        }
+
+        // ensure search is open
+        if (!isSearchActive(script)) {
+            script.log(BankSearchUtils.class, "search not active - attempting to open");
+            if (!openSearch(script)) {
+                script.log(BankSearchUtils.class, "failed to open search for typing");
+                return false;
+            }
+        }
+
+        // type the item name
+        script.log(BankSearchUtils.class, "typing search: " + itemName);
+        script.getKeyboard().type(itemName);
+
+        // human-like delay after typing for results to filter
+        script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        script.log(BankSearchUtils.class, "search typed successfully");
+        return true;
+    }
 }
