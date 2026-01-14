@@ -20,15 +20,15 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, and fill-to
 
 **Milestone Goal:** Make searchAndWithdrawByName robust by verifying items exist before withdrawing
 
-#### Phase 7: Scroll Position Detection
+#### Phase 7: Scroll Position Detection (Complete)
 
 **Goal**: Sprite-based at-top/at-bottom detection for bank scroll position
 **Depends on**: Phase 6
 **Research**: Unlikely (extends existing BankScrollUtils patterns)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 07-01: TBD (run /gsd:plan-phase 7 to break down)
+- [x] 07-01: Add isAtTop() and isAtBottom() methods — completed 2026-01-14
 
 #### Phase 8: Item ID Screen Search
 
@@ -82,8 +82,8 @@ See [v1.1 archive](milestones/v1.1-ROADMAP.md) for full details.
 | 4. Batch Withdrawal | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 5. Fill Inventory | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 6. Tap-Based Search Activation | v1.1 | 1/1 | Complete | 2026-01-14 |
-| 7. Scroll Position Detection | v1.2 | 0/? | Not started | - |
+| 7. Scroll Position Detection | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 8. Item ID Screen Search | v1.2 | 0/? | Not started | - |
 | 9. Robust Withdrawal Flow | v1.2 | 0/? | Not started | - |
 
-**Total:** 9 phases, 8+ plans (8 complete)
+**Total:** 9 phases, 9+ plans (9 complete)
