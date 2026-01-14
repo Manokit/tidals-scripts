@@ -15,7 +15,7 @@ None
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Core Search Infrastructure** - Bank search box interaction and typing
-- [ ] **Phase 2: Single Item Withdrawal** - Search and withdraw one item by name
+- [x] **Phase 2: Single Item Withdrawal** - Search and withdraw one item by name
 - [ ] **Phase 3: Scroll Fallback** - Scroll bank when search doesn't find item
 - [ ] **Phase 4: Batch Withdrawal** - Withdraw list of items in sequence
 - [ ] **Phase 5: Fill Inventory** - Fill remaining slots with searched item
@@ -68,7 +68,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Search Infrastructure | 2/2 | Complete | 2026-01-14 |
-| 2. Single Item Withdrawal | 0/TBD | Not started | - |
+| 2. Single Item Withdrawal | 1/1 | Complete | 2026-01-14 |
 | 3. Scroll Fallback | 0/TBD | Not started | - |
 | 4. Batch Withdrawal | 0/TBD | Not started | - |
 | 5. Fill Inventory | 0/TBD | Not started | - |
