@@ -826,4 +826,57 @@ public class BankSearchUtils {
         script.log(BankSearchUtils.class, "item verification failed: expected [" + expectedName + "] but got [" + actualName + "]");
         return null;
     }
+
+    /**
+     * Searches the entire bank for an item by ID with visual verification.
+     *
+     * This method:
+     * 1. Scrolls to top of bank (using isAtTop for verification)
+     * 2. Searches visible area using findAndVerifyItem
+     * 3. If not found, scrolls down and searches again
+     * 4. Repeats until item found or isAtBottom returns true
+     *
+     * Unlike searchAndWithdrawByName which uses fixed offsets, this method
+     * visually confirms the item's location before returning bounds.
+     *
+     * @param script the script instance
+     * @param itemId the item ID to find
+     * @return Rectangle bounds if item found and verified, null if not in bank
+     */
+    public static Rectangle searchBankForItem(Script script, int itemId) {
+        // check bank is visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot search for item");
+            return null;
+        }
+
+        script.log(BankSearchUtils.class, "searching bank for item id: " + itemId);
+
+        // scroll to top
+        BankScrollUtils.scrollToTopWithCheck(script, 20);
+        script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        // search loop
+        for (int scrollCount = 0; scrollCount < MAX_SCROLL_ITERATIONS; scrollCount++) {
+            // try to find and verify item in current view
+            Rectangle result = findAndVerifyItem(script, itemId);
+            if (result != null) {
+                script.log(BankSearchUtils.class, "found item after " + scrollCount + " scrolls");
+                return result;
+            }
+
+            // check if we're at the bottom
+            if (BankScrollUtils.isAtBottom(script)) {
+                script.log(BankSearchUtils.class, "reached bottom of bank - item not found");
+                break;
+            }
+
+            // scroll down
+            BankScrollUtils.scrollDown(script);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+        }
+
+        script.log(BankSearchUtils.class, "item not found in bank after full scroll");
+        return null;
+    }
 }
