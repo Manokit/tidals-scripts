@@ -34,7 +34,7 @@ import java.util.UUID;
 
 @ScriptDefinition(name = "TidalsCannonballThiever", description = "Thieves cannonballs from Port Roberts stalls while avoiding guards", skillCategory = SkillCategory.THIEVING, version = 1.0, author = "Tidalus")
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.5";
+    public static final String scriptVersion = "1.6";
     private static final String SCRIPT_NAME = "CannonballThiever";
     private static final String SESSION_ID = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -127,6 +127,8 @@ public class TidalsCannonballThiever extends Script {
             return true;
         if (isAtSafetyTile())
             return true;
+        if (isInJailCell(getWorldPosition()))
+            return true;
         return false;
     }
 
@@ -136,6 +138,8 @@ public class TidalsCannonballThiever extends Script {
             return false;
         if (doingDepositRun)
             return true;
+        if (isInJailCell(getWorldPosition()))
+            return true;
         return isAtSafetyTile();
     }
 
@@ -144,6 +148,8 @@ public class TidalsCannonballThiever extends Script {
         if (currentlyThieving)
             return false;
         if (doingDepositRun)
+            return true;
+        if (isInJailCell(getWorldPosition()))
             return true;
         return isAtSafetyTile();
     }
@@ -192,6 +198,7 @@ public class TidalsCannonballThiever extends Script {
                 new EscapeJail(this),
                 new DepositOres(this),
                 new PrepareForBreak(this),
+                new DismissDialogue(this),
                 new SwitchToOreStall(this),
                 new SwitchToCannonballStall(this),
                 new Retreat(this),
@@ -395,9 +402,8 @@ public class TidalsCannonballThiever extends Script {
             if (tracker != null) {
                 xpGainedLive = tracker.getXpGained();
                 currentXp = tracker.getXp();
-                ttlText = tracker.timeToNextLevelString();
-                etl = tracker.getXpForNextLevel();
 
+                // level sync (only increases)
                 final int MAX_LEVEL = 99;
                 int guard = 0;
                 while (currentLevel < MAX_LEVEL
@@ -406,17 +412,22 @@ public class TidalsCannonballThiever extends Script {
                     currentLevel++;
                 }
 
+                ttlText = tracker.timeToNextLevelString();
+
+                // calculate ETL and progress manually for accuracy
+                int curLevelXpStart = tracker.getExperienceForLevel(currentLevel);
+                int nextLevelXpTarget = tracker.getExperienceForLevel(Math.min(MAX_LEVEL, currentLevel + 1));
+                int span = Math.max(1, nextLevelXpTarget - curLevelXpStart);
+
+                etl = Math.max(0, nextLevelXpTarget - currentXp);
+
+                levelProgressFraction = Math.max(0.0, Math.min(1.0,
+                        (currentXp - curLevelXpStart) / (double) span));
+
                 if (currentLevel >= MAX_LEVEL) {
                     ttlText = "MAXED";
                     etl = 0;
                     levelProgressFraction = 1.0;
-                } else {
-                    int curLevelXpStart = tracker.getExperienceForLevel(currentLevel);
-                    int nextLevelXpTarget = tracker.getExperienceForLevel(currentLevel + 1);
-                    int span = Math.max(1, nextLevelXpTarget - curLevelXpStart);
-
-                    levelProgressFraction = Math.max(0.0, Math.min(1.0,
-                            (currentXp - curLevelXpStart) / (double) span));
                 }
             }
         }

@@ -19,19 +19,25 @@ public class SwitchToOreStall extends Task {
         if (!twoStallMode) return false;
         if (!currentlyThieving || atOreStall) return false;
 
-        // switch on 4 XP drops
+        // priority 1: switch on 4 XP drops
         if (guardTracker.shouldSwitchToOreByXp()) {
             script.log("SWITCH", "4 CB thieves done - switching to ore (XP cycle)");
             return true;
         }
 
-        // movement-based detection always works (guard actively walking towards us)
+        // priority 2: preemptive switch (guard at 1865 + low count + timer elapsed)
+        if (guardTracker.shouldPreemptiveSwitchToOre()) {
+            script.log("SWITCH", "Preemptive switch - low theft count and guard approaching!");
+            return true;
+        }
+
+        // priority 3: movement-based detection (guard actively walking towards us)
         if (guardTracker.shouldSwitchToOre()) {
             script.log("SWITCH", "Guard moving right - switching to ore (pixel detection)");
             return true;
         }
 
-        // position-based fallback respects cooldown (guard might be near but walking away)
+        // priority 4: position-based fallback respects cooldown (guard might be near but walking away)
         if (!guardTracker.isInXpSwitchCooldown() && guardTracker.isGuardPastWatchTile()) {
             return true;
         }
