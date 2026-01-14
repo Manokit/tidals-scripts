@@ -49,7 +49,7 @@ The exact pattern to follow, from BankScrollUtils.java:
 
 ```java
 // 1. Define sprite ID constants
-private static final int SEARCH_BUTTON_SPRITE_ID = ???;  // TBD via debug tool
+private static final int SEARCH_BUTTON_SPRITE_ID = 1043;  // frame 0
 
 // 2. Lazy initialization with caching
 private static SearchableImage searchButtonImage;
@@ -209,21 +209,17 @@ public static boolean scrollDown(Script script) {
 <open_questions>
 ## Open Questions
 
-### 1. SEARCH Button Sprite ID
+### 1. SEARCH Button Sprite ID - RESOLVED
 
-**What we know:**
-- Scroll buttons use sprites 773, 788, 789, 791
-- BankButtonType.SEARCH exists but has no click API
-- Sprite IDs are found via OSMB debug tool
+**Discovered via OSMB debug tool:**
+- **Sprite ID: 1043**
+- **Frame: 0**
 
-**What's unclear:**
-- The exact sprite ID for the SEARCH button
-
-**Recommendation:** User must find sprite ID using OSMB debug tool in-game:
-1. Open bank in OSMB
-2. Open debug tool
-3. Search/scan sprites visible on screen
-4. Identify SEARCH button sprite ID and frame
+Reference (scroll buttons for comparison):
+- Scroll up: 773
+- Scroll down: 788
+- Scrollbar top: 789
+- Scrollbar bottom: 791
 
 ### 2. Button State Variants
 
@@ -274,4 +270,4 @@ public static boolean scrollDown(Script script) {
 
 *Phase: 06-tap-based-search-activation*
 *Research completed: 2026-01-14*
-*Ready for planning: YES (pending sprite ID discovery)*
+*Ready for planning: YES*
