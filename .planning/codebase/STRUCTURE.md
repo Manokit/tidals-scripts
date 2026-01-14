@@ -31,7 +31,7 @@ tidals-scripts/
 │   └── (otherwise same)
 │
 ├── API/API.jar                   # OSMB core library
-├── docs/                         # Development guides (42 files)
+├── docs/                         # Development guides (37 files)
 ├── examples/                     # Reference implementations
 ├── settings.gradle               # Root project config
 ├── gradlew / gradlew.bat         # Gradle wrapper
@@ -76,8 +76,8 @@ script-dashboard/
 
 **docs/**
 - Purpose: Comprehensive development guides
-- Contains: 42 markdown files covering API, patterns, concepts
-- Key files: `api-reference.md`, `critical-concepts.md`, `Paint.md`, `Walker.md`
+- Contains: 37 markdown files covering API, patterns, concepts
+- Key files: `api-reference.md`, `critical-concepts.md`, `Paint.md`, `Walker.md`, `Bank.md`, `Keyboard.md`
 
 **examples/**
 - Purpose: Reference implementations and learning material
