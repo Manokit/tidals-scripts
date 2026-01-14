@@ -210,9 +210,9 @@ public class BankSearchUtils {
             }
         }
 
-        // type the item name
+        // type the item name with humanized delays
         script.log(BankSearchUtils.class, "typing search: " + itemName);
-        script.getKeyboard().type(itemName);
+        typeWithDelay(script, itemName);
 
         // human-like delay after typing for results to filter
         script.pollFramesHuman(() -> false, script.random(200, 400));
@@ -717,6 +717,22 @@ public class BankSearchUtils {
 
         script.log(BankSearchUtils.class, "first slot does not match: expected [" + itemName + "] got [" + entityName + "]");
         return null;
+    }
+
+    /**
+     * Types text with random delays between characters for humanization.
+     *
+     * @param script the script instance
+     * @param text the text to type
+     */
+    private static void typeWithDelay(Script script, String text) {
+        for (int i = 0; i < text.length(); i++) {
+            script.getKeyboard().type(String.valueOf(text.charAt(i)));
+            // human-like delay between characters (50-150ms)
+            if (i < text.length() - 1) {
+                script.pollFramesHuman(() -> false, script.random(50, 150));
+            }
+        }
     }
 
     /**
