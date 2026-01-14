@@ -35,6 +35,10 @@ public class BankScrollUtils {
 
     private static final int COLOR_TOLERANCE = 15;
 
+    // fixed Y coordinates for scroll position detection
+    private static final int SCROLLBAR_TOP_Y = 334;
+    private static final int SCROLLBAR_BOTTOM_Y = 507;
+
     // sprite IDs for bank scroll elements
     private static final int SCROLL_UP_SPRITE_ID = 773;
     private static final int SCROLL_DOWN_SPRITE_ID = 788;
@@ -263,6 +267,70 @@ public class BankScrollUtils {
         }
 
         return null;
+    }
+
+    /**
+     * Checks if the bank scroll bar is at the top position.
+     *
+     * Uses sprite 789 (top half of scroll bar) and checks if its Y coordinate
+     * equals 334, which is the fixed position when scrolled to top.
+     *
+     * @param script the script instance
+     * @return true if scroll bar is at top position
+     */
+    public static boolean isAtTop(Script script) {
+        if (!init(script)) {
+            return false;
+        }
+
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            return false;
+        }
+
+        if (scrollbarTopImage == null) {
+            script.log(BankScrollUtils.class, "scrollbar top sprite not loaded");
+            return false;
+        }
+
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(scrollbarTopImage);
+        if (matches == null || matches.isEmpty()) {
+            return false;
+        }
+
+        int y = matches.get(0).getAsPoint().y;
+        return y == SCROLLBAR_TOP_Y;
+    }
+
+    /**
+     * Checks if the bank scroll bar is at the bottom position.
+     *
+     * Uses sprite 791 (bottom half of scroll bar) and checks if its Y coordinate
+     * equals 507, which is the fixed position when scrolled to bottom.
+     *
+     * @param script the script instance
+     * @return true if scroll bar is at bottom position
+     */
+    public static boolean isAtBottom(Script script) {
+        if (!init(script)) {
+            return false;
+        }
+
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            return false;
+        }
+
+        if (scrollbarBottomImage == null) {
+            script.log(BankScrollUtils.class, "scrollbar bottom sprite not loaded");
+            return false;
+        }
+
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(scrollbarBottomImage);
+        if (matches == null || matches.isEmpty()) {
+            return false;
+        }
+
+        int y = matches.get(0).getAsPoint().y;
+        return y == SCROLLBAR_BOTTOM_Y;
     }
 
     /**
