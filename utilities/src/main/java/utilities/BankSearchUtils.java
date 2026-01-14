@@ -1,11 +1,18 @@
 package utilities;
 
+import com.osmb.api.definition.SpriteDefinition;
 import com.osmb.api.input.PhysicalKey;
 import com.osmb.api.input.TouchType;
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+import com.osmb.api.visual.color.ColorModel;
+import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
+import com.osmb.api.visual.image.Image;
+import com.osmb.api.visual.image.ImageSearchResult;
+import com.osmb.api.visual.image.SearchableImage;
 
+import java.awt.Point;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -31,14 +38,83 @@ import java.util.Set;
  */
 public class BankSearchUtils {
 
+    private static final int COLOR_TOLERANCE = 15;
+    private static final int SEARCH_BUTTON_SPRITE_ID = 1043;
+
+    private static SearchableImage searchButtonImage;
+    private static boolean spriteInitialized = false;
+
     private static final int DEFAULT_TIMEOUT = 3000;
     private static final int SEARCH_OPEN_ATTEMPTS = 5;
 
     /**
-     * Opens the bank search box by pressing the search hotkey.
+     * Initializes the search button sprite for visual detection.
      *
-     * In OSRS, pressing a letter key while the bank is open activates the search.
-     * We press a neutral key first, then detect if search input is active.
+     * @param script the script instance
+     * @return true if sprite loaded successfully
+     */
+    private static boolean initSprite(Script script) {
+        if (spriteInitialized) {
+            return true;
+        }
+
+        try {
+            SingleThresholdComparator tolerance = new SingleThresholdComparator(COLOR_TOLERANCE);
+
+            SpriteDefinition sprite = script.getSpriteManager().getSprite(SEARCH_BUTTON_SPRITE_ID, 0);
+            if (sprite == null) {
+                script.log(BankSearchUtils.class, "search button sprite not found: " + SEARCH_BUTTON_SPRITE_ID);
+                return false;
+            }
+            Image image = new Image(sprite);
+            searchButtonImage = image.toSearchableImage(tolerance, ColorModel.RGB);
+            script.log(BankSearchUtils.class, "loaded search button sprite: " + sprite.width + "x" + sprite.height);
+
+            spriteInitialized = true;
+            return true;
+
+        } catch (Exception e) {
+            script.log(BankSearchUtils.class, "failed to load search button sprite: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Taps the search button using sprite-based visual detection.
+     *
+     * @param script the script instance
+     * @return true if search button was found and tapped
+     */
+    private static boolean tapSearchButton(Script script) {
+        if (!initSprite(script)) {
+            return false;
+        }
+
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(searchButtonImage);
+        if (matches == null || matches.isEmpty()) {
+            script.log(BankSearchUtils.class, "search button not found on screen");
+            return false;
+        }
+
+        ImageSearchResult result = matches.get(0);
+        Point location = result.getAsPoint();
+        script.log(BankSearchUtils.class, "tapping search button at: " + location.x + "," + location.y);
+        boolean tapped = script.getFinger().tap(location);
+
+        if (tapped) {
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.log(BankSearchUtils.class, "search button tapped successfully");
+        } else {
+            script.log(BankSearchUtils.class, "failed to tap search button");
+        }
+
+        return tapped;
+    }
+
+    /**
+     * Opens the bank search box by tapping the SEARCH button.
+     *
+     * Uses sprite-based visual detection to find and tap the search button.
      *
      * @param script the script instance
      * @return true if search box opened successfully
@@ -48,45 +124,44 @@ public class BankSearchUtils {
     }
 
     /**
-     * Opens the bank search box by pressing the search hotkey.
+     * Opens the bank search box by tapping the SEARCH button.
+     *
+     * Uses sprite-based visual detection to find and tap the search button.
      *
      * @param script the script instance
      * @param timeout max time to wait for search box to open
      * @return true if search box opened successfully
      */
     public static boolean openSearch(Script script, int timeout) {
-        // pre-condition: bank must be visible
         if (!script.getWidgetManager().getBank().isVisible()) {
             script.log(BankSearchUtils.class, "bank not visible - cannot open search");
             return false;
         }
 
-        // check if search is already active (TEXT_SEARCH dialogue visible)
         if (isSearchActive(script)) {
             script.log(BankSearchUtils.class, "search already active");
             return true;
         }
 
-        // try to open search using keyboard shortcut
-        // in OSRS, typing any letter while bank is open activates search
         for (int attempt = 1; attempt <= SEARCH_OPEN_ATTEMPTS; attempt++) {
             script.log(BankSearchUtils.class, "opening search attempt " + attempt + "/" + SEARCH_OPEN_ATTEMPTS);
 
-            // press and release a key to activate search (backspace is safe - clears any partial)
-            script.getKeyboard().pressKey(TouchType.DOWN, PhysicalKey.BACKSPACE);
-            script.getKeyboard().pressKey(TouchType.UP, PhysicalKey.BACKSPACE);
+            // tap search button sprite
+            if (!tapSearchButton(script)) {
+                script.log(BankSearchUtils.class, "failed to tap search button on attempt " + attempt);
+                script.pollFramesHuman(() -> false, script.random(200, 400));
+                continue;
+            }
 
             // wait for search to become active
             boolean opened = script.pollFramesUntil(() -> isSearchActive(script), timeout);
 
             if (opened) {
                 script.log(BankSearchUtils.class, "search opened successfully");
-                // small delay for search box to be ready
                 script.pollFramesHuman(() -> false, script.random(100, 200));
                 return true;
             }
 
-            // small delay between attempts
             script.pollFramesHuman(() -> false, script.random(200, 400));
         }
 
@@ -504,6 +579,97 @@ public class BankSearchUtils {
         clearSearch(script);
 
         return freeSlots;
+    }
+
+    /**
+     * Searches for an item by name string and withdraws the first matching result.
+     *
+     * This method bypasses item ID lookup and searches by typing the name directly.
+     * After filtering, it uses ItemManager.findLocation() to find and tap the first visible item.
+     *
+     * Use this when getItemManager().getItemName() is not working or when you
+     * only know the item name, not the ID.
+     *
+     * @param script the script instance
+     * @param itemName the item name to search for (e.g., "Ring of dueling")
+     * @param amount the amount to withdraw (1 for single click, 0 for withdraw-all)
+     * @return true if withdrawal succeeded
+     */
+    public static boolean searchAndWithdrawByName(Script script, String itemName, int amount) {
+        // pre-condition: bank must be visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot search and withdraw");
+            return false;
+        }
+
+        // validate input
+        if (itemName == null || itemName.isEmpty()) {
+            script.log(BankSearchUtils.class, "item name is empty or null");
+            return false;
+        }
+
+        script.log(BankSearchUtils.class, "searching for: " + itemName);
+
+        // type search query
+        if (!typeSearch(script, itemName)) {
+            script.log(BankSearchUtils.class, "failed to type search for: " + itemName);
+            return false;
+        }
+
+        // wait for bank to filter results
+        script.pollFramesHuman(() -> false, script.random(400, 600));
+
+        // get all visible items in the filtered bank
+        ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Collections.emptySet());
+        if (bankItems == null) {
+            script.log(BankSearchUtils.class, "failed to get bank items after search");
+            clearSearch(script);
+            return false;
+        }
+
+        // check if any items are visible (getFreeSlots == total slots means empty)
+        int freeSlots = bankItems.getFreeSlots();
+        script.log(BankSearchUtils.class, "bank has " + freeSlots + " free slots after filtering");
+
+        // determine withdraw action based on amount
+        String action;
+        if (amount == 0) {
+            action = "Withdraw-All";
+        } else if (amount == 1) {
+            action = "Withdraw-1";
+        } else {
+            action = "Withdraw-" + amount;
+        }
+
+        // tap on the center of the bank widget area where items appear
+        // this will hit whatever item shows after filtering
+        com.osmb.api.shape.Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();
+        if (bankBounds == null) {
+            script.log(BankSearchUtils.class, "could not get bank bounds");
+            clearSearch(script);
+            return false;
+        }
+
+        // tap on the top-left item area (offset from bank bounds)
+        // bank item grid starts roughly 70px from left, 90px from top
+        int tapX = bankBounds.x + 90;
+        int tapY = bankBounds.y + 110;
+
+        script.log(BankSearchUtils.class, "tapping at " + tapX + ", " + tapY + " with action: " + action);
+
+        boolean success = script.getFinger().tap(tapX, tapY, new String[]{action});
+
+        if (success) {
+            script.log(BankSearchUtils.class, "withdraw tap succeeded for: " + itemName);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+        } else {
+            script.log(BankSearchUtils.class, "withdraw tap failed for: " + itemName);
+        }
+
+        // clear search
+        clearSearch(script);
+
+        return success;
     }
 
     /**
