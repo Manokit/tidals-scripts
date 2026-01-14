@@ -63,8 +63,14 @@ public class Setup extends Task {
 
         checkZoomLevel();
 
-        // initialize custom xp tracker with current level
-        xpTracking.initCustomTracker(thievingLevel);
+        // initialize custom xp tracker - try to get actual XP first
+        int actualXp = utils.XPTracking.tryGetActualXp(script, SkillType.THIEVING);
+        if (actualXp > 0) {
+            xpTracking.initCustomTracker(thievingLevel, actualXp);
+        } else {
+            // fall back to level-based (loses progress within level)
+            xpTracking.initCustomTracker(thievingLevel);
+        }
 
         script.log("SETUP", "Setup complete! Starting cannonball thieving...");
         setupDone = true;

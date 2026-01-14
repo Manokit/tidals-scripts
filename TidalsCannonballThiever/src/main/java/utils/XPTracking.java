@@ -13,8 +13,9 @@ public class XPTracking {
     private final ScriptCore core;
     private double lastKnownXp = -1.0;
     private boolean initialized = false;
+    private boolean recalibrated = false;
 
-    // custom thieving tracker - OSMB's core.getXPTrackers() returns null
+    // custom thieving tracker - OSMB's core.getXPTrackers() returns null at startup
     private XPTracker customThievingTracker;
     private double customXpGained = 0.0;
 
@@ -22,7 +23,33 @@ public class XPTracking {
         this.core = core;
     }
 
-    // initialize custom tracker with starting level
+    // try to get actual XP from built-in tracker (may work for some skills)
+    public static int tryGetActualXp(ScriptCore core, SkillType skill) {
+        try {
+            Map<SkillType, XPTracker> trackers = core.getXPTrackers();
+            if (trackers != null && trackers.containsKey(skill)) {
+                XPTracker tracker = trackers.get(skill);
+                if (tracker != null) {
+                    return (int) tracker.getXp();
+                }
+            }
+        } catch (Exception e) {
+            // fall through to return -1
+        }
+        return -1;
+    }
+
+    // initialize custom tracker with actual current XP (preferred)
+    public void initCustomTracker(int startingLevel, int actualCurrentXp) {
+        customThievingTracker = new XPTracker(core, actualCurrentXp);
+        customXpGained = 0.0;
+        initialized = true;
+        if (core instanceof com.osmb.api.script.Script) {
+            ((com.osmb.api.script.Script) core).log("XP", "Custom tracker initialized with actual XP: " + actualCurrentXp + " (level " + startingLevel + ")");
+        }
+    }
+
+    // initialize custom tracker with starting level (fallback - loses progress within level)
     public void initCustomTracker(int startingLevel) {
         XPTracker temp = new XPTracker(core, 0);
         int startingXp = temp.getExperienceForLevel(startingLevel);
@@ -30,7 +57,7 @@ public class XPTracking {
         customXpGained = 0.0;
         initialized = true;
         if (core instanceof com.osmb.api.script.Script) {
-            ((com.osmb.api.script.Script) core).log("XP", "Custom tracker initialized for level " + startingLevel + " (startXp=" + startingXp + ")");
+            ((com.osmb.api.script.Script) core).log("XP", "Custom tracker initialized for level " + startingLevel + " (startXp=" + startingXp + ", estimated)");
         }
     }
 
@@ -41,8 +68,35 @@ public class XPTracking {
             customThievingTracker.incrementXp(xp);
         }
         lastXpGain.reset();
-        if (core instanceof com.osmb.api.script.Script) {
-            ((com.osmb.api.script.Script) core).log("XP", "Added " + xp + " XP (total gained: " + customXpGained + ")");
+
+        // try to recalibrate once after first XP gain (built-in tracker may now be available)
+        if (!recalibrated) {
+            tryRecalibrate();
+        }
+    }
+
+    // attempt to recalibrate custom tracker using built-in tracker (if now available)
+    private void tryRecalibrate() {
+        recalibrated = true;
+        try {
+            int actualXp = tryGetActualXp(core, SkillType.THIEVING);
+            if (actualXp > 0 && customThievingTracker != null) {
+                double ourXp = customThievingTracker.getXp();
+                double diff = actualXp - ourXp;
+                if (Math.abs(diff) > 100) {
+                    // significant difference - recreate tracker with correct starting XP
+                    // subtract XP we've already gained to get true starting XP
+                    int trueStartXp = actualXp - (int) customXpGained;
+                    customThievingTracker = new XPTracker(core, trueStartXp);
+                    // re-add the XP we've gained so far
+                    customThievingTracker.incrementXp(customXpGained);
+                    if (core instanceof com.osmb.api.script.Script) {
+                        ((com.osmb.api.script.Script) core).log("XP", "Recalibrated tracker: startXp=" + trueStartXp + ", currentXp=" + actualXp + " (was off by " + (int)diff + ")");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // recalibration failed, continue with estimated values
         }
     }
 
