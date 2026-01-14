@@ -5,6 +5,7 @@
 - [v1.0 MVP](milestones/v1.0-ROADMAP.md) (Phases 1-5) — SHIPPED 2026-01-14
 - [v1.1 Fix Search Opening](milestones/v1.1-ROADMAP.md) (Phase 6) — SHIPPED 2026-01-14
 - [v1.2 Verified Withdrawals](milestones/v1.2-ROADMAP.md) (Phases 7-9) — SHIPPED 2026-01-14
+- 🚧 **v1.3 Humanization** - Phases 10-13 (in progress)
 
 ## Overview
 
@@ -12,7 +13,53 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, fill-to-cap
 
 ## Status
 
-**v1.2 complete** — All planned features shipped. BankSearchUtils is production-ready.
+**v1.3 in progress** — Adding humanization: randomized tap coordinates and typing delays.
+
+---
+
+### 🚧 v1.3 Humanization (In Progress)
+
+**Milestone Goal:** Make sprite interactions appear human-like by randomizing tap coordinates within sprite bounds and adding variable typing delays.
+
+#### Phase 10: Randomized Sprite Taps
+
+**Goal**: Convert Point-based taps to Rectangle-based taps with random coordinates within sprite bounds
+**Depends on**: v1.2 complete
+**Research**: Unlikely (internal patterns)
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: TBD (run /gsd:plan-phase 10 to break down)
+
+#### Phase 11: Humanized Typing
+
+**Goal**: Add random delays between characters when typing search queries
+**Depends on**: Phase 10
+**Research**: Unlikely (internal patterns)
+**Plans**: TBD
+
+Plans:
+- [ ] 11-01: TBD
+
+#### Phase 12: Integration Testing
+
+**Goal**: Test with TidalsWithdrawer to verify tap positions vary and typing looks natural
+**Depends on**: Phase 11
+**Research**: Unlikely (testing)
+**Plans**: TBD
+
+Plans:
+- [ ] 12-01: TBD
+
+#### Phase 13: Utility Rebuild
+
+**Goal**: Final build, verification, and documentation update
+**Depends on**: Phase 12
+**Research**: Unlikely (build process)
+**Plans**: TBD
+
+Plans:
+- [ ] 13-01: TBD
 
 ---
 
@@ -62,5 +109,9 @@ See [v1.0 archive](milestones/v1.0-ROADMAP.md) for full details.
 | 7. Scroll Position Detection | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 8. Item ID Screen Search | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 9. Robust Withdrawal Flow | v1.2 | 1/1 | Complete | 2026-01-14 |
+| 10. Randomized Sprite Taps | v1.3 | 0/? | Not started | - |
+| 11. Humanized Typing | v1.3 | 0/? | Not started | - |
+| 12. Integration Testing | v1.3 | 0/? | Not started | - |
+| 13. Utility Rebuild | v1.3 | 0/? | Not started | - |
 
-**Total:** 9 phases, 11 plans (11 complete)
+**Total:** 13 phases, 11+ plans
