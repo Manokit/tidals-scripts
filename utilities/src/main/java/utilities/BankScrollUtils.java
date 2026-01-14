@@ -1,19 +1,22 @@
 package utilities;
 
+import com.osmb.api.definition.SpriteDefinition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Rectangle;
-import com.osmb.api.visual.SearchablePixel;
+import com.osmb.api.visual.image.ImageSearchResult;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
+import com.osmb.api.visual.image.Image;
+import com.osmb.api.visual.image.SearchableImage;
 
 import java.awt.*;
 import java.util.List;
 
 /**
- * Bank scroll utilities for scrolling the bank interface via pixel color detection.
+ * Bank scroll utilities for scrolling the bank interface via sprite-based detection.
  *
- * Detects the bank scroll buttons by finding clusters of their characteristic
- * brown/golden colors in the right portion of the screen where the scrollbar lives.
+ * Uses game sprites to find scroll arrow buttons on screen and tap them.
+ * Also tracks scrollbar position to determine if more scrolling is possible.
  *
  * Usage:
  *   // scroll down to find more items
@@ -21,26 +24,87 @@ import java.util.List;
  *       // bank scrolled successfully
  *   }
  *
+ *   // check if we've scrolled to the bottom
+ *   if (!BankScrollUtils.canScrollDown(script)) {
+ *       // at bottom of bank
+ *   }
+ *
  * Note: Bank must be visible before calling these methods.
  */
 public class BankScrollUtils {
 
-    private static final int COLOR_TOLERANCE = 20;
+    private static final int COLOR_TOLERANCE = 15;
 
-    // scroll button colors - brown/golden tones from OSRS UI
-    // these are the prominent colors in the scroll arrow buttons
-    private static final int SCROLL_BUTTON_COLOR_1 = 0x655230; // dark brown
-    private static final int SCROLL_BUTTON_COLOR_2 = 0x7a6239; // medium brown
-    private static final int SCROLL_BUTTON_COLOR_3 = 0x544426; // darker brown
+    // sprite IDs for bank scroll elements
+    private static final int SCROLL_UP_SPRITE_ID = 773;
+    private static final int SCROLL_DOWN_SPRITE_ID = 788;
+    private static final int SCROLLBAR_TOP_SPRITE_ID = 789;
+    private static final int SCROLLBAR_BOTTOM_SPRITE_ID = 791;
 
-    // approximate screen regions for scroll buttons (right side of bank interface)
-    // these will be dynamically adjusted based on screen size
-    private static final double SCROLL_REGION_X_START = 0.85; // start at 85% of screen width
-    private static final double SCROLL_REGION_X_END = 0.99;   // end at 99% of screen width
-    private static final double SCROLL_UP_Y_START = 0.15;     // scroll up in upper portion
-    private static final double SCROLL_UP_Y_END = 0.35;
-    private static final double SCROLL_DOWN_Y_START = 0.65;   // scroll down in lower portion
-    private static final double SCROLL_DOWN_Y_END = 0.85;
+    private static SearchableImage scrollUpImage;
+    private static SearchableImage scrollDownImage;
+    private static SearchableImage scrollbarTopImage;
+    private static SearchableImage scrollbarBottomImage;
+    private static boolean initialized = false;
+
+    /**
+     * Initializes scroll button sprites. Called lazily on first use.
+     *
+     * @param script the script instance
+     * @return true if sprites loaded successfully
+     */
+    public static boolean init(Script script) {
+        if (initialized) {
+            return true;
+        }
+
+        try {
+            SingleThresholdComparator tolerance = new SingleThresholdComparator(COLOR_TOLERANCE);
+
+            // load scroll up sprite
+            SpriteDefinition upSprite = script.getSpriteManager().getSprite(SCROLL_UP_SPRITE_ID, 0);
+            if (upSprite == null) {
+                script.log(BankScrollUtils.class, "scroll up sprite not found: " + SCROLL_UP_SPRITE_ID);
+                return false;
+            }
+            Image upImage = new Image(upSprite);
+            scrollUpImage = upImage.toSearchableImage(tolerance, ColorModel.RGB);
+            script.log(BankScrollUtils.class, "loaded scroll up sprite: " + upSprite.width + "x" + upSprite.height);
+
+            // load scroll down sprite
+            SpriteDefinition downSprite = script.getSpriteManager().getSprite(SCROLL_DOWN_SPRITE_ID, 0);
+            if (downSprite == null) {
+                script.log(BankScrollUtils.class, "scroll down sprite not found: " + SCROLL_DOWN_SPRITE_ID);
+                return false;
+            }
+            Image downImage = new Image(downSprite);
+            scrollDownImage = downImage.toSearchableImage(tolerance, ColorModel.RGB);
+            script.log(BankScrollUtils.class, "loaded scroll down sprite: " + downSprite.width + "x" + downSprite.height);
+
+            // load scrollbar top sprite (for position tracking)
+            SpriteDefinition topSprite = script.getSpriteManager().getSprite(SCROLLBAR_TOP_SPRITE_ID, 0);
+            if (topSprite != null) {
+                Image topImage = new Image(topSprite);
+                scrollbarTopImage = topImage.toSearchableImage(tolerance, ColorModel.RGB);
+                script.log(BankScrollUtils.class, "loaded scrollbar top sprite: " + topSprite.width + "x" + topSprite.height);
+            }
+
+            // load scrollbar bottom sprite (for position tracking)
+            SpriteDefinition bottomSprite = script.getSpriteManager().getSprite(SCROLLBAR_BOTTOM_SPRITE_ID, 0);
+            if (bottomSprite != null) {
+                Image bottomImage = new Image(bottomSprite);
+                scrollbarBottomImage = bottomImage.toSearchableImage(tolerance, ColorModel.RGB);
+                script.log(BankScrollUtils.class, "loaded scrollbar bottom sprite: " + bottomSprite.width + "x" + bottomSprite.height);
+            }
+
+            initialized = true;
+            return true;
+
+        } catch (Exception e) {
+            script.log(BankScrollUtils.class, "failed to load scroll sprites: " + e.getMessage());
+            return false;
+        }
+    }
 
     /**
      * Scrolls the bank down by detecting and tapping the scroll down button.
@@ -49,29 +113,27 @@ public class BankScrollUtils {
      * @return true if scroll button was found and tapped
      */
     public static boolean scrollDown(Script script) {
-        // pre-condition: bank must be visible
         if (!script.getWidgetManager().getBank().isVisible()) {
             script.log(BankScrollUtils.class, "bank not visible - cannot scroll down");
             return false;
         }
 
-        // get scroll down search region
-        Rectangle searchRegion = getScrollDownRegion(script);
-        if (searchRegion == null) {
-            script.log(BankScrollUtils.class, "could not determine scroll region");
+        if (!init(script)) {
             return false;
         }
 
-        // find scroll button pixels
-        Point buttonCenter = findScrollButton(script, searchRegion);
-        if (buttonCenter == null) {
+        // find scroll down button on screen
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(scrollDownImage);
+        if (matches == null || matches.isEmpty()) {
             script.log(BankScrollUtils.class, "scroll down button not found");
             return false;
         }
 
         // tap the button
-        script.log(BankScrollUtils.class, "tapping scroll down at: " + buttonCenter.x + "," + buttonCenter.y);
-        boolean tapped = script.getFinger().tap(buttonCenter);
+        ImageSearchResult result = matches.get(0);
+        Point location = result.getAsPoint();
+        script.log(BankScrollUtils.class, "tapping scroll down at: " + location.x + "," + location.y);
+        boolean tapped = script.getFinger().tap(location);
 
         if (tapped) {
             // human-like delay after tapping
@@ -91,29 +153,27 @@ public class BankScrollUtils {
      * @return true if scroll button was found and tapped
      */
     public static boolean scrollUp(Script script) {
-        // pre-condition: bank must be visible
         if (!script.getWidgetManager().getBank().isVisible()) {
             script.log(BankScrollUtils.class, "bank not visible - cannot scroll up");
             return false;
         }
 
-        // get scroll up search region
-        Rectangle searchRegion = getScrollUpRegion(script);
-        if (searchRegion == null) {
-            script.log(BankScrollUtils.class, "could not determine scroll region");
+        if (!init(script)) {
             return false;
         }
 
-        // find scroll button pixels
-        Point buttonCenter = findScrollButton(script, searchRegion);
-        if (buttonCenter == null) {
+        // find scroll up button on screen
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(scrollUpImage);
+        if (matches == null || matches.isEmpty()) {
             script.log(BankScrollUtils.class, "scroll up button not found");
             return false;
         }
 
         // tap the button
-        script.log(BankScrollUtils.class, "tapping scroll up at: " + buttonCenter.x + "," + buttonCenter.y);
-        boolean tapped = script.getFinger().tap(buttonCenter);
+        ImageSearchResult result = matches.get(0);
+        Point location = result.getAsPoint();
+        script.log(BankScrollUtils.class, "tapping scroll up at: " + location.x + "," + location.y);
+        boolean tapped = script.getFinger().tap(location);
 
         if (tapped) {
             // human-like delay after tapping
@@ -127,7 +187,7 @@ public class BankScrollUtils {
     }
 
     /**
-     * Checks if the scroll down button is visible.
+     * Checks if the scroll down button is visible (can scroll further down).
      *
      * @param script the script instance
      * @return true if scroll down button is visible
@@ -137,16 +197,16 @@ public class BankScrollUtils {
             return false;
         }
 
-        Rectangle searchRegion = getScrollDownRegion(script);
-        if (searchRegion == null) {
+        if (!init(script)) {
             return false;
         }
 
-        return findScrollButton(script, searchRegion) != null;
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(scrollDownImage);
+        return matches != null && !matches.isEmpty();
     }
 
     /**
-     * Checks if the scroll up button is visible.
+     * Checks if the scroll up button is visible (can scroll further up).
      *
      * @param script the script instance
      * @return true if scroll up button is visible
@@ -156,79 +216,92 @@ public class BankScrollUtils {
             return false;
         }
 
-        Rectangle searchRegion = getScrollUpRegion(script);
-        if (searchRegion == null) {
+        if (!init(script)) {
             return false;
         }
 
-        return findScrollButton(script, searchRegion) != null;
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(scrollUpImage);
+        return matches != null && !matches.isEmpty();
     }
 
     /**
-     * Gets the search region for the scroll down button.
-     */
-    private static Rectangle getScrollDownRegion(Script script) {
-        Rectangle screenBounds = script.getScreen().getBounds();
-        if (screenBounds == null) {
-            return null;
-        }
-
-        int x = (int) (screenBounds.width * SCROLL_REGION_X_START);
-        int y = (int) (screenBounds.height * SCROLL_DOWN_Y_START);
-        int width = (int) (screenBounds.width * (SCROLL_REGION_X_END - SCROLL_REGION_X_START));
-        int height = (int) (screenBounds.height * (SCROLL_DOWN_Y_END - SCROLL_DOWN_Y_START));
-
-        return new Rectangle(x, y, width, height);
-    }
-
-    /**
-     * Gets the search region for the scroll up button.
-     */
-    private static Rectangle getScrollUpRegion(Script script) {
-        Rectangle screenBounds = script.getScreen().getBounds();
-        if (screenBounds == null) {
-            return null;
-        }
-
-        int x = (int) (screenBounds.width * SCROLL_REGION_X_START);
-        int y = (int) (screenBounds.height * SCROLL_UP_Y_START);
-        int width = (int) (screenBounds.width * (SCROLL_REGION_X_END - SCROLL_REGION_X_START));
-        int height = (int) (screenBounds.height * (SCROLL_UP_Y_END - SCROLL_UP_Y_START));
-
-        return new Rectangle(x, y, width, height);
-    }
-
-    /**
-     * Finds the scroll button in the given region by detecting characteristic colors.
+     * Gets the current scrollbar position as a Rectangle.
+     * Useful for determining scroll progress.
      *
      * @param script the script instance
-     * @param searchRegion the region to search within
-     * @return center point of button if found, null otherwise
+     * @return Rectangle of scrollbar position, or null if not found
      */
-    private static Point findScrollButton(Script script, Rectangle searchRegion) {
-        SingleThresholdComparator tolerance = new SingleThresholdComparator(COLOR_TOLERANCE);
-
-        SearchablePixel[] buttonColors = {
-            new SearchablePixel(SCROLL_BUTTON_COLOR_1, tolerance, ColorModel.RGB),
-            new SearchablePixel(SCROLL_BUTTON_COLOR_2, tolerance, ColorModel.RGB),
-            new SearchablePixel(SCROLL_BUTTON_COLOR_3, tolerance, ColorModel.RGB)
-        };
-
-        // find pixels matching scroll button colors
-        List<Point> pixels = script.getPixelAnalyzer().findPixels(searchRegion, buttonColors);
-
-        if (pixels == null || pixels.isEmpty()) {
+    public static Rectangle getScrollbarPosition(Script script) {
+        if (!script.getWidgetManager().getBank().isVisible()) {
             return null;
         }
 
-        // calculate centroid of found pixels as button center
-        int sumX = 0;
-        int sumY = 0;
-        for (Point p : pixels) {
-            sumX += p.x;
-            sumY += p.y;
+        if (!init(script)) {
+            return null;
         }
 
-        return new Point(sumX / pixels.size(), sumY / pixels.size());
+        // find scrollbar top and bottom to get full scrollbar bounds
+        List<ImageSearchResult> topMatches = scrollbarTopImage != null
+            ? script.getImageAnalyzer().findLocations(scrollbarTopImage)
+            : null;
+        List<ImageSearchResult> bottomMatches = scrollbarBottomImage != null
+            ? script.getImageAnalyzer().findLocations(scrollbarBottomImage)
+            : null;
+
+        if (topMatches != null && !topMatches.isEmpty() &&
+            bottomMatches != null && !bottomMatches.isEmpty()) {
+            Point top = topMatches.get(0).getAsPoint();
+            Point bottom = bottomMatches.get(0).getAsPoint();
+
+            // combine into full scrollbar bounds (estimate width as 15px)
+            int x = Math.min(top.x, bottom.x);
+            int y = top.y;
+            int width = 15;
+            int height = bottom.y - top.y + 15;
+
+            return new Rectangle(x, y, width, height);
+        }
+
+        return null;
+    }
+
+    /**
+     * Scrolls to the top of the bank.
+     *
+     * @param script the script instance
+     * @param maxScrolls maximum number of scroll attempts
+     * @return true if reached top or already at top
+     */
+    public static boolean scrollToTop(Script script, int maxScrolls) {
+        for (int i = 0; i < maxScrolls; i++) {
+            if (!canScrollUp(script)) {
+                script.log(BankScrollUtils.class, "reached top of bank");
+                return true;
+            }
+            if (!scrollUp(script)) {
+                return false;
+            }
+        }
+        return !canScrollUp(script);
+    }
+
+    /**
+     * Scrolls to the bottom of the bank.
+     *
+     * @param script the script instance
+     * @param maxScrolls maximum number of scroll attempts
+     * @return true if reached bottom or already at bottom
+     */
+    public static boolean scrollToBottom(Script script, int maxScrolls) {
+        for (int i = 0; i < maxScrolls; i++) {
+            if (!canScrollDown(script)) {
+                script.log(BankScrollUtils.class, "reached bottom of bank");
+                return true;
+            }
+            if (!scrollDown(script)) {
+                return false;
+            }
+        }
+        return !canScrollDown(script);
     }
 }
