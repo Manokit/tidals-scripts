@@ -16,16 +16,17 @@ Reliable search — finding items by name must work 100% of the time, regardless
 - ✓ BankingUtils — bank open/close, deposits, basic withdrawals — existing
 - ✓ TabUtils — tab opening with verification — existing
 - ✓ DialogueUtils — dialogue handling — existing
+- ✓ Search for items by name using bank search box — v1.0
+- ✓ Scroll bank contents as fallback when search doesn't find item — v1.0
+- ✓ Withdraw single item by name with specified amount — v1.0
+- ✓ Withdraw list of items with amounts in sequence — v1.0
+- ✓ Fill remaining inventory slots with searched item — v1.0
+- ✓ Return false/null when item not found (caller handles) — v1.0
+- ✓ Integrate with existing BankingUtils patterns — v1.0
 
 ### Active
 
-- [ ] Search for items by name using bank search box
-- [ ] Scroll bank contents as fallback when search doesn't find item
-- [ ] Withdraw single item by name with specified amount
-- [ ] Withdraw list of items with amounts in sequence
-- [ ] Fill remaining inventory slots with searched item
-- [ ] Return false/null when item not found (caller handles)
-- [ ] Integrate with existing BankingUtils patterns
+(None — v1.0 shipped)
 
 ### Out of Scope
 
@@ -60,9 +61,29 @@ Reliable search — finding items by name must work 100% of the time, regardless
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Search box first, scroll fallback | Search is fastest for known items; scroll handles edge cases | — Pending |
-| Return null/false on not found | Let calling scripts decide behavior; don't force exception handling | — Pending |
-| Withdrawals only in v1 | Deposits already work fine with existing Bank methods; focus on the pain point | — Pending |
+| Search box first, scroll fallback | Search is fastest for known items; scroll handles edge cases | ✓ Good |
+| Return null/false on not found | Let calling scripts decide behavior; don't force exception handling | ✓ Good |
+| Withdrawals only in v1 | Deposits already work fine with existing Bank methods; focus on the pain point | ✓ Good |
+| Keyboard shortcut over button click | No direct API for clicking BankButtonType buttons; keyboard approach is cleaner | ✓ Good |
+| Backspace key for activation | Safer than letter keys as it clears any partial search without adding characters | ✓ Good |
+| PhysicalKey.BACK over ESCAPE | OSMB PhysicalKey enum does not have ESCAPE; BACK is mobile equivalent | ✓ Good |
+| Sprite-based scroll detection | PixelAnalyzer.findSubImages() doesn't exist; sprite + ImageAnalyzer proven reliable | ✓ Good |
+| Continue batch on partial failure | Batch operations complete even if some items fail to withdraw | ✓ Good |
+| keepSearchOpen for batch efficiency | Avoids repeated search clear/open cycles during multi-item withdrawals | ✓ Good |
+
+## Context
+
+**Current state:**
+- v1.0 shipped: BankSearchUtils complete with 1,445 LOC Java
+- Tech stack: OSMB API (Bank, Keyboard, SpriteManager, ImageAnalyzer)
+- Utility location: `utilities/src/main/java/utilities/BankSearchUtils.java`
+- Supporting classes: BankScrollUtils, WithdrawalRequest, BatchWithdrawalResult
+
+**API methods delivered:**
+- openSearch(), typeSearch(), clearSearch(), isSearchActive()
+- searchAndWithdraw(), searchAndFillInventory()
+- withdrawBatch() with List and varargs overloads
+- BankScrollUtils: scrollDown/Up, canScroll, scrollToTop/Bottom
 
 ---
-*Last updated: 2026-01-14 after initialization*
+*Last updated: 2026-01-14 after v1.0 milestone*
