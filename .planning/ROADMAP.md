@@ -69,6 +69,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Core Search Infrastructure | 2/2 | Complete | 2026-01-14 |
 | 2. Single Item Withdrawal | 1/1 | Complete | 2026-01-14 |
-| 3. Scroll Fallback | 0/TBD | Not started | - |
+| 3. Scroll Fallback | 1/2 | In progress | - |
 | 4. Batch Withdrawal | 0/TBD | Not started | - |
 | 5. Fill Inventory | 0/TBD | Not started | - |
