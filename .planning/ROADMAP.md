@@ -21,15 +21,15 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, fill-to-cap
 
 **Milestone Goal:** Make sprite interactions appear human-like by randomizing tap coordinates within sprite bounds and adding variable typing delays.
 
-#### Phase 10: Randomized Sprite Taps
+#### Phase 10: Randomized Sprite Taps - COMPLETE
 
 **Goal**: Convert Point-based taps to Rectangle-based taps with random coordinates within sprite bounds
 **Depends on**: v1.2 complete
 **Research**: Unlikely (internal patterns)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 10-01: TBD (run /gsd:plan-phase 10 to break down)
+- [x] 10-01: Convert sprite taps to Rectangle bounds — completed 2026-01-14
 
 #### Phase 11: Humanized Typing
 
@@ -109,7 +109,7 @@ See [v1.0 archive](milestones/v1.0-ROADMAP.md) for full details.
 | 7. Scroll Position Detection | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 8. Item ID Screen Search | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 9. Robust Withdrawal Flow | v1.2 | 1/1 | Complete | 2026-01-14 |
-| 10. Randomized Sprite Taps | v1.3 | 0/? | Not started | - |
+| 10. Randomized Sprite Taps | v1.3 | 1/1 | Complete | 2026-01-14 |
 | 11. Humanized Typing | v1.3 | 0/? | Not started | - |
 | 12. Integration Testing | v1.3 | 0/? | Not started | - |
 | 13. Utility Rebuild | v1.3 | 0/? | Not started | - |
