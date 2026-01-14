@@ -30,15 +30,15 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, and fill-to
 Plans:
 - [x] 07-01: Add isAtTop() and isAtBottom() methods — completed 2026-01-14
 
-#### Phase 8: Item ID Screen Search
+#### Phase 8: Item ID Screen Search (Complete)
 
 **Goal**: Search visible bank area for item by ID with tapGetResponse verification
 **Depends on**: Phase 7
 **Research**: Unlikely (existing API patterns)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 08-01: TBD (run /gsd:plan-phase 8 to break down)
+- [x] 08-01: Add item ID visual search methods — completed 2026-01-14
 
 #### Phase 9: Robust Withdrawal Flow
 
@@ -83,7 +83,7 @@ See [v1.1 archive](milestones/v1.1-ROADMAP.md) for full details.
 | 5. Fill Inventory | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 6. Tap-Based Search Activation | v1.1 | 1/1 | Complete | 2026-01-14 |
 | 7. Scroll Position Detection | v1.2 | 1/1 | Complete | 2026-01-14 |
-| 8. Item ID Screen Search | v1.2 | 0/? | Not started | - |
+| 8. Item ID Screen Search | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 9. Robust Withdrawal Flow | v1.2 | 0/? | Not started | - |
 
-**Total:** 9 phases, 9+ plans (9 complete)
+**Total:** 9 phases, 10+ plans (10 complete)

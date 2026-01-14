@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-14)
 
 ## Current Position
 
-Phase: 7 of 9 (Scroll Position Detection)
+Phase: 8 of 9 (Item ID Screen Search)
 Plan: 1 of 1 complete
 Status: Phase complete
-Last activity: 2026-01-14 — Completed 07-01-PLAN.md
+Last activity: 2026-01-14 — Completed 08-01-PLAN.md
 
-Progress: █░░░░░░░░░ 11%
+Progress: ██░░░░░░░░ 22%
 
 ## v1.2 Focus
 
@@ -45,10 +45,11 @@ Progress: █░░░░░░░░░ 11%
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: Completed Phase 7 (07-01-PLAN.md)
+Stopped at: Completed Phase 8 (08-01-PLAN.md)
 Resume file: None
 
 ### Roadmap Evolution
 
 - Milestone v1.2 created: verified withdrawals with item ID search, 3 phases (Phase 7-9)
 - Phase 7 complete: isAtTop() and isAtBottom() methods added to BankScrollUtils
+- Phase 8 complete: Item ID visual search with verification (findAndVerifyItem, searchBankForItem)
