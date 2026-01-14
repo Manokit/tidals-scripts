@@ -38,7 +38,14 @@ None
 ### Phase 3: Scroll Fallback
 **Goal**: Scroll through bank contents when search doesn't find item (edge case handling)
 **Depends on**: Phase 2
-**Research**: Unlikely (internal scroll patterns, established UI)
+**Research**: Likely (discover best scroll method before implementation)
+**Research topics**:
+- Bank API scroll/pagination methods (check Bank interface for scroll())
+- Keyboard arrow keys while bank focused (simplest if works)
+- Finger/mouse scroll wheel support (check getFinger() for scroll methods)
+- Image-based scroll buttons (fallback - capture scroll_up.png/scroll_down.png in utilities/src/resources/, use SearchableImage + PixelAnalyzer.findSubImages())
+- Detecting scroll availability (grayed arrows = end of scroll)
+**Discovery approach**: Exhaust API/keyboard methods first; image detection only if simpler methods unavailable
 **Plans**: TBD
 
 ### Phase 4: Batch Withdrawal
@@ -60,7 +67,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Search Infrastructure | 0/TBD | Not started | - |
+| 1. Core Search Infrastructure | 0/2 | Planned | - |
 | 2. Single Item Withdrawal | 0/TBD | Not started | - |
 | 3. Scroll Fallback | 0/TBD | Not started | - |
 | 4. Batch Withdrawal | 0/TBD | Not started | - |
