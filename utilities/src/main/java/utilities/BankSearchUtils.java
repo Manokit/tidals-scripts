@@ -163,11 +163,11 @@ public class BankSearchUtils {
             return true;
         }
 
-        script.log(BankSearchUtils.class, "clearing search with ESC");
+        script.log(BankSearchUtils.class, "clearing search with BACK key");
 
-        // press ESC to close search
-        script.getKeyboard().pressKey(TouchType.DOWN, PhysicalKey.ESCAPE);
-        script.getKeyboard().pressKey(TouchType.UP, PhysicalKey.ESCAPE);
+        // press BACK to close search (equivalent to ESC on desktop)
+        script.getKeyboard().pressKey(TouchType.DOWN, PhysicalKey.BACK);
+        script.getKeyboard().pressKey(TouchType.UP, PhysicalKey.BACK);
 
         // wait for search to become inactive
         boolean cleared = script.pollFramesUntil(() -> !isSearchActive(script), timeout);
