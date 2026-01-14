@@ -1,158 +1,152 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-01-13
+**Analysis Date:** 2026-01-14
 
 ## Test Framework
 
 **Runner:**
-- None detected - No formal test framework in either project
+- No formal unit testing framework detected
+- No JUnit, TestNG, Mockito, or similar in dependencies
+- No `testImplementation` dependencies in `build.gradle` files
 
 **Assertion Library:**
-- Not applicable
+- Not applicable - no test framework
 
 **Run Commands:**
 ```bash
-# Dashboard - no test command configured
-npm run lint                      # ESLint validation only
-
-# Scripts - no test infrastructure
-osmb build TidalsGemCutter        # Build only
+# No test commands available
+# Scripts are tested manually through OSMB client execution
 ```
 
 ## Test File Organization
 
 **Location:**
-- No test files detected
-- No `*.test.ts`, `*.spec.ts`, `__tests__/` directories
-- No Java test directories (`src/test/java/`)
+- No `src/test/` directories found
+- No `__tests__/` directories
+- No `*.test.java` or `*.spec.java` files
 
-**Naming:**
-- Not applicable
+**Testing Philosophy:**
+- Manual/integration-focused rather than unit-tested
+- Scripts tested by running in OSMB client
+- Visual verification through paint overlay statistics
 
-**Structure:**
-```
-# Current (no tests)
-src/
-  main/java/...   # Source only
+## Implicit Testing Approach
 
-# Recommended
-src/
-  main/java/...   # Source
-  test/java/...   # Tests (to be added)
-```
+**Setup Validation:**
+- `Setup.java` tasks validate prerequisites before execution
+- Checks performed:
+  - Skill levels (`TidalsGemCutter/src/main/java/tasks/Setup.java`)
+  - Equipment presence
+  - Inventory state
+  - Location verification
 
-## Test Structure
-
-**Suite Organization:**
-- Not applicable - no tests exist
-
-**Patterns:**
-- Manual testing in OSMB client environment
-- Visual verification of script behavior
-
-## Mocking
-
-**Framework:**
-- Not applicable
-
-**What Would Need Mocking (if tests added):**
-- OSMB API interactions (Script, Inventory, Bank, etc.)
-- HTTP calls for stats reporting
-- File system for Prisma
-
-## Fixtures and Factories
-
-**Test Data:**
-- Demo data exists in dashboard for display purposes (`script-dashboard/src/app/stats/page.tsx`)
-- Not for testing, just fallback when no real data
-
-## Coverage
-
-**Requirements:**
-- No coverage requirements
-- No coverage tooling configured
-
-**Current State:**
-- 0% automated test coverage
-- Quality relies on:
-  - TypeScript type checking (strict mode)
-  - ESLint validation
-  - Manual testing
-  - Code review
-
-## Test Types
-
-**Unit Tests:**
-- None
-
-**Integration Tests:**
-- None
-
-**E2E Tests:**
-- None
-- Manual testing in OSMB client serves this purpose for scripts
-
-## Quality Assurance Practices
-
-**Type Safety:**
-- TypeScript strict mode enabled (`script-dashboard/tsconfig.json`)
-- Java compile-time type checking (JDK 17)
-
-**Linting:**
-- ESLint with Next.js config for dashboard
-- No Java linting (IDE-based only)
-
-**Code Review:**
-- Git history shows iterative development
-- No formal PR review process visible
-
-**Manual Testing:**
-- Scripts tested in OSMB client
-- Dashboard tested via browser
-
-## Validation Patterns (Substitute for Tests)
-
-**Input Validation (Dashboard):**
-```typescript
-// script-dashboard/src/app/api/stats/route.ts
-function sanitizeString(str: string, maxLength: number): string {
-  if (typeof str !== 'string') return ''
-  return str.replace(/\0/g, '').trim().slice(0, maxLength)
+**Runtime Validation Pattern:**
+```java
+@Override
+public boolean activate() {
+    ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(selectedUncutGemID));
+    if (inv == null) return false;
+    return !inv.contains(selectedUncutGemID);
 }
 ```
 
-**Null Safety (Scripts):**
-```java
-// Consistent pattern across utilities
-if (inv == null) return false;
-if (bank == null) { script.log(getClass(), "bank not found"); return null; }
+**Manual Testing Approach:**
+- Scripts output detailed logs for monitoring
+- Canvas overlay displays runtime statistics
+- XP tracking compared against in-game stats
+
+## Test Structure (Inferred)
+
+**Condition Checks:**
+- All task `activate()` methods contain conditional logic
+- Example: `Bank.java` lines 21-51 - Complex conditions for banking
+- Example: `Setup.java` - Prerequisites validation
+
+**State Verification:**
+- `XPTracking` class monitors skill progression
+- `GuardTracker` monitors NPC positions and movement
+- Paint overlay displays live statistics
+
+## Coverage Approach
+
+**Areas Without Tests:**
+- `RetryUtils.java` - Tested implicitly through script execution
+- `BankingUtils.java` - Validated during runtime
+- `DialogueUtils.java` - Tested when scripts encounter dialogues
+- `BankSearchUtils.java` - Validated through bank operations
+
+**Validation Through Execution:**
+- State machine transitions - Validated through task activation/execution
+- Webhook integration - Tested with Discord in production
+- XP tracking - Compared against in-game stats in logs
+
+## Build Verification
+
+**Gradle Build:**
+```bash
+# Build specific script
+osmb build TidalsGemCutter
+
+# Build all scripts
+osmb build all
+
+# Build utilities JAR
+cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build
 ```
 
-**Rate Limiting:**
-```typescript
-// Timing-based protection
-const RATE_LIMIT_WINDOW = 60_000
-const RATE_LIMIT_MAX = 30
-```
+**Build Output Verification:**
+- JAR files generated in `[ScriptName]/jar/`
+- No automated build tests
+- Manual load test in OSMB client
 
-## Recommendations for Future Testing
+## Linting & Static Analysis
 
-**Dashboard (Priority: Medium):**
-1. Add Vitest for unit tests
-2. Test API route handlers with mock Prisma
-3. Test utility functions (formatRuntime, sanitizeString)
+**Java:**
+- No checkstyle.xml configuration
+- No PMD or FindBugs setup
+- IDE-based style enforcement only
 
-**Scripts (Priority: Low):**
-1. Extract pure logic to testable modules
-2. Mock OSMB API for unit tests
-3. Focus on RetryUtils, BankingUtils
+**TypeScript (Dashboard):**
+- ESLint configured (`script-dashboard/eslint.config.mjs`)
+- Extends `next/core-web-vitals` and `next/typescript`
+- Run: `npm run lint`
 
-**Quick Wins:**
-- Add `npm test` script to package.json
-- Configure Vitest with `vitest.config.ts`
-- Test sanitization and validation functions first
+## Dashboard Testing
+
+**Framework:**
+- No test framework detected in `script-dashboard/package.json`
+- No Jest, Vitest, or Playwright configuration
+
+**API Testing:**
+- Manual testing via curl/Postman
+- Scripts serve as integration test clients
+
+## Test Gaps (Known Issues)
+
+**Critical Gaps:**
+- No unit tests for utility classes
+- No integration tests for API endpoints
+- No component tests for React dashboard
+- Complex business logic (GuardTracker) untested
+
+**Recommended Additions:**
+- JUnit 5 for Java utility testing
+- Vitest for dashboard component testing
+- API integration tests with mock scripts
+
+## Debugging Approach
+
+**Logging:**
+- `script.log(Class, "message")` throughout codebase
+- Paint overlay for visual debugging
+- Task name displayed in overlay
+
+**OSMB Debug Tools:**
+- Built-in OSMB client debugger
+- Pixel analyzer for color detection debugging
+- Object inspector for RSObject verification
 
 ---
 
-*Testing analysis: 2026-01-13*
+*Testing analysis: 2026-01-14*
 *Update when test patterns change*

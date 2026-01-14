@@ -1,168 +1,146 @@
 # Architecture
 
-**Analysis Date:** 2026-01-13
+**Analysis Date:** 2026-01-14
 
 ## Pattern Overview
 
-**Overall:** Monorepo with State Machine Scripts + Full-stack Dashboard
+**Overall:** Modular Monorepo with Shared Utilities
 
 **Key Characteristics:**
-- Independent Java scripts share utilities via compiled JAR
-- Dashboard aggregates incremental stats from running scripts
-- HTTP POST every 10 minutes for stats reporting
-- Color bot paradigm: visual detection, not injection
+- Multiple independent script applications sharing a utility JAR
+- Task-based state machine pattern for script execution
+- Separate dashboard application for statistics aggregation
+- Single-threaded execution model within OSMB client
 
 ## Layers
 
-**Script Entry Point Layer:**
-- Purpose: Initialize script, run main loop, render paint overlay
-- Contains: `@ScriptDefinition`, `onStart()`, `poll()`, `onPaint()`
-- Location: `*/src/main/java/main/*.java`
-- Depends on: Task layer, utilities, OSMB API
-- Used by: OSMB client loads and executes scripts
+**Presentation Layer:**
+- Purpose: User interface and visual feedback
+- Contains: Paint overlays, JavaFX setup UIs, React dashboard components
+- Files: `**/main/ScriptUI.java`, `**/onPaint()` methods, `script-dashboard/src/app/`
+- Depends on: Script Core Layer, API Layer
 
-**Task Layer (State Machine):**
-- Purpose: Encapsulate discrete actions with conditions
-- Contains: `activate()` condition, `execute()` action
-- Location: `*/src/main/java/tasks/*.java`
-- Depends on: Script reference, utilities
-- Used by: Main script's poll loop
+**Script Core Layer:**
+- Purpose: State machine orchestration and task execution
+- Contains: Main script classes, task implementations, state management
+- Files: `**/main/[ScriptName].java`, `**/tasks/*.java`
+- Depends on: Service Layer, API Layer
+- Used by: Presentation Layer
 
-**Utilities Layer:**
-- Purpose: Shared reusable functionality across scripts
-- Contains: RetryUtils, BankingUtils, TabUtils, DialogueUtils
-- Location: `utilities/src/main/java/utilities/*.java`
-- Depends on: OSMB API only
-- Used by: All scripts via JAR dependency
+**Service/Utility Layer:**
+- Purpose: Reusable interaction patterns and helpers
+- Contains: RetryUtils, BankingUtils, DialogueUtils, TabUtils, BankSearchUtils
+- Files: `utilities/src/main/java/utilities/*.java`
+- Depends on: API Layer only
+- Used by: Script Core Layer
 
-**Configuration Layer:**
-- Purpose: User preferences via JavaFX UI
-- Contains: ScriptUI dialogs, Preferences storage
-- Location: `*/src/main/java/main/ScriptUI.java`
-- Used by: Main script's onStart()
-
-**Dashboard API Layer:**
-- Purpose: Receive and serve aggregated stats
-- Contains: POST/GET handlers, authentication, rate limiting
-- Location: `script-dashboard/src/app/api/stats/route.ts`
-- Depends on: Prisma ORM, SQLite
-- Used by: Scripts (POST), frontend (GET)
-
-**Dashboard Page Layer:**
-- Purpose: Render stats visualizations
-- Contains: Server components with database queries
-- Location: `script-dashboard/src/app/*/page.tsx`
-- Depends on: Prisma, React components
-- Used by: Web browsers
+**API Layer (OSMB):**
+- Purpose: Game client abstraction and detection
+- Contains: Managers (Widget, Object, Scene), Pixel detection, OCR
+- Files: `API/API.jar` (provided)
+- Depends on: Platform
+- Used by: All layers above
 
 ## Data Flow
 
-**Script Execution Cycle:**
+**Script Execution Lifecycle:**
 
-1. User starts script in OSMB client
-2. `onStart()` shows ScriptUI, initializes task list
-3. `poll()` iterates tasks, first `activate()` true runs `execute()`
-4. Task returns, poll sleeps (0-600ms)
-5. Every 10 minutes: `sendStats()` POSTs incremental data
-6. `onPaint()` renders overlay each frame
-7. `onStop()` cleanup on script end
+1. User runs `osmb build [ScriptName]` - Gradle compiles to JAR
+2. User loads script in OSMB client
+3. `Script.onStart()` - Initialize UI, load config, create task list
+4. `Script.poll()` loop at each frame:
+   - Check webhook send timing
+   - Iterate tasks, check `task.activate()`
+   - First activated task's `execute()` runs
+   - Return sleep duration (ms)
+5. `Script.onPaint()` - Render overlay asynchronously
+6. `Script.onStop()` - Cleanup on stop
 
 **Stats Reporting Flow:**
 
-1. Script tracks XP/GP/runtime increments
-2. POST to `/api/stats` with X-Stats-Key header
-3. Dashboard validates, rate-limits, sanitizes
-4. Upsert ScriptSession (session tracking)
-5. Create ScriptStat (individual report)
-6. Update AggregatedStats (daily rollup)
-7. Frontend fetches GET `/api/stats?days=7`
-8. Render charts with Recharts
+1. Script collects incremental stats (XP, items, runtime)
+2. Every 10 minutes: `sendStats()` constructs JSON payload
+3. HTTP POST to dashboard `/api/stats` endpoint
+4. Dashboard validates, stores to SQLite, aggregates daily
+5. React dashboard fetches and displays charts
 
 **State Management:**
-- Scripts: Static fields + Preferences API (per-user)
-- Dashboard: File-based SQLite via Prisma
-- Sessions: UUID per script run, ephemeral
+- Inter-task: Shared `public static` fields in main script class
+- Example: `TidalsGemCutter.setupDone`, `TidalsGemCutter.task`, `TidalsGemCutter.craftCount`
+- Cross-session: SQLite database for historical stats
 
 ## Key Abstractions
 
-**Task:**
-- Purpose: Discrete state machine action
+**Task (State Machine Node):**
+- Purpose: Encapsulate activation condition and execution logic
+- Interface: `activate()` returns boolean, `execute()` performs action
 - Examples: `Setup.java`, `Process.java`, `Bank.java`
-- Location: `*/src/main/java/tasks/*.java`
-- Pattern: Abstract class with `activate()` + `execute()`
+- Files: `**/utils/Task.java` (abstract base)
+- Pattern: Strategy with condition-based selection
 
-**Utility:**
-- Purpose: Reusable interaction helpers
-- Examples: `RetryUtils`, `BankingUtils`, `TabUtils`, `DialogueUtils`
-- Location: `utilities/src/main/java/utilities/*.java`
-- Pattern: Static methods with Script reference parameter
+**Utility Services:**
+- Purpose: Encapsulate common interaction patterns with retry logic
+- Examples: `RetryUtils`, `BankingUtils`, `DialogueUtils`, `TabUtils`
+- Files: `utilities/src/main/java/utilities/*.java`
+- Pattern: Static utility methods with script reference
 
-**Strategy (Alternative):**
-- Purpose: Pluggable behavior implementations
-- Examples: `MortMyreFungusCollector` implements `SecondaryCollectorStrategy`
-- Location: `TidalsSecondaryCollector/src/main/java/strategies/`
-- Pattern: Interface + concrete implementations
+**RSObject Query Predicate:**
+- Purpose: Reusable object finding criteria
+- Examples: `BankingUtils.BANK_QUERY`, custom predicates per script
+- Pattern: Predicate<RSObject> composition
 
-**XPTracking:**
-- Purpose: Skill progress wrapper
-- Location: `*/src/main/java/utils/XPTracking.java`
-- Pattern: Wrapper around OSMB XPTracker API
+**XP Tracking:**
+- Purpose: Monitor skill progression during execution
+- Files: `**/utils/XPTracking.java`
+- Pattern: Observer on XP changes
 
 ## Entry Points
 
-**Scripts:**
-- Location: `Tidals*/src/main/java/main/Tidals*.java`
-- Triggers: OSMB client starts script
-- Responsibilities: Initialization, loop execution, stats, paint
+**Script Entry:**
+- Location: `[ScriptName]/src/main/java/main/[ScriptName].java`
+- Triggers: OSMB client loads JAR
+- Responsibilities: Extend `Script`, implement `onStart()`, `poll()`, `onStop()`
+- Examples:
+  - `TidalsGemCutter/src/main/java/main/TidalsGemCutter.java`
+  - `TidalsCannonballThiever/src/main/java/main/TidalsCannonballThiever.java`
+  - `TidalsGoldSuperheater/src/main/java/main/TidalsGoldSuperheater.java`
 
-**Dashboard Homepage:**
-- Location: `script-dashboard/src/app/page.tsx`
-- Triggers: Browser navigates to `/`
-- Responsibilities: Hero section, script carousel
-
-**Dashboard Stats:**
-- Location: `script-dashboard/src/app/stats/page.tsx`
-- Triggers: Browser navigates to `/stats`
-- Responsibilities: Query DB, render charts/cards
-
-**Stats API:**
+**Dashboard API Entry:**
 - Location: `script-dashboard/src/app/api/stats/route.ts`
-- Triggers: HTTP POST/GET requests
-- Responsibilities: Auth, validation, database operations
+- Triggers: HTTP POST from scripts
+- Responsibilities: Validate, store, aggregate stats
+
+**Build Entry:**
+- Location: `settings.gradle`
+- Triggers: `gradle build` or `osmb build`
+- Responsibilities: Auto-discover and compile all modules
 
 ## Error Handling
 
-**Strategy (Scripts):** Log and continue
-- Utilities log failures with attempt counts
-- Scripts use `script.log(getClass(), message)` pattern
-- Some empty catch blocks exist (tech debt)
+**Strategy:** Graceful degradation with logging
 
-**Strategy (Dashboard):** Return appropriate HTTP status
-- 400 for validation errors
-- 401 for authentication failures
-- 429 for rate limiting
-- 500 for unexpected errors
-- All errors logged to console
+**Patterns:**
+- Null checks before method calls, return false/null for failures
+- `script.log(Class, "message")` for context-aware logging
+- Try-catch only for truly exceptional cases (IO, network)
+- Retry logic in utilities (10 attempts, 300-500ms delays)
 
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Scripts: `script.log(Class, message)` to OSMB console
-- Dashboard: `console.error()` / `console.log()`
-
-**Authentication:**
-- X-Stats-Key header with timing-safe comparison
-- API key stored in Secrets.java (scripts) and .env (dashboard)
-
-**Rate Limiting:**
-- Dashboard: 30 requests/minute per IP
-- In-memory Map-based tracking
+- Java: `script.log(ClassName.class, "message")` - OSMB client console
+- Dashboard: Console stdout/stderr
 
 **Validation:**
-- Dashboard: Input sanitization, length limits, type checking
-- Scripts: Minimal validation before API calls
+- API: String sanitization, numeric bounds, size limits
+- Scripts: `Setup.java` task validates prerequisites before execution
+
+**Security:**
+- API key authentication with timing-safe comparison
+- Security headers in Next.js config (X-Frame-Options, CSP)
+- Rate limiting (30 req/min per IP)
 
 ---
 
-*Architecture analysis: 2026-01-13*
+*Architecture analysis: 2026-01-14*
 *Update when major patterns change*

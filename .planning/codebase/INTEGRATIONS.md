@@ -1,142 +1,120 @@
 # External Integrations
 
-**Analysis Date:** 2026-01-13
+**Analysis Date:** 2026-01-14
 
 ## APIs & External Services
 
-**Stats Reporting API (Internal):**
-- Purpose: Scripts report XP/GP/runtime to dashboard
+**Stats API (Internal):**
+- Purpose: Scripts report game statistics to dashboard
 - Endpoint: `POST /api/stats` (`script-dashboard/src/app/api/stats/route.ts`)
-- Auth: `X-Stats-Key` header with timing-safe comparison
-- Rate Limit: 30 requests/minute per IP
-- Payload:
-  ```json
-  {
-    "script": "TidalsGemCutter",
-    "session": "<UUID>",
-    "gp": 0,
-    "xp": 50000,
-    "runtime": 600,
-    "gemsCut": 150
-  }
-  ```
+- Authentication: `X-Stats-Key` header with API key
+- Rate Limiting: 30 requests per minute per IP (in-memory)
+- Payload: JSON with `script`, `session`, `gp`, `xp`, `runtime`, and script-specific metadata
 
-**Discord Webhooks (Optional):**
-- Purpose: Send progress screenshots to Discord
-- Configuration: User-provided webhook URL via ScriptUI
-- Implementation: `TidalsGemCutter/src/main/java/main/ScriptUI.java`, `TidalsGoldSuperheater/src/main/java/main/ScriptUI.java`
-- Features: Configurable interval (1-60 minutes), optional username inclusion
-- Uses `java.net.HttpURLConnection` for POST requests
+**OSMB API (Game Automation):**
+- Purpose: Color-based bot for OSRS game automation
+- SDK: `API/API.jar` (provided dependency)
+- Core Managers:
+  - `WidgetManager` - UI: Bank, Inventory, Dialogue, Tabs, Minimap
+  - `ObjectManager` - RSObjects (trees, rocks, banks)
+  - `SceneManager` - NPCs, ground items, tiles
+  - `Walker` - Pathfinding and navigation
+  - `PixelAnalyzer` - Color/pixel detection
+  - `OCR` - Text recognition
 
-**OSMB API (External):**
-- Purpose: Core color bot framework
-- SDK: `API/API.jar` (compileOnly dependency)
-- Provides: Script base class, widget managers, pixel analysis, OCR
+**Discord Webhook (Optional):**
+- Purpose: Script completion notifications
+- Integration: `TidalsGemCutter/src/main/java/main/TidalsGemCutter.java`
+- Method: Multipart form-data with embedded canvas screenshot
+- Rate limit handling: 429 response retry logic
+- Configurable interval: 5-60 minutes
 
 ## Data Storage
 
 **Databases:**
-- SQLite - Primary data store for dashboard
-- Connection: `DATABASE_URL` environment variable
-- Client: Prisma ORM v6.19 (`script-dashboard/src/lib/db.ts`)
-- Migrations: `prisma/migrations/` (Prisma migrate)
-- Schema: `script-dashboard/prisma/schema.prisma`
-
-**Models:**
-- `ScriptSession` - Unique session tracking (sessionId, script, timestamps)
-- `ScriptStat` - Individual stat reports (xp, gp, runtime, metadata)
-- `AggregatedStats` - Daily rollups per script (totals, session counts)
+- SQLite - Primary data store for dashboard (`script-dashboard/prisma/schema.prisma`)
+  - Connection: `DATABASE_URL` environment variable
+  - Client: Prisma ORM 6.19.1
+  - Migrations: `prisma/migrations/`
+  - Tables:
+    - `ScriptSession` - Session tracking with unique `sessionId`
+    - `ScriptStat` - Individual stats entries (gp, xp, runtime, metadata)
+    - `AggregatedStats` - Daily aggregated stats by script
 
 **File Storage:**
-- None - No file upload functionality
+- None - No external file storage service
+- Local file system for script JARs and build artifacts
 
 **Caching:**
-- None - Direct database queries
+- None - No Redis or external cache
+- In-memory rate limiting map (single-instance only)
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- API key authentication (not user auth)
-- Key stored in `STATS_API_KEY` env var (dashboard)
-- Key stored in `obf/Secrets.java` (scripts)
+- API key authentication only (`X-Stats-Key` header)
+- Timing-safe constant-time comparison (`script-dashboard/src/app/api/stats/route.ts:56-67`)
+- No user authentication system
 
-**Implementation:**
-- Timing-safe string comparison to prevent timing attacks
-- Single API key shared across all scripts
-- No user sessions or tokens
+**OAuth Integrations:**
+- None
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- None - Console logging only
+- None - No Sentry, Datadog, or similar
+- Console logging only
 
 **Analytics:**
-- Built-in: Stats dashboard tracks XP, GP, runtime, sessions
-- No external analytics service
+- None - No Mixpanel, GA, or similar
+- Internal stats dashboard provides script usage metrics
 
 **Logs:**
-- Scripts: OSMB client console (`script.log()`)
-- Dashboard: Node.js console (stdout/stderr)
+- Console stdout/stderr
+- OSMB client logs for script execution
+- `script.log(Class, "message")` pattern in Java scripts
 
 ## CI/CD & Deployment
 
-**Hosting (Dashboard):**
-- Docker-ready: `script-dashboard/Dockerfile`
-- Can deploy to Vercel (Next.js native)
-- Environment vars configured in host platform
+**Hosting:**
+- Docker container - Dashboard deployment
+- Local - Script JAR files deployed to OSMB client
 
 **CI Pipeline:**
-- None configured
-- No GitHub Actions workflows
-
-**Build:**
-- Dashboard: `npm run build` (Next.js)
-- Scripts: `osmb build <name>` or Gradle
+- None detected - No GitHub Actions, Jenkins, etc.
+- Manual builds: `osmb build [ScriptName]`
 
 ## Environment Configuration
 
 **Development:**
-- Dashboard: `.env` with `DATABASE_URL=file:./dev.db`
-- Scripts: `obf/Secrets.java` with local/test API endpoint
-- Template: `.env.example` provided
+- Required env vars: `DATABASE_URL`, `STATS_API_KEY`
+- Secrets location: `.env` (gitignored), `obf/Secrets.java` (gitignored)
+- Mock services: None - uses real SQLite database
 
 **Production:**
-- Dashboard: Environment variables via hosting platform
-- Database: `file:/app/data/prod.db` (Docker volume)
-- Scripts: Compiled with production API URL in Secrets.java
-
-**Required Variables (Dashboard):**
-- `DATABASE_URL` - SQLite file path
-- `STATS_API_KEY` - API authentication key
-
-**Required (Scripts):**
-- `obf/Secrets.java` with `STATS_URL` and `STATS_API` constants
+- Docker Compose with volume persistence (`docker-compose.yml`)
+- Environment variables passed via Docker
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- `POST /api/stats` - Receives stats from scripts
-  - Validation: Script name, session ID, numeric bounds
-  - Authentication: X-Stats-Key header
-  - Rate limiting: 30/min per IP
+- `POST /api/stats` - Stats submission from scripts
+  - Validation: API key, string sanitization, numeric bounds
+  - Data: Incremental stats (not cumulative)
 
 **Outgoing:**
-- Discord webhooks (optional, user-configured)
-  - Triggers: Configured interval (1-60 minutes)
-  - Payload: JSON with script name, stats, optional screenshot
-  - No retry logic implemented
+- Discord webhook (optional from Java scripts)
+  - Trigger: Script completion or interval
+  - Payload: Stats summary with screenshot embed
 
-## External References
+## External Image Resources
 
-**Asset URLs:**
-- OSRS Wiki images: `https://oldschool.runescape.wiki/images/*`
-- Used in dashboard for item icons
-
-**Stats Reporting URL:**
-- Configured per-script in `obf/Secrets.java`
-- Example: `https://scripts.tidale.us/api/stats`
+**Old School RuneScape Wiki:**
+- Configuration: `script-dashboard/next.config.ts`
+- Source: `https://oldschool.runescape.wiki/images/**`
+- Use: Item sprites and game assets in dashboard UI
 
 ---
 
-*Integration audit: 2026-01-13*
+*Integration audit: 2026-01-14*
 *Update when adding/removing external services*

@@ -1,180 +1,203 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-01-13
+**Analysis Date:** 2026-01-14
 
 ## Naming Patterns
 
-**Files (Java):**
-- PascalCase for all class files: `TidalsGemCutter.java`, `Setup.java`, `RetryUtils.java`
-- Package names lowercase: `main`, `tasks`, `utils`, `obf`, `utilities`
+**Files:**
+- PascalCase for Java files: `TidalsGemCutter.java`, `BankingUtils.java`
+- Task files: `Setup.java`, `Process.java`, `Bank.java`
+- Utility files: `*Utils.java` suffix (RetryUtils, BankingUtils, DialogueUtils)
 
-**Files (TypeScript):**
-- PascalCase for components: `StatsChart.tsx`, `ScriptCard.tsx`
-- lowercase for utilities: `db.ts`
-- Special: `route.ts` for API endpoints
+**Functions:**
+- camelCase for all methods: `openBankAndWait()`, `equipmentInteract()`, `searchAndWithdraw()`
+- No special prefix for async methods
+- Handler pattern: verb-first descriptive names
 
-**Functions (Java):**
-- camelCase for all methods: `openBankAndWait()`, `equipmentInteract()`, `depositAllExcept()`
-- Boolean getters: `isLevelUp()`, `hasDialogue()`, `needsGuardSync()`
-- Action methods: `sendStats()`, `handleLevelUp()`, `resetCbCycle()`
+**Variables:**
+- camelCase for instance/local: `setupDone`, `selectedUncutGemID`, `webhookEnabled`
+- UPPER_SNAKE_CASE for constants: `DEFAULT_MAX_ATTEMPTS`, `STATS_INTERVAL_MS`, `MAX_SCROLL_ITERATIONS`
+- No underscore prefix for private members
 
-**Functions (TypeScript):**
-- camelCase: `formatRuntime()`, `sanitizeString()`, `mergeMetadata()`
-- React components: PascalCase: `StatsChart`, `ScriptCard`
-
-**Variables (Java):**
-- camelCase for fields: `selectedUncutGemID`, `lastStatsSent`, `webhookEnabled`
-- UPPER_SNAKE_CASE for constants: `STATS_INTERVAL_MS`, `DEFAULT_MAX_ATTEMPTS`, `BANK_NAMES`
-- Static fields: camelCase with static modifier
-
-**Variables (TypeScript):**
-- camelCase: `accentColor`, `isRateLimited`
-- UPPER_SNAKE_CASE for constants: `RATE_LIMIT_WINDOW`, `MAX_SCRIPT_NAME_LENGTH`
-
-**Types (TypeScript):**
-- PascalCase for interfaces: `StatCardProps`, `ScriptStat`, `ChartDataPoint`
-- Props suffix for component props: `ScriptCardProps`, `StatCardProps`
+**Types:**
+- PascalCase for classes/interfaces: `Task`, `WithdrawalRequest`, `BatchWithdrawalResult`
+- No `I` prefix for interfaces
+- Descriptive names: `GuardTracker`, `XPTracking`
 
 ## Code Style
 
-**Formatting (Java):**
-- Indentation: 4 spaces
-- Braces: Same line opening (K&R style)
-- Line length: Generally under 120 characters
-- Import organization: Grouped by package origin
+**Formatting:**
+- 4-space indentation (Java standard)
+- Opening brace on same line
+- Consistent blank lines between method definitions
+- No trailing whitespace
 
-**Formatting (TypeScript):**
-- Indentation: 2 spaces
-- Braces: Same line opening
-- Line length: Generally under 100 characters
-- ESLint: `eslint-config-next` with core-web-vitals
+**Quotes & Strings:**
+- Double quotes for all string literals: `"Opening inventory"`
+- String.format() for complex string construction
+
+**Semicolons:**
+- Required at end of all statements
 
 **Linting:**
-- TypeScript: ESLint 9 with Next.js config (`script-dashboard/eslint.config.mjs`)
-- Java: No formal linter (IDE-based)
-- Run: `npm run lint` in script-dashboard
+- No explicit linting configuration (checkstyle, PMD)
+- Style enforced manually/via IDE
+- Guidelines documented in `CLAUDE.md`
 
 ## Import Organization
 
-**Order (Java):**
-1. Java standard library (java.*, javax.*)
-2. Third-party packages (com.osmb.*)
-3. Local packages (tasks.*, utils.*, obf.*)
+**Order:**
+1. `com.osmb.api.*` - OSMB API imports
+2. `java.*` - Standard Java imports
+3. `main.*` - Local main package
+4. `utils.*` - Local utility imports
+5. `static main.[ScriptName].*` - Static field imports
 
-**Order (TypeScript):**
-1. React/framework imports
-2. Third-party packages
-3. Internal modules (@/lib, @/components)
-4. Type imports
+**Grouping:**
+- Blank line between OSMB and Java imports
+- No wildcard imports (explicit imports only)
+- Static imports at end with `static` keyword
 
-**Path Aliases:**
-- TypeScript: `@/*` maps to `src/*` (`script-dashboard/tsconfig.json`)
+**Example from Bank.java:**
+```java
+import com.osmb.api.item.ItemGroupResult;
+import com.osmb.api.item.ItemID;
+import com.osmb.api.script.Script;
+
+import java.util.Collections;
+import java.util.Set;
+
+import main.TidalsGemCutter;
+import utils.Task;
+
+import static main.TidalsGemCutter.*;
+```
 
 ## Error Handling
 
-**Patterns (Java):**
-- Utilities log and return boolean: `if (!success) { script.log(...); return false; }`
-- Null checks before API calls: `if (inv == null) return false;`
-- Atomic types for thread safety: `AtomicBoolean`, `AtomicReference`
+**Patterns:**
+- Null checks before method calls, return false/null for failures
+- Graceful degradation rather than exceptions
+- Try-catch only for IO/network operations
 
-**Patterns (TypeScript):**
-- Try/catch at API boundaries with appropriate HTTP status
-- Timing-safe comparison for authentication
-- Input sanitization with helper functions
+**Example:**
+```java
+if (bank == null) {
+    script.log(BankingUtils.class, "bank object is null");
+    return false;
+}
+```
 
-**Error Types:**
-- Java: Log to OSMB console, continue or return
-- TypeScript: Return HTTP error responses with status codes
+**Logging:**
+- Context-aware: `script.log(ClassName.class, "message")`
+- Lowercase, blunt messages per project guidelines
+- Log each retry attempt: `"description attempt X/10"`
 
 ## Logging
 
-**Framework (Java):**
-- OSMB logging: `script.log(getClass(), message)` or `script.log("CATEGORY", message)`
-- Categories: "GUARD", "CYCLE", "SYNC" for specialized tracking
-
-**Framework (TypeScript):**
-- Console: `console.error()` for errors, `console.log()` for info
-- No structured logging framework
+**Framework:**
+- OSMB built-in: `script.log(Class, String)` method
+- Outputs to OSMB client console
 
 **Patterns:**
-- Java: Log each retry attempt with count: "description attempt X/10"
-- TypeScript: Log validation failures with context
+- Log state transitions and important actions
+- Include context (item names, counts, task names)
+- Keep messages concise and lowercase
+
+**Example:**
+```java
+script.log(getClass(), "looking for " + itemName);
+script.log(BankSearchUtils.class, "searching for: " + itemName + " (id: " + itemId + ")");
+```
 
 ## Comments
 
 **When to Comment:**
-- Explain why, not what: `// timeout` or `// level up`
-- Document business rules and edge cases
-- Blunt, lowercase style per CLAUDE.md: `// track crafted items`
+- Explain why, not what: `// banked cut gems mode - bank when no cut gems`
+- Document business logic and mode differences
+- Avoid obvious comments
 
-**JSDoc/JavaDoc:**
-- Java: Document utility methods with usage examples (`BankingUtils.java`)
-- TypeScript: JSDoc for public API functions
+**JavaDoc:**
+- Required for all public utility methods
+- Format: `/** ... */` block style
+- Use `@param`, `@return` tags
 
-**TODO Comments:**
-- Format: `// TODO: description`
-- Example: `// TODO: Not 100% sure these are correct` (`BlisterwoodChopper.java`)
+**Example from RetryUtils.java:**
+```java
+/**
+ * Retry an equipment interaction up to maxAttempts times.
+ *
+ * @param script the script instance
+ * @param itemId the equipment item ID to interact with
+ * @param action the action to perform (e.g., "Teleport")
+ * @param description logging description for the interaction
+ * @param maxAttempts maximum retry attempts
+ * @return true if interaction succeeded
+ */
+```
+
+**Inline Comments:**
+- Blunt, lowercase style: `// track last sent values for incremental reporting`
+- Comments above the code they describe
+- Branch explanation in conditionals
 
 ## Function Design
 
 **Size:**
-- Java: Most methods under 50 lines, utilities are compact
-- TypeScript: Components modular, logic extracted to helpers
+- Keep under 50 lines where practical
+- Complex scripts may have longer methods (tracked as concern)
 
 **Parameters:**
-- Java: Script reference as first parameter for utilities
-- TypeScript: Destructured props for React components
-- Use object parameter for 4+ arguments
+- `script` reference always first parameter in utilities
+- Use options objects for 4+ parameters (see `WithdrawalRequest`)
+- Descriptive parameter names
 
 **Return Values:**
-- Java: Boolean for success/failure, void for actions
-- TypeScript: Typed returns, explicit null handling
+- Boolean for success/failure operations
+- Null for "not found" cases
+- Explicit returns, no implicit undefined
 
 ## Module Design
 
-**Exports (TypeScript):**
-- Named exports for utilities: `export function`
-- Named exports for components: `export function ComponentName`
-- No default exports
-
-**Barrel Files:**
-- Not used in this codebase
-- Direct imports preferred
-
-**Java Packages:**
-- `main/` - Entry point and UI
-- `tasks/` - State machine tasks
-- `utils/` - Local utilities
-- `obf/` - Secrets (gitignored)
-- `utilities/` - Shared JAR
-
-## Script-Specific Patterns
+**Exports:**
+- Public methods in utility classes
+- Package-private for internal helpers
+- Static methods for stateless utilities
 
 **Task Pattern:**
-```java
-public abstract class Task {
-    protected Script script;
-    public Task(Script script) { this.script = script; }
-    public abstract boolean activate();
-    public abstract boolean execute();
-}
-```
-
-**Retry Pattern:**
-```java
-for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-    script.log(getClass(), description + " attempt " + attempt + "/" + maxAttempts);
-    if (success) return true;
-    script.pollFramesUntil(() -> false, script.random(300, 500), true);
-}
-```
+- Abstract base class with `activate()` and `execute()` methods
+- Concrete implementations per state
+- Tasks communicate via static fields in main script
 
 **Static State:**
-- Scripts use `public static` fields for configuration
-- Set during `onStart()` from ScriptUI selections
-- Accessed throughout task execution
+- Inter-task communication: `public static` fields in main script
+- Example: `TidalsGemCutter.setupDone`, `TidalsGemCutter.task`
+- Reset in `onStart()`, cleaned in `onStop()`
+
+## Retry Pattern (Critical)
+
+**Standard pattern for all menu interactions:**
+```java
+private boolean interactWithRetry(Polygon poly, String action, String description) {
+    int maxAttempts = 10;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        script.log(getClass(), description + " attempt " + attempt + "/" + maxAttempts);
+        boolean success = script.getFinger().tap(poly, action);
+        if (success) return true;
+        script.pollFramesUntil(() -> false, script.random(300, 500), true);
+    }
+    script.log(getClass(), description + " failed after " + maxAttempts + " attempts");
+    return false;
+}
+```
+
+**Rules:**
+- Default 10 retry attempts
+- Log each attempt as "description attempt X/10"
+- 300-500ms random delay between attempts
+- Use `RetryUtils` from shared utilities instead of custom implementations
 
 ---
 
-*Convention analysis: 2026-01-13*
+*Convention analysis: 2026-01-14*
 *Update when patterns change*

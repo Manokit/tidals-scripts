@@ -1,90 +1,86 @@
 # Technology Stack
 
-**Analysis Date:** 2026-01-13
+**Analysis Date:** 2026-01-14
 
 ## Languages
 
 **Primary:**
-- Java 17 - OSMB automation scripts (`TidalsGemCutter/build.gradle`, `utilities/build.gradle`)
-- TypeScript 5 - Dashboard application (`script-dashboard/tsconfig.json`)
+- Java 17 - All OSMB script application code (`TidalsGemCutter/build.gradle`, `utilities/build.gradle`)
+- TypeScript 5.x - Dashboard application code (`script-dashboard/package.json`)
 
 **Secondary:**
-- JavaScript - Build scripts, config files
-- Groovy - Gradle build configuration (`settings.gradle`, `*/build.gradle`)
+- JavaScript - Dashboard build scripts, config files
+- Gradle DSL - Build configuration for Java scripts
 
 ## Runtime
 
 **Environment:**
-- Java 17 (class version 61.0) - Required by OSMB API
-- Node.js 16+ - Inferred from Next.js 16 requirements
+- Java 17 (class version 61.0) - Required for OSMB API compatibility
+- Node.js 20.x - Dashboard runtime (`script-dashboard/Dockerfile` uses node:20-alpine)
 
 **Package Manager:**
-- Gradle 7+ - Java dependency management via wrapper (`gradlew`)
-- npm - Node.js package management (`script-dashboard/package.json`)
-- No lockfiles committed (npm uses package.json semver, Gradle uses resolution)
+- npm 10.x - Dashboard dependencies (`script-dashboard/package-lock.json`)
+- Gradle - Java script builds (multi-project setup via `settings.gradle`)
 
 ## Frameworks
 
 **Core:**
-- OSMB API - Color bot framework for automation scripts (`API/API.jar`)
-- Next.js 16.1.1 - React web framework with App Router (`script-dashboard/package.json`)
-- React 19.2.3 - UI component library
+- OSMB API - Game automation framework (`API/API.jar` - compileOnly dependency)
+- Next.js 16.1.1 - Full-stack React framework with App Router (`script-dashboard/package.json`)
+- React 19.2.3 - UI component library (`script-dashboard/package.json`)
 
 **Testing:**
-- None - No formal test framework configured in either project
+- No formal testing frameworks detected in either project
+- Manual/integration testing through OSMB client execution
 
 **Build/Dev:**
-- Gradle - Java compilation and JAR packaging
-- TypeScript 5 - Static type checking
-- ESLint 9 - Linting for dashboard (`script-dashboard/eslint.config.mjs`)
-- Tailwind CSS 4 - Utility-first styling (`@tailwindcss/postcss`)
-- PostCSS - CSS processing
+- Gradle - Java build system (auto-discovers modules via `settings.gradle`)
+- TypeScript 5.x - Type checking for dashboard (`script-dashboard/tsconfig.json`)
+- PostCSS 4 - CSS transformation (`script-dashboard/postcss.config.mjs`)
 
 ## Key Dependencies
 
 **Critical (Dashboard):**
-- `@prisma/client` ^6.19.1 - ORM for SQLite database access (`script-dashboard/src/lib/db.ts`)
-- `prisma` ^6.19.1 - Database migrations and schema management
-- `recharts` ^3.6.0 - Data visualization charts (`script-dashboard/src/components/StatsChart.tsx`)
-- `date-fns` ^4.1.0 - Date formatting utilities
+- Prisma 6.19.1 - ORM for SQLite database access (`@prisma/client`)
+- Recharts 3.6.0 - React charting for stats visualization
+- date-fns 4.1.0 - Date utility library
+- Tailwind CSS 4 - Utility-first CSS framework
 
-**Critical (Scripts):**
-- OSMB API.jar - Core color bot framework (`API/API.jar`)
-- TidalsUtilities.jar - Shared retry, banking, tab, dialogue utilities (`utilities/jar/`)
+**Critical (Java Scripts):**
+- OSMB API (`API/API.jar`) - Core game automation (WidgetManager, ObjectManager, SceneManager)
+- TidalsUtilities.jar - Shared utilities (RetryUtils, BankingUtils, DialogueUtils, TabUtils)
 
 **Infrastructure:**
-- SQLite - File-based database via Prisma (`prisma/schema.prisma`)
-- JavaFX - UI configuration dialogs (`*/main/ScriptUI.java`)
+- SQLite - Lightweight database for stats storage
+- Docker - Containerization for dashboard deployment
 
 ## Configuration
 
-**Environment (Dashboard):**
-- `.env` files with DATABASE_URL and STATS_API_KEY (`script-dashboard/.env.example`)
-- Required: `DATABASE_URL` (SQLite path), `STATS_API_KEY` (authentication)
-
-**Environment (Scripts):**
-- `obf/Secrets.java` - Hardcoded API URL and key (gitignored)
-- Java Preferences API - User configuration storage for webhook URLs
+**Environment:**
+- `DATABASE_URL` - SQLite database path (`file:./dev.db` or `file:/app/data/prod.db`)
+- `STATS_API_KEY` - API key for script authentication
+- `obf/Secrets.java` - Java scripts credentials (gitignored)
 
 **Build:**
-- `settings.gradle` - Root project with auto-discovery of subdirectories
-- `build.gradle` per script - Individual JAR configuration
-- `tsconfig.json` - TypeScript strict mode, path aliases (`@/*` → `src/*`)
-- `next.config.ts` - Next.js security headers
+- `script-dashboard/next.config.ts` - Next.js with security headers, remote image patterns
+- `script-dashboard/tsconfig.json` - TypeScript ES2017 target, bundler module resolution
+- `prisma/schema.prisma` - Database schema (SQLite provider)
+- `script-dashboard/eslint.config.mjs` - ESLint extending next/core-web-vitals
 
 ## Platform Requirements
 
 **Development:**
-- macOS/Linux/Windows with Java 17 JDK
-- Node.js 16+ for dashboard
+- macOS/Linux/Windows (any platform with Java 17 and Node.js 20)
 - OSMB client for script testing
+- No external database required (SQLite embedded)
 
 **Production:**
-- Scripts: Compiled JAR files run in OSMB client
-- Dashboard: Vercel-compatible (Docker available via `Dockerfile`)
-- Database: SQLite file storage
+- Docker 20.10+ - Multi-stage build for dashboard
+- Docker Compose 3.8 - Orchestration with volume persistence
+- OSMB client - Script execution environment
+- Java 17 runtime for scripts
 
 ---
 
-*Stack analysis: 2026-01-13*
+*Stack analysis: 2026-01-14*
 *Update after major dependency changes*
