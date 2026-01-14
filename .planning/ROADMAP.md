@@ -67,7 +67,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Search Infrastructure | 0/2 | Planned | - |
+| 1. Core Search Infrastructure | 1/2 | In progress | - |
 | 2. Single Item Withdrawal | 0/TBD | Not started | - |
 | 3. Scroll Fallback | 0/TBD | Not started | - |
 | 4. Batch Withdrawal | 0/TBD | Not started | - |
