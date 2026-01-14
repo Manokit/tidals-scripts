@@ -5,25 +5,30 @@
 See: .planning/PROJECT.md (updated 2026-01-14)
 
 **Core value:** Reliable search — finding items by name must work 100% of the time
-**Current focus:** Complete (v1.1 shipped)
+**Current focus:** v1.2 Verified Withdrawals
 
 ## Current Position
 
-Phase: 6 of 6 (Complete)
-Plan: All plans complete
-Status: v1.1 shipped
-Last activity: 2026-01-14 — v1.1 milestone complete
+Phase: 7 of 9 (Scroll Position Detection)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-14 — Milestone v1.2 created
 
-Progress: ██████████ 100% (8/8 plans)
+Progress: ░░░░░░░░░░ 0%
+
+## v1.2 Focus
+
+**Problem:** searchAndWithdrawByName uses fixed pixel offset and hopes OSRS bank search consolidates items to top-left. No verification that item exists or matches.
+
+**Solution:**
+- Sprite-based scroll position detection (at-top/at-bottom)
+- Item ID search with tapGetResponse verification
+- Refactor withdrawal flow with proper verification
 
 ## v1.1 Summary
 
 **Problem:** openSearch() used BACKSPACE keyboard shortcut which doesn't activate bank search
 **Fix:** Visual tap on SEARCH button using sprite-based detection (sprite ID 1043)
-
-**Shipped:**
-- Phase 6: Tap-Based Search Activation (1 plan)
-- openSearch() now uses proven sprite-based tap pattern
 
 ## v1.0 Summary
 
@@ -40,5 +45,9 @@ Progress: ██████████ 100% (8/8 plans)
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: v1.1 milestone complete
+Stopped at: Milestone v1.2 initialization
 Resume file: None
+
+### Roadmap Evolution
+
+- Milestone v1.2 created: verified withdrawals with item ID search, 3 phases (Phase 7-9)
