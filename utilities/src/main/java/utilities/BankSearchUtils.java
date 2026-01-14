@@ -2,8 +2,11 @@ package utilities;
 
 import com.osmb.api.input.PhysicalKey;
 import com.osmb.api.input.TouchType;
+import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+
+import java.util.Set;
 
 /**
  * Bank search utilities for searching items by name.
@@ -181,5 +184,86 @@ public class BankSearchUtils {
 
         script.log(BankSearchUtils.class, "failed to clear search");
         return false;
+    }
+
+    /**
+     * Searches for an item by name and withdraws the specified amount.
+     *
+     * This method:
+     * 1. Gets the item name from the ID
+     * 2. Types the name into bank search
+     * 3. Waits for bank to filter results
+     * 4. Withdraws the item by ID
+     * 5. Clears the search
+     *
+     * @param script the script instance
+     * @param itemId the item ID to withdraw
+     * @param amount the amount to withdraw
+     * @return true if withdrawal succeeded
+     */
+    public static boolean searchAndWithdraw(Script script, int itemId, int amount) {
+        return searchAndWithdraw(script, itemId, amount, false);
+    }
+
+    /**
+     * Searches for an item by name and withdraws the specified amount.
+     *
+     * @param script the script instance
+     * @param itemId the item ID to withdraw
+     * @param amount the amount to withdraw
+     * @param keepSearchOpen if true, does not clear search after withdraw
+     * @return true if withdrawal succeeded
+     */
+    public static boolean searchAndWithdraw(Script script, int itemId, int amount, boolean keepSearchOpen) {
+        // pre-condition: bank must be visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot search and withdraw");
+            return false;
+        }
+
+        // get item name from ID
+        String itemName = script.getItemManager().getItemName(itemId);
+        if (itemName == null || itemName.isEmpty()) {
+            script.log(BankSearchUtils.class, "failed to get item name for id: " + itemId);
+            return false;
+        }
+
+        script.log(BankSearchUtils.class, "searching for: " + itemName + " (id: " + itemId + ")");
+
+        // type search query
+        if (!typeSearch(script, itemName)) {
+            script.log(BankSearchUtils.class, "failed to type search for: " + itemName);
+            return false;
+        }
+
+        // wait for bank to filter results
+        script.pollFramesHuman(() -> false, script.random(300, 500));
+
+        // verify item exists in filtered bank
+        ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
+        if (bankItems == null || !bankItems.contains(itemId)) {
+            script.log(BankSearchUtils.class, "item not found after search: " + itemName);
+            clearSearch(script);
+            return false;
+        }
+
+        // withdraw the item
+        script.log(BankSearchUtils.class, "withdrawing " + amount + " x " + itemName);
+        boolean success = script.getWidgetManager().getBank().withdraw(itemId, amount);
+
+        if (success) {
+            script.log(BankSearchUtils.class, "withdraw succeeded");
+            // human-like delay after withdraw
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+        } else {
+            script.log(BankSearchUtils.class, "withdraw failed for: " + itemName);
+        }
+
+        // clear search unless caller wants to keep it open
+        if (!keepSearchOpen) {
+            clearSearch(script);
+        }
+
+        return success;
     }
 }
