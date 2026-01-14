@@ -135,4 +135,51 @@ public class BankSearchUtils {
         script.log(BankSearchUtils.class, "search typed successfully");
         return true;
     }
+
+    /**
+     * Clears the bank search box by pressing ESC.
+     *
+     * In OSRS, pressing ESC while search is active clears the search
+     * and returns to showing all bank items.
+     *
+     * @param script the script instance
+     * @return true if search was cleared (or wasn't active)
+     */
+    public static boolean clearSearch(Script script) {
+        return clearSearch(script, DEFAULT_TIMEOUT);
+    }
+
+    /**
+     * Clears the bank search box by pressing ESC.
+     *
+     * @param script the script instance
+     * @param timeout max time to wait for search to clear
+     * @return true if search was cleared (or wasn't active)
+     */
+    public static boolean clearSearch(Script script, int timeout) {
+        // if search not active, nothing to clear
+        if (!isSearchActive(script)) {
+            script.log(BankSearchUtils.class, "search not active - nothing to clear");
+            return true;
+        }
+
+        script.log(BankSearchUtils.class, "clearing search with ESC");
+
+        // press ESC to close search
+        script.getKeyboard().pressKey(TouchType.DOWN, PhysicalKey.ESCAPE);
+        script.getKeyboard().pressKey(TouchType.UP, PhysicalKey.ESCAPE);
+
+        // wait for search to become inactive
+        boolean cleared = script.pollFramesUntil(() -> !isSearchActive(script), timeout);
+
+        if (cleared) {
+            script.log(BankSearchUtils.class, "search cleared successfully");
+            // human-like delay after clearing
+            script.pollFramesHuman(() -> false, script.random(100, 200));
+            return true;
+        }
+
+        script.log(BankSearchUtils.class, "failed to clear search");
+        return false;
+    }
 }
