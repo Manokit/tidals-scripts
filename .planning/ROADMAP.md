@@ -40,15 +40,15 @@ Plans:
 Plans:
 - [x] 08-01: Add item ID visual search methods — completed 2026-01-14
 
-#### Phase 9: Robust Withdrawal Flow
+#### Phase 9: Robust Withdrawal Flow (Complete)
 
 **Goal**: Refactor searchAndWithdrawByName with new verified item search flow
 **Depends on**: Phase 8
 **Research**: Unlikely (internal refactor)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 09-01: TBD (run /gsd:plan-phase 9 to break down)
+- [x] 09-01: Refactor searchAndWithdrawByName with verified item search — completed 2026-01-14
 
 ---
 
@@ -84,6 +84,6 @@ See [v1.1 archive](milestones/v1.1-ROADMAP.md) for full details.
 | 6. Tap-Based Search Activation | v1.1 | 1/1 | Complete | 2026-01-14 |
 | 7. Scroll Position Detection | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 8. Item ID Screen Search | v1.2 | 1/1 | Complete | 2026-01-14 |
-| 9. Robust Withdrawal Flow | v1.2 | 0/? | Not started | - |
+| 9. Robust Withdrawal Flow | v1.2 | 1/1 | Complete | 2026-01-14 |
 
-**Total:** 9 phases, 10+ plans (10 complete)
+**Total:** 9 phases, 11 plans (11 complete)
