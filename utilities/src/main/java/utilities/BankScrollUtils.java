@@ -304,4 +304,145 @@ public class BankScrollUtils {
         }
         return !canScrollDown(script);
     }
+
+    /**
+     * Scrolls down and checks if we can scroll further.
+     *
+     * This method uses sprite-based detection - after scrolling, it checks if the
+     * scroll down button is still visible. If not visible, we've hit the bottom.
+     *
+     * @param script the script instance
+     * @return true if scroll succeeded and can scroll more, false if at end or scroll failed
+     */
+    public static boolean scrollDownAndCheck(Script script) {
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankScrollUtils.class, "bank not visible - cannot scroll down and check");
+            return false;
+        }
+
+        // check if we can even scroll down before attempting
+        if (!canScrollDown(script)) {
+            script.log(BankScrollUtils.class, "already at bottom of bank");
+            return false;
+        }
+
+        // attempt scroll down
+        if (!scrollDown(script)) {
+            script.log(BankScrollUtils.class, "scroll down failed");
+            return false;
+        }
+
+        // check if we can continue scrolling
+        boolean canContinue = canScrollDown(script);
+
+        if (canContinue) {
+            script.log(BankScrollUtils.class, "scrolled down - more content available");
+        } else {
+            script.log(BankScrollUtils.class, "scrolled down - reached bottom of bank");
+        }
+
+        return canContinue;
+    }
+
+    /**
+     * Scrolls up and checks if we can scroll further.
+     *
+     * This method uses sprite-based detection - after scrolling, it checks if the
+     * scroll up button is still visible. If not visible, we've hit the top.
+     *
+     * @param script the script instance
+     * @return true if scroll succeeded and can scroll more, false if at top or scroll failed
+     */
+    public static boolean scrollUpAndCheck(Script script) {
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankScrollUtils.class, "bank not visible - cannot scroll up and check");
+            return false;
+        }
+
+        // check if we can even scroll up before attempting
+        if (!canScrollUp(script)) {
+            script.log(BankScrollUtils.class, "already at top of bank");
+            return false;
+        }
+
+        // attempt scroll up
+        if (!scrollUp(script)) {
+            script.log(BankScrollUtils.class, "scroll up failed");
+            return false;
+        }
+
+        // check if we can continue scrolling
+        boolean canContinue = canScrollUp(script);
+
+        if (canContinue) {
+            script.log(BankScrollUtils.class, "scrolled up - more content available");
+        } else {
+            script.log(BankScrollUtils.class, "scrolled up - reached top of bank");
+        }
+
+        return canContinue;
+    }
+
+    /**
+     * Scrolls to the top of the bank using sprite-based end detection.
+     *
+     * Repeatedly scrolls up until the scroll up button is no longer visible,
+     * indicating we've reached the top of the bank.
+     *
+     * @param script the script instance
+     * @return true if successfully scrolled to top (or already at top)
+     */
+    public static boolean scrollToTopWithCheck(Script script) {
+        return scrollToTopWithCheck(script, 20);
+    }
+
+    /**
+     * Scrolls to the top of the bank using sprite-based end detection.
+     *
+     * Repeatedly scrolls up until the scroll up button is no longer visible,
+     * indicating we've reached the top of the bank.
+     *
+     * @param script the script instance
+     * @param maxScrolls maximum number of scroll attempts (safeguard)
+     * @return true if successfully scrolled to top (or already at top)
+     */
+    public static boolean scrollToTopWithCheck(Script script, int maxScrolls) {
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankScrollUtils.class, "bank not visible - cannot scroll to top");
+            return false;
+        }
+
+        // check if already at top
+        if (!canScrollUp(script)) {
+            script.log(BankScrollUtils.class, "already at top of bank");
+            return true;
+        }
+
+        script.log(BankScrollUtils.class, "scrolling to top of bank (max " + maxScrolls + " scrolls)");
+
+        for (int i = 0; i < maxScrolls; i++) {
+            // scroll up and check if we can continue
+            if (!scrollUp(script)) {
+                script.log(BankScrollUtils.class, "scroll up failed on attempt " + (i + 1));
+                // retry a couple times before giving up
+                continue;
+            }
+
+            // check if we've reached the top
+            if (!canScrollUp(script)) {
+                script.log(BankScrollUtils.class, "successfully reached top of bank after " + (i + 1) + " scrolls");
+                return true;
+            }
+        }
+
+        // hit max iterations - check final state
+        boolean atTop = !canScrollUp(script);
+        if (atTop) {
+            script.log(BankScrollUtils.class, "reached top of bank at max iterations");
+        } else {
+            script.log(BankScrollUtils.class, "hit max scroll iterations (" + maxScrolls + ") - may not be at top");
+        }
+
+        return atTop;
+    }
 }
