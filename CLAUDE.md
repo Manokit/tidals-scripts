@@ -91,7 +91,8 @@ Run `osmb list` to see all buildable scripts:
 - `docs/banking-patterns.md` - Banking, inventory, deposits
 - `docs/walking-npcs.md` - Walking, NPC interaction, objects
 - `docs/ui-widgets.md` - Dialogue, equipment, minimap, overlays
-- `docs/paint-overlay.md` - Professional paint implementation
+- `docs/Paint.md` - **Paint overlay & Setup UI standard (MUST READ for any UI work)**
+- `docs/paint-overlay.md` - Legacy paint reference (see Paint.md for current standard)
 - `docs/common-mistakes.md` - Debugging guide, pitfalls to avoid
 - `docs/advanced-patterns.md` - Production patterns from Davy's scripts
 - `docs/advanced-techniques.md` - Ground items, agility, combat, health
@@ -326,10 +327,11 @@ private boolean objectInteractWithRetry(RSObject obj, String action, String desc
 - Multi-step sequences
 - Item selection dialogs
 
-**Paint Overlay?** → `docs/paint-overlay.md`
-- Professional clean design
-- XP tracking integration
-- Level 99 handling
+**Paint Overlay / Setup UI?** → `docs/Paint.md`
+- Standard color palette and layout
+- Paint overlay template
+- Setup UI (JavaFX) template
+- Logo loading and rendering
 
 **Script Broken?** → `docs/common-mistakes.md`
 - Null checking
@@ -371,7 +373,7 @@ private boolean objectInteractWithRetry(RSObject obj, String action, String desc
 
 - **Can't find NPCs** → See `docs/walking-npcs.md` TOP SECTION (minimap positions, highlights, clusters)
 - **NPCs not clickable** → See `docs/walking-npcs.md` for tapGetResponse verification
-- **Paint looks amateur** → See `docs/paint-overlay.md` for modern template
+- **Paint looks amateur** → See `docs/Paint.md` for standard template
 - **Bank withdrawing 0 items** → See `examples/gem-cutting.md` for timing fix
 - **Items not detected** → See `docs/critical-concepts.md` for HSL/RGB
 - **Complex travel** → See `docs/advanced-patterns.md` for multi-step sequences
