@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-14)
 
 ## Current Position
 
-Phase: 3 of 5 (Scroll Fallback)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-01-14 — Completed 03-01-PLAN.md
+Phase: 3 of 5 (Scroll Fallback) - COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-01-14 — Completed 03-02-PLAN.md
 
-Progress: ████░░░░░░ 40%
+Progress: ██████░░░░ 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 9.3 min
-- Total execution time: 0.62 hours
+- Total plans completed: 5
+- Average duration: 8 min
+- Total execution time: 0.67 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: ████░░░░░░ 40%
 |-------|-------|-------|----------|
 | 1. Core Search | 2 | 27 min | 13.5 min |
 | 2. Single Item Withdrawal | 1 | 1 min | 1 min |
-| 3. Scroll Fallback | 1 | 8 min | 8 min |
+| 3. Scroll Fallback | 2 | 12 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 15, 12, 1, 8 min
-- Trend: Improving (adapted to API differences quickly)
+- Last 5 plans: 15, 12, 1, 8, 4 min
+- Trend: Improving (reusing infrastructure from previous plans)
 
 ## Accumulated Context
 
@@ -52,6 +52,8 @@ Recent decisions affecting current work:
 | 02-01 | Verify item exists before withdraw | Provides clear failure reason instead of silent failures |
 | 03-01 | Pixel color detection over SearchableImage | PixelAnalyzer.findSubImages() doesn't exist; use proven pixel detection |
 | 03-01 | Screen-relative regions for scroll buttons | Adapts to different resolutions without hardcoded coordinates |
+| 03-02 | Sprite visibility for end-of-scroll detection | ItemGroupResult.getSlots() doesn't exist; sprite detection more reliable |
+| 03-02 | Default scroll fallback enabled | Search-first is fast; scroll handles edge cases automatically |
 
 ### Deferred Issues
 
@@ -68,5 +70,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: Completed 03-01-PLAN.md
+Stopped at: Completed 03-02-PLAN.md (Phase 3 complete)
 Resume file: None
