@@ -101,6 +101,13 @@ public class GuardTracker {
     private long lastXpBasedSwitchTime = 0;
     private static final long XP_SWITCH_COOLDOWN_MS = 5000;
 
+    // preemptive switch timer: detect guard at 1865 early and switch if low theft count
+    private long guardAt1865StartTime = 0;
+    private long preemptiveSwitchDelayMs = 0;
+    private static final int PREEMPTIVE_MIN_TICKS = 5;
+    private static final int PREEMPTIVE_MAX_TICKS = 8;
+    private static final int MS_PER_TICK = 600;
+
     // guard sync: after reset, wait to see guard leave CB stall before starting
     private boolean needsGuardSync = false;
     private boolean sawGuardAtCbStall = false;
@@ -116,6 +123,11 @@ public class GuardTracker {
         double delay = DELAY_MEAN_SEC + random.nextGaussian() * DELAY_STD_DEV;
         delay = Math.max(DELAY_MIN_SEC, Math.min(DELAY_MAX_SEC, delay));
         return (long) (delay * 1000);
+    }
+
+    private long generatePreemptiveSwitchDelay() {
+        int ticks = PREEMPTIVE_MIN_TICKS + random.nextInt(PREEMPTIVE_MAX_TICKS - PREEMPTIVE_MIN_TICKS + 1);
+        return ticks * MS_PER_TICK;
     }
 
     public List<WorldPosition> findAllNPCPositions() {
@@ -573,6 +585,64 @@ public class GuardTracker {
         return false;
     }
 
+    /**
+     * checks if we should preemptively switch to ore due to low theft count
+     * and guard position. only triggers when:
+     * 1. guard is at (1865, 3295)
+     * 2. cbXpDropCount is 0, 1, or 2
+     * 3. timer has elapsed (5-8 ticks / 3000-4800ms)
+     */
+    public boolean shouldPreemptiveSwitchToOre() {
+        if (!twoStallMode) return false;
+
+        // only applies to low theft counts (0-2)
+        if (cbXpDropCount > 2) return false;
+
+        // check if guard is at early warning position (1865, 3295)
+        List<WorldPosition> npcPositions = findAllNPCPositions();
+        boolean guardAt1865 = false;
+
+        for (WorldPosition npcPos : npcPositions) {
+            if (npcPos == null || npcPos.getPlane() != 0) continue;
+
+            int x = (int) npcPos.getX();
+            int y = (int) npcPos.getY();
+
+            if (x == EARLY_WARNING_X && y == PATROL_Y) {
+                guardAt1865 = true;
+                break;
+            }
+        }
+
+        if (guardAt1865) {
+            // start timer if not already running
+            if (guardAt1865StartTime == 0) {
+                guardAt1865StartTime = System.currentTimeMillis();
+                preemptiveSwitchDelayMs = generatePreemptiveSwitchDelay();
+                double delaySec = preemptiveSwitchDelayMs / 1000.0;
+                script.log("GUARD", String.format("Guard at 1865 with low count (%d/4) - preemptive timer started (%.1fs)",
+                        cbXpDropCount, delaySec));
+            }
+
+            // check if timer has elapsed
+            long elapsed = System.currentTimeMillis() - guardAt1865StartTime;
+            if (elapsed >= preemptiveSwitchDelayMs) {
+                script.log("GUARD", String.format("Preemptive switch triggered! Only %d/4 thefts, guard at 1865 for %.1fs",
+                        cbXpDropCount, elapsed / 1000.0));
+                return true;
+            }
+        } else {
+            // guard not at 1865 - reset timer
+            if (guardAt1865StartTime != 0) {
+                script.log("GUARD", "Guard left 1865 - preemptive timer reset");
+                guardAt1865StartTime = 0;
+                preemptiveSwitchDelayMs = 0;
+            }
+        }
+
+        return false;
+    }
+
     public boolean isGuardPastOreWatchTile() {
         if (!twoStallMode) return false;
 
@@ -678,6 +748,9 @@ public class GuardTracker {
         consecutiveRightwardFrames = 0;
         // reset logging state
         lastCbSafeState = true;
+        // reset preemptive switch timer
+        guardAt1865StartTime = 0;
+        preemptiveSwitchDelayMs = 0;
     }
 
     public boolean checkCbXpDrop(double currentXp) {

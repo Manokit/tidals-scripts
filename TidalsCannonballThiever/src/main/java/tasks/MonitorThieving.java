@@ -61,27 +61,34 @@ public class MonitorThieving extends Task {
             double currentXp = xpTracking.getThievingXpGained();
             guardTracker.checkCbXpDrop(currentXp);
 
-            // check XP-based switch (4 thieves done)
+            // priority 1: XP-based switch (4 thieves done)
             if (guardTracker.shouldSwitchToOreByXp()) {
                 return true;
             }
 
-            // movement-based detection always works (guard actively walking towards us)
+            // priority 2: preemptive switch (guard at 1865 + low count + timer elapsed)
+            if (guardTracker.shouldPreemptiveSwitchToOre()) {
+                return true;
+            }
+
+            // priority 3: movement-based detection (guard actively walking towards us)
             if (guardTracker.shouldSwitchToOre()) {
                 return true;
             }
 
-            // position-based fallback respects cooldown (guard might be near but walking away)
+            // priority 4: position-based fallback respects cooldown (guard might be near but walking away)
             if (!guardTracker.isInXpSwitchCooldown() && guardTracker.isGuardPastWatchTile()) {
                 return true;
             }
 
             return false;
         }, 500);
-        
+
         if (shouldSwitch) {
             if (guardTracker.shouldSwitchToOreByXp()) {
                 script.log("MONITOR", "4 CB thieves done - time to switch!");
+            } else if (guardTracker.shouldPreemptiveSwitchToOre()) {
+                script.log("MONITOR", "Preemptive switch - low count and guard approaching!");
             } else if (!isInventoryFull()) {
                 script.log("MONITOR", "Guard detected - switching (backup)!");
             }

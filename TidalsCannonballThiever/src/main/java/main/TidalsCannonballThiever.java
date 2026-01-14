@@ -34,7 +34,7 @@ import java.util.UUID;
 
 @ScriptDefinition(name = "TidalsCannonballThiever", description = "Thieves cannonballs from Port Roberts stalls while avoiding guards", skillCategory = SkillCategory.THIEVING, version = 1.0, author = "Tidalus")
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.5";
+    public static final String scriptVersion = "1.6";
     private static final String SCRIPT_NAME = "CannonballThiever";
     private static final String SESSION_ID = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
