@@ -17,7 +17,7 @@ None
 - [x] **Phase 1: Core Search Infrastructure** - Bank search box interaction and typing
 - [x] **Phase 2: Single Item Withdrawal** - Search and withdraw one item by name
 - [x] **Phase 3: Scroll Fallback** - Scroll bank when search doesn't find item
-- [ ] **Phase 4: Batch Withdrawal** - Withdraw list of items in sequence
+- [x] **Phase 4: Batch Withdrawal** - Withdraw list of items in sequence
 - [ ] **Phase 5: Fill Inventory** - Fill remaining slots with searched item
 
 ## Phase Details
@@ -70,5 +70,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Core Search Infrastructure | 2/2 | Complete | 2026-01-14 |
 | 2. Single Item Withdrawal | 1/1 | Complete | 2026-01-14 |
 | 3. Scroll Fallback | 2/2 | Complete | 2026-01-14 |
-| 4. Batch Withdrawal | 0/TBD | Not started | - |
+| 4. Batch Withdrawal | 1/1 | Complete | 2026-01-14 |
 | 5. Fill Inventory | 0/TBD | Not started | - |
