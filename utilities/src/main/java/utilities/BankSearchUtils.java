@@ -7,6 +7,7 @@ import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -400,6 +401,110 @@ public class BankSearchUtils {
      * Prevents infinite loops if item truly doesn't exist.
      */
     private static final int MAX_SCROLL_ITERATIONS = 30;
+
+    /**
+     * Searches for an item by name and withdraws enough to fill all remaining inventory slots.
+     *
+     * This method:
+     * 1. Checks bank is visible
+     * 2. Gets free inventory slots
+     * 3. Gets item name from ID
+     * 4. Types the name into bank search
+     * 5. Verifies item exists in filtered results
+     * 6. Falls back to scrolling if search doesn't find item
+     * 7. Withdraws free-slots amount
+     * 8. Clears search after withdrawal
+     *
+     * @param script the script instance
+     * @param itemId the item ID to search for and withdraw
+     * @return number of slots filled, 0 if no free slots, or -1 on failure
+     */
+    public static int searchAndFillInventory(Script script, int itemId) {
+        // pre-condition: bank must be visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot search and fill inventory");
+            return -1;
+        }
+
+        // get free inventory slots
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Collections.emptySet());
+        if (inv == null) {
+            script.log(BankSearchUtils.class, "inventory not visible");
+            return -1;
+        }
+
+        int freeSlots = inv.getFreeSlots();
+        if (freeSlots <= 0) {
+            script.log(BankSearchUtils.class, "no free slots available");
+            return 0;
+        }
+
+        script.log(BankSearchUtils.class, "filling " + freeSlots + " inventory slots");
+
+        // get item name from ID
+        String itemName = script.getItemManager().getItemName(itemId);
+        if (itemName == null || itemName.isEmpty()) {
+            script.log(BankSearchUtils.class, "failed to get item name for id: " + itemId);
+            return -1;
+        }
+
+        script.log(BankSearchUtils.class, "searching for: " + itemName + " (id: " + itemId + ")");
+
+        // type search query
+        if (!typeSearch(script, itemName)) {
+            script.log(BankSearchUtils.class, "failed to type search for: " + itemName);
+            return -1;
+        }
+
+        // wait for bank to filter results
+        script.pollFramesHuman(() -> false, script.random(300, 500));
+
+        // verify item exists in filtered bank
+        ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
+        boolean foundViaSearch = bankItems != null && bankItems.contains(itemId);
+
+        if (!foundViaSearch) {
+            script.log(BankSearchUtils.class, "item not found via search, trying scroll fallback");
+            clearSearch(script);
+
+            boolean foundViaScroll = findItemByScrolling(script, itemId);
+            if (!foundViaScroll) {
+                script.log(BankSearchUtils.class, "item not found in bank after full scroll: " + itemName);
+                return -1;
+            }
+
+            // found via scroll - withdraw it
+            script.log(BankSearchUtils.class, "item found via scroll, withdrawing " + freeSlots + " x " + itemName);
+            boolean success = script.getWidgetManager().getBank().withdraw(itemId, freeSlots);
+
+            if (success) {
+                script.log(BankSearchUtils.class, "withdraw succeeded (via scroll fallback), filled " + freeSlots + " slots");
+                script.pollFramesHuman(() -> false, script.random(200, 400));
+                return freeSlots;
+            } else {
+                script.log(BankSearchUtils.class, "withdraw failed for: " + itemName);
+                return -1;
+            }
+        }
+
+        // item found via search - withdraw it
+        script.log(BankSearchUtils.class, "withdrawing " + freeSlots + " x " + itemName);
+        boolean success = script.getWidgetManager().getBank().withdraw(itemId, freeSlots);
+
+        if (success) {
+            script.log(BankSearchUtils.class, "withdraw succeeded, filled " + freeSlots + " slots");
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+        } else {
+            script.log(BankSearchUtils.class, "withdraw failed for: " + itemName);
+            clearSearch(script);
+            return -1;
+        }
+
+        // clear search to leave bank in clean state
+        clearSearch(script);
+
+        return freeSlots;
+    }
 
     /**
      * Finds an item by scrolling through the bank.
