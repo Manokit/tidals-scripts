@@ -11,6 +11,7 @@ import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.visual.image.Image;
 import com.osmb.api.visual.image.ImageSearchResult;
 import com.osmb.api.visual.image.SearchableImage;
+import com.osmb.api.input.MenuEntry;
 import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.item.SearchableItem;
 import com.osmb.api.shape.Rectangle;
@@ -764,5 +765,65 @@ public class BankSearchUtils {
         // search for item in bank bounds
         ItemSearchResult result = script.getItemManager().findLocation(false, bankBounds, searchableItems[0]);
         return result;
+    }
+
+    /**
+     * Finds an item visually and verifies it matches via menu inspection.
+     *
+     * This method:
+     * 1. Uses findItemInVisibleBank to locate the item sprite
+     * 2. Uses tapGetResponse on the found bounds to get menu entry
+     * 3. Compares menu entity name with expected item name
+     * 4. Returns verified bounds only if names match
+     *
+     * This prevents false positives from items with similar sprites.
+     *
+     * @param script the script instance
+     * @param itemId the item ID to find and verify
+     * @return Rectangle bounds if item found and verified, null otherwise
+     */
+    public static Rectangle findAndVerifyItem(Script script, int itemId) {
+        // check bank is visible
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            script.log(BankSearchUtils.class, "bank not visible - cannot find and verify item");
+            return null;
+        }
+
+        // find item visually
+        ItemSearchResult searchResult = findItemInVisibleBank(script, itemId);
+        if (searchResult == null) {
+            return null;
+        }
+
+        // get bounds from result
+        Rectangle bounds = searchResult.getBounds();
+        if (bounds == null) {
+            script.log(BankSearchUtils.class, "item search result has no bounds");
+            return null;
+        }
+
+        // use tapGetResponse to get menu entry
+        MenuEntry menuEntry = script.getFinger().tapGetResponse(true, bounds);
+        if (menuEntry == null) {
+            script.log(BankSearchUtils.class, "could not get menu for item");
+            return null;
+        }
+
+        // get expected item name
+        String expectedName = script.getItemManager().getItemName(itemId);
+        if (expectedName == null || expectedName.isEmpty()) {
+            script.log(BankSearchUtils.class, "could not get expected item name for id: " + itemId);
+            return null;
+        }
+
+        // compare menu entity name with expected name (case-insensitive contains)
+        String actualName = menuEntry.getEntityName();
+        if (actualName != null && actualName.toLowerCase().contains(expectedName.toLowerCase())) {
+            script.log(BankSearchUtils.class, "item verified: " + expectedName);
+            return bounds;
+        }
+
+        script.log(BankSearchUtils.class, "item verification failed: expected [" + expectedName + "] but got [" + actualName + "]");
+        return null;
     }
 }
