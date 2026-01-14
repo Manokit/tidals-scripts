@@ -207,6 +207,7 @@ public class BankSearchUtils {
 
     /**
      * Searches for an item by name and withdraws the specified amount.
+     * Uses scroll fallback by default if search doesn't find the item.
      *
      * @param script the script instance
      * @param itemId the item ID to withdraw
@@ -215,6 +216,26 @@ public class BankSearchUtils {
      * @return true if withdrawal succeeded
      */
     public static boolean searchAndWithdraw(Script script, int itemId, int amount, boolean keepSearchOpen) {
+        return searchAndWithdraw(script, itemId, amount, keepSearchOpen, true);
+    }
+
+    /**
+     * Searches for an item by name and withdraws the specified amount.
+     *
+     * When search doesn't find the item and useScrollFallback is true, this method will:
+     * 1. Clear the search
+     * 2. Scroll to the top of the bank
+     * 3. Scroll through the entire bank looking for the item
+     * 4. Withdraw if found
+     *
+     * @param script the script instance
+     * @param itemId the item ID to withdraw
+     * @param amount the amount to withdraw
+     * @param keepSearchOpen if true, does not clear search after withdraw (only applies to search success)
+     * @param useScrollFallback if true, scrolls through bank when search fails to find item
+     * @return true if withdrawal succeeded
+     */
+    public static boolean searchAndWithdraw(Script script, int itemId, int amount, boolean keepSearchOpen, boolean useScrollFallback) {
         // pre-condition: bank must be visible
         if (!script.getWidgetManager().getBank().isVisible()) {
             script.log(BankSearchUtils.class, "bank not visible - cannot search and withdraw");
@@ -241,19 +262,47 @@ public class BankSearchUtils {
 
         // verify item exists in filtered bank
         ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
-        if (bankItems == null || !bankItems.contains(itemId)) {
-            script.log(BankSearchUtils.class, "item not found after search: " + itemName);
+        boolean foundViaSearch = bankItems != null && bankItems.contains(itemId);
+
+        if (!foundViaSearch) {
+            script.log(BankSearchUtils.class, "item not found via search: " + itemName);
+
+            // try scroll fallback if enabled
+            if (useScrollFallback) {
+                script.log(BankSearchUtils.class, "trying scroll fallback to find item");
+                clearSearch(script);
+
+                boolean foundViaScroll = findItemByScrolling(script, itemId);
+                if (!foundViaScroll) {
+                    script.log(BankSearchUtils.class, "item not found in bank after full scroll: " + itemName);
+                    return false;
+                }
+
+                // found via scroll - withdraw it
+                script.log(BankSearchUtils.class, "item found via scroll, withdrawing " + amount + " x " + itemName);
+                boolean success = script.getWidgetManager().getBank().withdraw(itemId, amount);
+
+                if (success) {
+                    script.log(BankSearchUtils.class, "withdraw succeeded (via scroll fallback)");
+                    script.pollFramesHuman(() -> false, script.random(200, 400));
+                } else {
+                    script.log(BankSearchUtils.class, "withdraw failed for: " + itemName);
+                }
+
+                return success;
+            }
+
+            // no scroll fallback - just clear and return
             clearSearch(script);
             return false;
         }
 
-        // withdraw the item
+        // item found via search - withdraw it
         script.log(BankSearchUtils.class, "withdrawing " + amount + " x " + itemName);
         boolean success = script.getWidgetManager().getBank().withdraw(itemId, amount);
 
         if (success) {
             script.log(BankSearchUtils.class, "withdraw succeeded");
-            // human-like delay after withdraw
             script.pollFramesHuman(() -> false, script.random(200, 400));
         } else {
             script.log(BankSearchUtils.class, "withdraw failed for: " + itemName);
@@ -265,5 +314,60 @@ public class BankSearchUtils {
         }
 
         return success;
+    }
+
+    /**
+     * Maximum number of scroll iterations when searching for an item.
+     * Prevents infinite loops if item truly doesn't exist.
+     */
+    private static final int MAX_SCROLL_ITERATIONS = 30;
+
+    /**
+     * Finds an item by scrolling through the bank.
+     *
+     * This method:
+     * 1. Scrolls to the top of the bank
+     * 2. Searches for the item on current view
+     * 3. If not found, scrolls down and searches again
+     * 4. Repeats until item found or end of bank reached
+     *
+     * @param script the script instance
+     * @param itemId the item ID to find
+     * @return true if item was found and is currently visible
+     */
+    private static boolean findItemByScrolling(Script script, int itemId) {
+        // scroll to top first to ensure we search the entire bank
+        script.log(BankSearchUtils.class, "scrolling to top of bank to begin search");
+        BankScrollUtils.scrollToTopWithCheck(script, 20);
+
+        // wait for scroll to settle
+        script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        // search current view
+        for (int scrollCount = 0; scrollCount < MAX_SCROLL_ITERATIONS; scrollCount++) {
+            // check if item is visible in current view
+            ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
+            if (bankItems != null && bankItems.contains(itemId)) {
+                script.log(BankSearchUtils.class, "item found after " + scrollCount + " scrolls");
+                return true;
+            }
+
+            // check if we can scroll further
+            if (!BankScrollUtils.canScrollDown(script)) {
+                script.log(BankSearchUtils.class, "reached end of bank after " + scrollCount + " scrolls - item not found");
+                return false;
+            }
+
+            // scroll down
+            script.log(BankSearchUtils.class, "item not visible, scrolling down (scroll " + (scrollCount + 1) + ")");
+            if (!BankScrollUtils.scrollDown(script)) {
+                script.log(BankSearchUtils.class, "scroll down failed");
+                // retry next iteration
+            }
+        }
+
+        // hit max iterations
+        script.log(BankSearchUtils.class, "hit max scroll iterations (" + MAX_SCROLL_ITERATIONS + ") - item not found");
+        return false;
     }
 }
