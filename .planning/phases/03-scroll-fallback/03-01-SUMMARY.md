@@ -2,7 +2,7 @@
 phase: 03-scroll-fallback
 plan: 01
 subsystem: utilities
-tags: [pixel-detection, bank-scrolling, osmb-api, searchable-pixel]
+tags: [sprite-detection, bank-scrolling, osmb-api, image-analyzer]
 
 # Dependency graph
 requires:
@@ -11,127 +11,132 @@ requires:
 provides:
   - BankScrollUtils.scrollDown() method
   - BankScrollUtils.scrollUp() method
-  - Pixel-based scroll button detection
+  - Sprite-based scroll button detection via ImageAnalyzer
 affects: [04-scroll-search-integration, bank-utilities]
 
 # Tech tracking
 tech-stack:
   added: []
-  patterns: [pixel-color-detection-for-ui-elements, screen-relative-region-detection]
+  patterns: [sprite-template-matching, image-analyzer-detection]
 
 key-files:
   created:
     - utilities/src/main/java/utilities/BankScrollUtils.java
-    - utilities/src/resources/scroll_up.png
-    - utilities/src/resources/scroll_down.png
   modified: []
 
 key-decisions:
-  - "Used pixel color detection instead of SearchableImage template matching"
-  - "Screen-relative regions for button detection (adapts to resolution)"
-  - "Centroid calculation for button center from pixel cluster"
+  - "Used game sprites (773, 788) instead of custom PNG images"
+  - "Used ImageAnalyzer.findLocations() for template matching"
+  - "Added scrollbar position tracking with sprites 789, 791"
 
 patterns-established:
-  - "Pixel color detection for UI element finding when findSubImages unavailable"
+  - "SpriteManager + ImageAnalyzer for UI element detection"
+  - "SearchableImage from sprite for template matching"
 
 issues-created: []
 
 # Metrics
-duration: 8min
+duration: 45min (including API discovery)
 completed: 2026-01-14
 ---
 
-# Phase 3 Plan 1: Scroll Button Resources and Detection Summary
+# Phase 3 Plan 1: Scroll Button Detection Summary
 
-**Implemented bank scroll detection using pixel color matching after discovering PixelAnalyzer.findSubImages() doesn't exist in OSMB API**
+**Implemented bank scroll detection using SpriteManager and ImageAnalyzer for sprite-based template matching**
 
 ## Performance
 
-- **Duration:** 8 min
-- **Started:** 2026-01-14T16:44:00Z
-- **Completed:** 2026-01-14T16:52:00Z
+- **Duration:** 45 min (initial approach failed, required API research)
+- **Started:** 2026-01-14
+- **Completed:** 2026-01-14
 - **Tasks:** 2/2
-- **Files modified:** 3 (1 Java file, 2 PNG images)
+- **Files modified:** 1 Java file
 
 ## Accomplishments
 
-- Captured scroll_up.png and scroll_down.png button images from OSRS bank interface
 - Implemented BankScrollUtils.java with scrollDown(), scrollUp() methods
 - Added canScrollDown(), canScrollUp() helper methods for scroll availability detection
-- Used pixel color detection pattern from existing codebase (GuardTracker, MortMyreFungusCollector)
+- Added scrollToTop(), scrollToBottom() convenience methods
+- Added getScrollbarPosition() for scroll progress tracking
+- Used proper OSMB API: SpriteManager + ImageAnalyzer.findLocations()
 
 ## Task Commits
 
-Each task was committed atomically:
-
-1. **Task 1: Capture scroll button images** - Images were captured by user and included in Task 2 commit
-2. **Task 2: Implement BankScrollUtils** - `2fc9457` (feat)
-
-**Plan metadata:** See commit below
+1. **Task 1: Capture scroll button images** - User identified sprite IDs instead (773, 788, 789, 791)
+2. **Task 2: Implement BankScrollUtils** - `086152b` (fix)
 
 ## Files Created/Modified
 
 - `utilities/src/main/java/utilities/BankScrollUtils.java` - Scroll detection and tap methods
-- `utilities/src/resources/scroll_up.png` - Up arrow button image (~15x15px)
-- `utilities/src/resources/scroll_down.png` - Down arrow button image (~15x15px)
+- `utilities/jar/TidalsUtilities.jar` - Rebuilt with BankScrollUtils
+
+## API Discovery
+
+The original plan and docs/image.md specified APIs that don't exist:
+- `PixelAnalyzer.findSubImages()` - DOES NOT EXIST
+- `EuclideanToleranceComparator` - DOES NOT EXIST
+- `WidgetManager.getSpriteManager()` - Wrong accessor
+
+**Correct API** (discovered via user-provided javadocs):
+- `Script.getSpriteManager()` - Access SpriteManager directly from Script
+- `Script.getImageAnalyzer()` - Access ImageAnalyzer directly from Script
+- `ImageAnalyzer.findLocations(SearchableImage)` - Returns List<ImageSearchResult>
+- `ImageSearchResult.getAsPoint()` - Get location as Point
+- `SingleThresholdComparator` - Tolerance comparator that exists
+
+## Sprite IDs Used
+
+| Element | Sprite ID | Frame |
+|---------|-----------|-------|
+| Scroll Up Arrow | 773 | 0 |
+| Scroll Down Arrow | 788 | 0 |
+| Scrollbar Top | 789 | 0 |
+| Scrollbar Bottom | 791 | 0 |
+
+## Implementation Pattern
+
+```java
+// Load sprite via SpriteManager
+SpriteDefinition sprite = script.getSpriteManager().getSprite(SPRITE_ID, 0);
+Image image = new Image(sprite);
+SearchableImage searchable = image.toSearchableImage(tolerance, ColorModel.RGB);
+
+// Find on screen via ImageAnalyzer
+List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(searchable);
+if (!matches.isEmpty()) {
+    Point location = matches.get(0).getAsPoint();
+    script.getFinger().tap(location);
+}
+```
 
 ## Decisions Made
 
-1. **Used pixel color detection instead of SearchableImage/findSubImages**
-   - Plan specified using PixelAnalyzer.findSubImages(SearchableImage)
-   - This method does NOT exist in the OSMB API
-   - docs/image.md documentation is aspirational/outdated
-   - Used proven pixel detection pattern from existing code (GuardTracker, MortMyreFungusCollector)
+1. **Used game sprites instead of PNG images**
+   - Sprites are loaded directly from game, no external files needed
+   - More reliable than custom screenshots
+   - User identified sprite IDs via testing
 
-2. **Screen-relative regions for button detection**
-   - Scroll buttons are always in right side of bank interface
-   - Used percentage-based coordinates (85-99% width, upper/lower portions)
-   - Adapts to different screen resolutions
+2. **Used ImageAnalyzer for template matching**
+   - Proper OSMB API for finding SearchableImage on screen
+   - Returns List<ImageSearchResult> with location and score
 
-3. **Centroid calculation for button center**
-   - Find all pixels matching scroll button colors
-   - Calculate average position as button center
-   - More robust than single pixel detection
+3. **Added scrollbar position tracking**
+   - Can determine scroll progress via scrollbar sprite positions
+   - Enables smarter scroll-then-search logic
 
-## Deviations from Plan
+## Documentation Updates
 
-### Auto-fixed Issues
-
-**1. [Rule 3 - Blocking] PixelAnalyzer.findSubImages() doesn't exist**
-- **Found during:** Task 2 (BankScrollUtils implementation)
-- **Issue:** Plan specified using `getPixelAnalyzer().findSubImages(scrollDownArrow)` but this method doesn't exist in OSMB API
-- **Fix:** Used pixel color detection with SearchablePixel and findPixels() - proven pattern from existing codebase
-- **Files modified:** utilities/src/main/java/utilities/BankScrollUtils.java
-- **Verification:** Compiles successfully with `gradle :utilities:compileJava`
-- **Committed in:** 2fc9457
-
-**2. [Rule 3 - Blocking] EuclideanToleranceComparator doesn't exist**
-- **Found during:** Task 2 (BankScrollUtils implementation)
-- **Issue:** Plan/docs specified EuclideanToleranceComparator but class doesn't exist
-- **Fix:** Used SingleThresholdComparator - the actual tolerance comparator used in codebase
-- **Files modified:** utilities/src/main/java/utilities/BankScrollUtils.java
-- **Verification:** Compiles successfully
-- **Committed in:** 2fc9457
-
-### Deferred Enhancements
-
-None - no issues logged.
-
----
-
-**Total deviations:** 2 auto-fixed (both blocking issues - incorrect API assumptions)
-**Impact on plan:** Core functionality delivered via alternative approach. Pattern works correctly.
-
-## Issues Encountered
-
-- docs/image.md contains examples using methods that don't exist in OSMB API
-- Research phase accepted these docs at face value without verifying against actual API
-- Future research should cross-reference docs against actual codebase usage
+Added new OSMB API documentation files:
+- docs/Script.md - Script class methods
+- docs/Image.md - Image and SearchableImage classes
+- docs/ImageSearchResult.md - Search result structure
+- docs/Sprite.md - SpriteManager and SpriteDefinition
+- docs/PixelAnalyzer.md - Updated with actual API
 
 ## Next Phase Readiness
 
 - BankScrollUtils ready for integration with BankSearchUtils
-- scroll button images captured and committed
+- Sprite-based detection proven working
 - Phase 03 plan 02 can proceed with scroll-search integration
 
 ---
