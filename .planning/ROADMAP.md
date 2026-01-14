@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ [v1.0 MVP](milestones/v1.0-ROADMAP.md) (Phases 1-5) — SHIPPED 2026-01-14
-- 🚧 **v1.1 Fix Search Opening** — Phase 6 (in progress)
+- ✅ **v1.1 Fix Search Opening** — Phase 6 — SHIPPED 2026-01-14
 
 ## Overview
 
@@ -11,11 +11,11 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, and fill-to
 
 ## Status
 
-**v1.1 in progress** — Fixing search button activation.
+**v1.1 complete** — Search button activation fixed via sprite-based tap.
 
 ---
 
-### 🚧 v1.1 Fix Search Opening (In Progress)
+### ✅ v1.1 Fix Search Opening (Complete)
 
 **Milestone Goal:** Fix openSearch() to actually work by tapping the SEARCH button visually instead of using non-functional keyboard shortcuts.
 
@@ -32,7 +32,7 @@ The current openSearch() uses BACKSPACE key which doesn't activate bank search. 
 3. Verifying search activated
 
 Plans:
-- [ ] 06-01: Sprite-based SEARCH button tap
+- [x] 06-01: Sprite-based SEARCH button tap — completed 2026-01-14
 
 <details>
 <summary>✅ v1.0 MVP (Phases 1-5) — SHIPPED 2026-01-14</summary>
@@ -54,6 +54,6 @@ Plans:
 | 3. Scroll Fallback | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 4. Batch Withdrawal | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 5. Fill Inventory | v1.0 | 1/1 | Complete | 2026-01-14 |
-| 6. Tap-Based Search Activation | v1.1 | 0/1 | Not started | - |
+| 6. Tap-Based Search Activation | v1.1 | 1/1 | Complete | 2026-01-14 |
 
-**Total:** 6 phases, 8 plans (7 complete, 1 pending)
+**Total:** 6 phases, 8 plans (8 complete)
