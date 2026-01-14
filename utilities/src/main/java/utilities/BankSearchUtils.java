@@ -101,9 +101,9 @@ public class BankSearchUtils {
         }
 
         ImageSearchResult result = matches.get(0);
-        Point location = result.getAsPoint();
-        script.log(BankSearchUtils.class, "tapping search button at: " + location.x + "," + location.y);
-        boolean tapped = script.getFinger().tap(location);
+        Rectangle bounds = result.getBounds();
+        script.log(BankSearchUtils.class, "tapping search button within: " + bounds);
+        boolean tapped = script.getFinger().tap(bounds);
 
         if (tapped) {
             script.pollFramesHuman(() -> false, script.random(200, 400));
@@ -633,9 +633,12 @@ public class BankSearchUtils {
             action = "Withdraw-" + amount;
         }
 
-        // scroll to top first to ensure we search from the beginning
-        BankScrollUtils.scrollToTopWithCheck(script, 20);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        // scroll to top - previous search may have left scroll position mid-way
+        if (!BankScrollUtils.isAtTop(script)) {
+            script.log(BankSearchUtils.class, "scrolling to top before searching");
+            BankScrollUtils.scrollToTopWithCheck(script, 20);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+        }
 
         // get bank bounds for calculating item slot positions
         Rectangle bankBounds = script.getWidgetManager().getBank().getBounds();

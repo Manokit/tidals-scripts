@@ -135,9 +135,9 @@ public class BankScrollUtils {
 
         // tap the button
         ImageSearchResult result = matches.get(0);
-        Point location = result.getAsPoint();
-        script.log(BankScrollUtils.class, "tapping scroll down at: " + location.x + "," + location.y);
-        boolean tapped = script.getFinger().tap(location);
+        Rectangle bounds = result.getBounds();
+        script.log(BankScrollUtils.class, "tapping scroll down within: " + bounds);
+        boolean tapped = script.getFinger().tap(bounds);
 
         if (tapped) {
             // human-like delay after tapping
@@ -175,9 +175,9 @@ public class BankScrollUtils {
 
         // tap the button
         ImageSearchResult result = matches.get(0);
-        Point location = result.getAsPoint();
-        script.log(BankScrollUtils.class, "tapping scroll up at: " + location.x + "," + location.y);
-        boolean tapped = script.getFinger().tap(location);
+        Rectangle bounds = result.getBounds();
+        script.log(BankScrollUtils.class, "tapping scroll up within: " + bounds);
+        boolean tapped = script.getFinger().tap(bounds);
 
         if (tapped) {
             // human-like delay after tapping
@@ -465,10 +465,10 @@ public class BankScrollUtils {
     }
 
     /**
-     * Scrolls to the top of the bank using sprite-based end detection.
+     * Scrolls to the top of the bank using position-based detection.
      *
-     * Repeatedly scrolls up until the scroll up button is no longer visible,
-     * indicating we've reached the top of the bank.
+     * Uses isAtTop() for reliable termination (checks scrollbar Y position)
+     * rather than sprite visibility which can be unreliable.
      *
      * @param script the script instance
      * @param maxScrolls maximum number of scroll attempts (safeguard)
@@ -480,31 +480,42 @@ public class BankScrollUtils {
             return false;
         }
 
-        // check if already at top
+        // use position-based check first (most reliable)
+        if (isAtTop(script)) {
+            script.log(BankScrollUtils.class, "already at top of bank (position check)");
+            return true;
+        }
+
+        // if no scrollbar detected at all, might not need scrolling
+        // (e.g., bank search with few results)
         if (!canScrollUp(script)) {
-            script.log(BankScrollUtils.class, "already at top of bank");
+            script.log(BankScrollUtils.class, "no scroll up available - assuming at top");
             return true;
         }
 
         script.log(BankScrollUtils.class, "scrolling to top of bank (max " + maxScrolls + " scrolls)");
 
         for (int i = 0; i < maxScrolls; i++) {
-            // scroll up and check if we can continue
             if (!scrollUp(script)) {
                 script.log(BankScrollUtils.class, "scroll up failed on attempt " + (i + 1));
-                // retry a couple times before giving up
                 continue;
             }
 
-            // check if we've reached the top
+            // use position-based check for reliable termination
+            if (isAtTop(script)) {
+                script.log(BankScrollUtils.class, "reached top of bank after " + (i + 1) + " scrolls (position check)");
+                return true;
+            }
+
+            // fallback: if scroll sprite no longer detected
             if (!canScrollUp(script)) {
-                script.log(BankScrollUtils.class, "successfully reached top of bank after " + (i + 1) + " scrolls");
+                script.log(BankScrollUtils.class, "scroll up no longer available after " + (i + 1) + " scrolls");
                 return true;
             }
         }
 
         // hit max iterations - check final state
-        boolean atTop = !canScrollUp(script);
+        boolean atTop = isAtTop(script) || !canScrollUp(script);
         if (atTop) {
             script.log(BankScrollUtils.class, "reached top of bank at max iterations");
         } else {
