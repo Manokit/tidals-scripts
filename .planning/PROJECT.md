@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A reusable utility for TidalsUtilities that searches for and withdraws items from the bank by name, with verified item detection via tapGetResponse. Eliminates the need for users to specify bank tabs or reorganize their banks. Uses the bank's search box feature with scroll fallback and visual verification to reliably locate and withdraw items.
+A reusable utility for TidalsUtilities that searches for and withdraws items from the bank by name, with verified item detection via tapGetResponse and humanized interactions. Eliminates the need for users to specify bank tabs or reorganize their banks. Uses the bank's search box feature with scroll fallback and visual verification to reliably locate and withdraw items. Includes randomized tap coordinates and humanized typing delays to appear more natural.
 
 ## Core Value
 
@@ -27,10 +27,12 @@ Reliable search — finding items by name must work 100% of the time, regardless
 - Sprite-based scroll position detection (isAtTop/isAtBottom) — v1.2
 - Visual item search with tapGetResponse verification — v1.2
 - Verified withdrawal flow eliminating blind offset tapping — v1.2
+- Randomized tap coordinates within sprite bounds — v1.3
+- Humanized typing with per-character delays (50-150ms) — v1.3
 
 ### Active
 
-(None — v1.2 shipped, BankSearchUtils feature-complete)
+(None — v1.3 shipped, BankSearchUtils feature-complete with humanization)
 
 ### Out of Scope
 
@@ -41,18 +43,18 @@ Reliable search — finding items by name must work 100% of the time, regardless
 ## Context
 
 **Current state:**
-- v1.2 shipped: BankSearchUtils complete with 1,446 LOC Java
+- v1.3 shipped: BankSearchUtils complete with 2,362 LOC Java (all utilities)
 - Tech stack: OSMB API (Bank, Keyboard, SpriteManager, ImageAnalyzer, ItemManager)
 - Utility location: `utilities/src/main/java/utilities/BankSearchUtils.java`
 - Supporting classes: BankScrollUtils, WithdrawalRequest, BatchWithdrawalResult
 
 **API methods delivered:**
-- openSearch() (sprite-based), typeSearch(), clearSearch(), isSearchActive()
-- searchAndWithdraw(), searchAndWithdrawByName() (now with verification)
+- openSearch() (sprite-based), typeSearch() (humanized), clearSearch(), isSearchActive()
+- searchAndWithdraw(), searchAndWithdrawByName() (with verification)
 - searchAndFillInventory()
 - withdrawBatch() with List and varargs overloads
 - findAndVerifyItem(), searchBankForItem() (item ID visual search)
-- BankScrollUtils: scrollDown/Up, canScroll, scrollToTop/Bottom, isAtTop/isAtBottom
+- BankScrollUtils: scrollDown/Up (randomized), canScroll, scrollToTop/Bottom, isAtTop/isAtBottom
 
 ## Constraints
 
@@ -75,6 +77,8 @@ Reliable search — finding items by name must work 100% of the time, regardless
 | tapGetResponse verification | Verify item identity via menu before withdrawal action | Good — v1.2 |
 | First slot verification only | Bank search consolidates to top-left; verify first slot is sufficient | Good — v1.2 |
 | isAtBottom() for scroll termination | More reliable than canScrollDown() using scrollbar sprite position | Good — v1.2 |
+| Rectangle bounds for sprite taps | getBounds() allows random click positions within sprite for humanization | Good — v1.3 |
+| 50-150ms typing delay range | Mimics natural human typing speed variance without being too slow | Good — v1.3 |
 
 ---
-*Last updated: 2026-01-14 after v1.2 milestone*
+*Last updated: 2026-01-14 after v1.3 milestone*

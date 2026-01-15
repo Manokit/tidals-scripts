@@ -1,5 +1,31 @@
 # Project Milestones: BankSearchUtils
 
+## v1.3 Humanization (Shipped: 2026-01-14)
+
+**Delivered:** Human-like interactions with randomized tap coordinates and typing delays.
+
+**Phases completed:** 10-11 (2 plans total)
+
+**Key accomplishments:**
+
+- Converted sprite taps from Point to Rectangle bounds for random click positions
+- Added typeWithDelay() helper for humanized character-by-character typing
+- Updated typeSearch() with 50-150ms random delays between keystrokes
+- Rebuilt TidalsUtilities.jar with all humanization changes
+
+**Stats:**
+
+- 9 files created/modified
+- 2,362 lines of Java (all utilities combined)
+- 2 phases, 2 plans
+- Same day as v1.2 ship
+
+**Git range:** `2891aa9` → `f28567c`
+
+**What's next:** BankSearchUtils feature-complete. Integrate into Tidals scripts as needed.
+
+---
+
 ## v1.2 Verified Withdrawals (Shipped: 2026-01-14)
 
 **Delivered:** Robust searchAndWithdrawByName that verifies items exist via tapGetResponse before withdrawing.
