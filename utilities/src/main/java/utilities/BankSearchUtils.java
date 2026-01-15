@@ -547,9 +547,9 @@ public class BankSearchUtils {
         // wait for bank to filter results
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // verify item exists in filtered bank
-        ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
-        boolean foundViaSearch = bankItems != null && bankItems.contains(itemId);
+        // verify item exists in filtered bank using sprite detection
+        Rectangle foundBounds = findAndVerifyItem(script, itemId);
+        boolean foundViaSearch = foundBounds != null;
 
         if (!foundViaSearch) {
             script.log(BankSearchUtils.class, "item not found via search, trying scroll fallback");
@@ -561,9 +561,17 @@ public class BankSearchUtils {
                 return -1;
             }
 
-            // found via scroll - withdraw it
+            // found via scroll - need to re-find bounds for withdrawal
+            Rectangle scrollBounds = findAndVerifyItem(script, itemId);
+            if (scrollBounds == null) {
+                script.log(BankSearchUtils.class, "item found via scroll but bounds lost");
+                return -1;
+            }
+
+            // withdraw using verified bounds
             script.log(BankSearchUtils.class, "item found via scroll, withdrawing " + freeSlots + " x " + itemName);
-            boolean success = script.getWidgetManager().getBank().withdraw(itemId, freeSlots);
+            String[] actions = getWithdrawActions(freeSlots);
+            boolean success = script.getFinger().tap(scrollBounds, actions);
 
             if (success) {
                 script.log(BankSearchUtils.class, "withdraw succeeded (via scroll fallback), filled " + freeSlots + " slots");
@@ -575,9 +583,10 @@ public class BankSearchUtils {
             }
         }
 
-        // item found via search - withdraw it
+        // item found via search - withdraw using verified bounds
         script.log(BankSearchUtils.class, "withdrawing " + freeSlots + " x " + itemName);
-        boolean success = script.getWidgetManager().getBank().withdraw(itemId, freeSlots);
+        String[] actions = getWithdrawActions(freeSlots);
+        boolean success = script.getFinger().tap(foundBounds, actions);
 
         if (success) {
             script.log(BankSearchUtils.class, "withdraw succeeded, filled " + freeSlots + " slots");
