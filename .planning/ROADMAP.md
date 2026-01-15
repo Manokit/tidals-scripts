@@ -6,7 +6,7 @@
 - [v1.1 Fix Search Opening](milestones/v1.1-ROADMAP.md) (Phase 6) — SHIPPED 2026-01-14
 - [v1.2 Verified Withdrawals](milestones/v1.2-ROADMAP.md) (Phases 7-9) — SHIPPED 2026-01-14
 - [v1.3 Humanization](milestones/v1.3-ROADMAP.md) (Phases 10-11) — SHIPPED 2026-01-14
-- 🚧 **v1.4 Bug Fixes** — Phase 12 (in progress)
+- [v1.4 Bug Fixes](milestones/v1.4-ROADMAP.md) (Phase 12) — SHIPPED 2026-01-15
 
 ## Overview
 
@@ -14,23 +14,23 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, fill-to-cap
 
 ## Status
 
-**v1.4 in progress** — Fixing withdraw functionality.
+**v1.4 complete** — Fixed withdraw functionality with sprite-based detection.
 
 ---
 
-### 🚧 v1.4 Bug Fixes (In Progress)
+### v1.4 Bug Fixes (Complete)
 
 **Milestone Goal:** Fix finding items and withdrawing them from the bank
 
-#### Phase 12: Fix Withdraw
+#### Phase 12: Fix Withdraw - Complete
 
 **Goal**: Fix finding items and actually withdrawing them from the bank
 **Depends on**: Previous milestone complete
 **Research**: Unlikely (internal patterns)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 12-01: TBD (run /gsd:plan-phase 12 to break down)
+- [x] 12-01: Replace bank.search() with sprite-based findAndVerifyItem() - completed 2026-01-15
 
 ---
 
@@ -92,6 +92,6 @@ See [v1.0 archive](milestones/v1.0-ROADMAP.md) for full details.
 | 9. Robust Withdrawal Flow | v1.2 | 1/1 | Complete | 2026-01-14 |
 | 10. Randomized Sprite Taps | v1.3 | 1/1 | Complete | 2026-01-14 |
 | 11. Humanized Typing | v1.3 | 1/1 | Complete | 2026-01-14 |
-| 12. Fix Withdraw | v1.4 | 0/? | Not started | - |
+| 12. Fix Withdraw | v1.4 | 1/1 | Complete | 2026-01-15 |
 
-**Total:** 12 phases, 13+ plans
+**Total:** 12 phases, 14 plans
