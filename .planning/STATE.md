@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-14)
 
 **Core value:** Reliable search — finding items by name must work 100% of the time
-**Current focus:** v1.3 shipped — BankSearchUtils feature-complete with humanization
+**Current focus:** v1.4 Bug Fixes — Fix withdraw functionality
 
 ## Current Position
 
-Phase: 11 of 11 (complete)
-Plan: All phases complete
-Status: Milestone v1.3 shipped
-Last activity: 2026-01-14 — v1.3 milestone complete
+Phase: 12 of 12 (Fix Withdraw)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-14 — Milestone v1.4 created
 
-Progress: ██████████ 100%
+Progress: ░░░░░░░░░░ 0%
 
 ## Project Summary
 
@@ -34,10 +34,10 @@ Progress: ██████████ 100%
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: v1.3 milestone complete
+Stopped at: Milestone v1.4 initialization
 Resume file: None
 
 ### Roadmap Evolution
 
 - Milestone v1.3 archived: Humanization, 2 phases (Phase 10-11)
-- All milestones complete
+- Milestone v1.4 created: Bug Fixes, 1 phase (Phase 12)
