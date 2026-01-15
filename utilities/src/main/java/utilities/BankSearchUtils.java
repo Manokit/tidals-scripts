@@ -685,8 +685,8 @@ public class BankSearchUtils {
     /**
      * Finds an item in visible bank by name match using tapGetResponse.
      *
-     * Uses the first bank slot position (where bank search consolidates results)
-     * and verifies via menu that the entity name matches the expected item.
+     * Scans all visible bank slots (8 columns x visible rows) and uses
+     * tapGetResponse to verify each slot's entity name matches the search term.
      *
      * @param script the script instance
      * @param itemName the item name to search for
@@ -698,24 +698,39 @@ public class BankSearchUtils {
             return null;
         }
 
-        // first item slot position (bank search consolidates results to top-left)
-        int x = bankBounds.x + 90;
-        int y = bankBounds.y + 110;
-        Rectangle firstSlot = new Rectangle(x - 15, y - 15, 36, 32);
+        // bank item grid layout
+        // slot dimensions based on OSRS bank interface
+        int startX = bankBounds.x + 73;
+        int startY = bankBounds.y + 83;
+        int slotWidth = 48;
+        int slotHeight = 36;
+        int cols = 8;
+        int visibleRows = 6;
 
-        // verify via menu
-        MenuEntry entry = script.getFinger().tapGetResponse(true, firstSlot);
-        if (entry == null) {
-            return null;
+        for (int row = 0; row < visibleRows; row++) {
+            for (int col = 0; col < cols; col++) {
+                // calculate slot bounds
+                int slotX = startX + (col * slotWidth);
+                int slotY = startY + (row * slotHeight);
+                Rectangle slotBounds = new Rectangle(slotX, slotY, slotWidth - 6, slotHeight - 4);
+
+                // tap to get menu response
+                MenuEntry entry = script.getFinger().tapGetResponse(true, slotBounds);
+                if (entry == null) {
+                    // empty slot or no response - continue to next
+                    continue;
+                }
+
+                // check if entity name contains our search term
+                String entityName = entry.getEntityName();
+                if (entityName != null && entityName.toLowerCase().contains(itemName.toLowerCase())) {
+                    script.log(BankSearchUtils.class, "found matching item at slot [" + row + "," + col + "]: " + entityName);
+                    return slotBounds;
+                }
+            }
         }
 
-        String entityName = entry.getEntityName();
-        if (entityName != null && entityName.toLowerCase().contains(itemName.toLowerCase())) {
-            script.log(BankSearchUtils.class, "verified item at first slot: " + entityName);
-            return firstSlot;
-        }
-
-        script.log(BankSearchUtils.class, "first slot does not match: expected [" + itemName + "] got [" + entityName + "]");
+        script.log(BankSearchUtils.class, "no matching item found in visible slots for: " + itemName);
         return null;
     }
 
@@ -758,9 +773,9 @@ public class BankSearchUtils {
 
         // search current view
         for (int scrollCount = 0; scrollCount < MAX_SCROLL_ITERATIONS; scrollCount++) {
-            // check if item is visible in current view
-            ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
-            if (bankItems != null && bankItems.contains(itemId)) {
+            // check if item is visible in current view using sprite detection
+            Rectangle found = findAndVerifyItem(script, itemId);
+            if (found != null) {
                 script.log(BankSearchUtils.class, "item found after " + scrollCount + " scrolls");
                 return true;
             }
