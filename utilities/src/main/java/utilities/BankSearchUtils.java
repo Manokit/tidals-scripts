@@ -342,9 +342,9 @@ public class BankSearchUtils {
         // wait for bank to filter results
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // verify item exists in filtered bank
-        ItemGroupResult bankItems = script.getWidgetManager().getBank().search(Set.of(itemId));
-        boolean foundViaSearch = bankItems != null && bankItems.contains(itemId);
+        // verify item exists in filtered bank using sprite detection
+        Rectangle foundBounds = findAndVerifyItem(script, itemId);
+        boolean foundViaSearch = foundBounds != null;
 
         if (!foundViaSearch) {
             script.log(BankSearchUtils.class, "item not found via search: " + itemName);
@@ -360,9 +360,17 @@ public class BankSearchUtils {
                     return false;
                 }
 
-                // found via scroll - withdraw it
+                // found via scroll - need to re-find bounds for withdrawal
+                Rectangle scrollBounds = findAndVerifyItem(script, itemId);
+                if (scrollBounds == null) {
+                    script.log(BankSearchUtils.class, "item found via scroll but bounds lost");
+                    return false;
+                }
+
+                // withdraw using verified bounds
                 script.log(BankSearchUtils.class, "item found via scroll, withdrawing " + amount + " x " + itemName);
-                boolean success = script.getWidgetManager().getBank().withdraw(itemId, amount);
+                String[] actions = getWithdrawActions(amount);
+                boolean success = script.getFinger().tap(scrollBounds, actions);
 
                 if (success) {
                     script.log(BankSearchUtils.class, "withdraw succeeded (via scroll fallback)");
@@ -379,9 +387,10 @@ public class BankSearchUtils {
             return false;
         }
 
-        // item found via search - withdraw it
+        // item found via search - withdraw using verified bounds
         script.log(BankSearchUtils.class, "withdrawing " + amount + " x " + itemName);
-        boolean success = script.getWidgetManager().getBank().withdraw(itemId, amount);
+        String[] actions = getWithdrawActions(amount);
+        boolean success = script.getFinger().tap(foundBounds, actions);
 
         if (success) {
             script.log(BankSearchUtils.class, "withdraw succeeded");
@@ -747,6 +756,27 @@ public class BankSearchUtils {
             if (i < text.length() - 1) {
                 script.pollFramesHuman(() -> false, script.random(50, 150));
             }
+        }
+    }
+
+    /**
+     * Gets the appropriate withdraw action strings for the given amount.
+     *
+     * @param amount the amount to withdraw (1, 5, 10, 0 for all, or custom)
+     * @return array of action strings to try
+     */
+    private static String[] getWithdrawActions(int amount) {
+        if (amount == 0) {
+            return new String[]{"Withdraw-All"};
+        } else if (amount == 1) {
+            return new String[]{"Withdraw-1"};
+        } else if (amount == 5) {
+            return new String[]{"Withdraw-5"};
+        } else if (amount == 10) {
+            return new String[]{"Withdraw-10"};
+        } else {
+            // custom amount - try specific first, fall back to all
+            return new String[]{"Withdraw-" + amount, "Withdraw-All"};
         }
     }
 
