@@ -29,10 +29,11 @@ Reliable search — finding items by name must work 100% of the time, regardless
 - Verified withdrawal flow eliminating blind offset tapping — v1.2
 - Randomized tap coordinates within sprite bounds — v1.3
 - Humanized typing with per-character delays (50-150ms) — v1.3
+- Sprite-based item detection replacing broken bank.search() — v1.4
 
 ### Active
 
-(None — v1.3 shipped, BankSearchUtils feature-complete with humanization)
+(None — v1.4 shipped, BankSearchUtils feature-complete with reliable detection)
 
 ### Out of Scope
 
@@ -43,7 +44,7 @@ Reliable search — finding items by name must work 100% of the time, regardless
 ## Context
 
 **Current state:**
-- v1.3 shipped: BankSearchUtils complete with 2,362 LOC Java (all utilities)
+- v1.4 shipped: BankSearchUtils complete with 2,499 LOC Java (all utilities)
 - Tech stack: OSMB API (Bank, Keyboard, SpriteManager, ImageAnalyzer, ItemManager)
 - Utility location: `utilities/src/main/java/utilities/BankSearchUtils.java`
 - Supporting classes: BankScrollUtils, WithdrawalRequest, BatchWithdrawalResult
@@ -54,6 +55,7 @@ Reliable search — finding items by name must work 100% of the time, regardless
 - searchAndFillInventory()
 - withdrawBatch() with List and varargs overloads
 - findAndVerifyItem(), searchBankForItem() (item ID visual search)
+- getWithdrawActions() (standardized action string generation)
 - BankScrollUtils: scrollDown/Up (randomized), canScroll, scrollToTop/Bottom, isAtTop/isAtBottom
 
 ## Constraints
@@ -79,6 +81,9 @@ Reliable search — finding items by name must work 100% of the time, regardless
 | isAtBottom() for scroll termination | More reliable than canScrollDown() using scrollbar sprite position | Good — v1.2 |
 | Rectangle bounds for sprite taps | getBounds() allows random click positions within sprite for humanization | Good — v1.3 |
 | 50-150ms typing delay range | Mimics natural human typing speed variance without being too slow | Good — v1.3 |
+| findAndVerifyItem() everywhere | bank.search() was failing to detect visible items; sprite detection works | Good — v1.4 |
+| Re-verify bounds after scroll | Ensures withdrawal targets correct location after scroll movement | Good — v1.4 |
+| getWithdrawActions() helper | Standardizes action string generation for all withdraw amounts | Good — v1.4 |
 
 ---
-*Last updated: 2026-01-14 after v1.3 milestone*
+*Last updated: 2026-01-15 after v1.4 milestone*

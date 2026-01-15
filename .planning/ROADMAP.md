@@ -8,6 +8,8 @@
 - [v1.3 Humanization](milestones/v1.3-ROADMAP.md) (Phases 10-11) — SHIPPED 2026-01-14
 - [v1.4 Bug Fixes](milestones/v1.4-ROADMAP.md) (Phase 12) — SHIPPED 2026-01-15
 
+All milestones complete. BankSearchUtils is feature-complete.
+
 ## Overview
 
 Bank search-by-name utility with scroll fallback, batch withdrawals, fill-to-capacity support, and verified item detection.
@@ -18,21 +20,14 @@ Bank search-by-name utility with scroll fallback, batch withdrawals, fill-to-cap
 
 ---
 
-### v1.4 Bug Fixes (Complete)
+<details>
+<summary>v1.4 Bug Fixes (Phase 12) — SHIPPED 2026-01-15</summary>
 
-**Milestone Goal:** Fix finding items and withdrawing them from the bank
+- [x] Phase 12: Fix Withdraw (1/1 plan) — completed 2026-01-15
 
-#### Phase 12: Fix Withdraw - Complete
+See [v1.4 archive](milestones/v1.4-ROADMAP.md) for full details.
 
-**Goal**: Fix finding items and actually withdrawing them from the bank
-**Depends on**: Previous milestone complete
-**Research**: Unlikely (internal patterns)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 12-01: Replace bank.search() with sprite-based findAndVerifyItem() - completed 2026-01-15
-
----
+</details>
 
 <details>
 <summary>v1.3 Humanization (Phases 10-11) — SHIPPED 2026-01-14</summary>

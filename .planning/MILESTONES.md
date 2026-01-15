@@ -1,5 +1,31 @@
 # Project Milestones: BankSearchUtils
 
+## v1.4 Bug Fixes (Shipped: 2026-01-15)
+
+**Delivered:** Fixed bank item detection with sprite-based findAndVerifyItem() for 100% reliable withdrawals.
+
+**Phases completed:** 12 (1 plan total)
+
+**Key accomplishments:**
+
+- Replaced broken bank.search(Set.of(itemId)) with sprite-based findAndVerifyItem()
+- Refactored findItemByScrolling(), searchAndWithdraw(), and searchAndFillInventory()
+- Added getWithdrawActions() helper for standardized withdraw action strings
+- Re-verify bounds after scroll fallback for accurate targeting
+
+**Stats:**
+
+- 5 files modified
+- 2,499 lines of Java (all utilities combined)
+- 1 phase, 1 plan, 3 tasks
+- Same day as milestone creation
+
+**Git range:** `e8afc75` → `b7c33cf`
+
+**What's next:** BankSearchUtils feature-complete with reliable detection. Ready for script integration.
+
+---
+
 ## v1.3 Humanization (Shipped: 2026-01-14)
 
 **Delivered:** Human-like interactions with randomized tap coordinates and typing delays.
