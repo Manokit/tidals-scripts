@@ -52,20 +52,20 @@ Which phases cover which requirements. Updated by create-roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MODE-01 | — | Pending |
-| MODE-02 | — | Pending |
-| COLL-01 | — | Pending |
-| COLL-02 | — | Pending |
-| BANK-01 | — | Pending |
-| BANK-02 | — | Pending |
-| RETN-01 | — | Pending |
-| RETN-02 | — | Pending |
-| RETN-03 | — | Pending |
+| MODE-01 | Phase 1 | Pending |
+| MODE-02 | Phase 1 | Pending |
+| COLL-01 | Phase 2 | Pending |
+| COLL-02 | Phase 2 | Pending |
+| BANK-01 | Phase 3 | Pending |
+| BANK-02 | Phase 3 | Pending |
+| RETN-01 | Phase 3 | Pending |
+| RETN-02 | Phase 3 | Pending |
+| RETN-03 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 9 total
-- Mapped to phases: 0
-- Unmapped: 9 ⚠️
+- Mapped to phases: 9 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-16*
