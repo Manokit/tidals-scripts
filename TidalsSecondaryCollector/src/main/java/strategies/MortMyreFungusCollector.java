@@ -139,6 +139,15 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         this.script = script;
     }
 
+    // get detected mode (null if verifyRequirements not yet called)
+    public Mode getDetectedMode() {
+        return detectedMode;
+    }
+
+    public boolean isFairyRingMode() {
+        return detectedMode == Mode.FAIRY_RING;
+    }
+
     @Override
     public State determineState() {
         // priority 1: check prayer (need at least 6 for bloom)
