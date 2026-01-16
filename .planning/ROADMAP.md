@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Mode Detection** - Auto-detect equipment configuration
 - [x] **Phase 2: Collection** - 3-log tile fungus collection with inventory bloom
-- [ ] **Phase 3: Banking & Return** - Zanaris banking + monastery return loop
+- [x] **Phase 3: Banking & Return** - Zanaris banking + monastery return loop
 
 ## Phase Details
 
@@ -60,8 +60,8 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 03-01: Zanaris banking via fairy ring
-- [ ] 03-02: Monastery return and BKR validation
+- [x] 03-01: Zanaris banking via fairy ring
+- [x] 03-02: Monastery return and BKR validation
 
 ## Progress
 
@@ -72,4 +72,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Mode Detection | 1/1 | Complete | 2026-01-16 |
 | 2. Collection | 1/1 | Complete | 2026-01-16 |
-| 3. Banking & Return | 0/2 | Not started | - |
+| 3. Banking & Return | 2/2 | Complete | 2026-01-16 |

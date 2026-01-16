@@ -19,14 +19,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Banking
 
-- [ ] **BANK-01**: Fairy Ring mode teleports to Zanaris via fairy ring at 3469, 3431, 0
-- [ ] **BANK-02**: Fairy Ring mode walks to Zanaris bank chest after arrival
+- [x] **BANK-01**: Fairy Ring mode teleports to Zanaris via fairy ring at 3469, 3431, 0
+- [x] **BANK-02**: Fairy Ring mode walks to Zanaris bank chest after arrival
 
 ### Return
 
-- [ ] **RETN-01**: Fairy Ring mode uses ardy cloak → monastery → walks to fairy ring → "Last-destination (BKR)"
-- [ ] **RETN-02**: Script validates BKR is configured as last destination before interacting
-- [ ] **RETN-03**: Script terminates with error if BKR not configured (safety check)
+- [x] **RETN-01**: Fairy Ring mode uses ardy cloak → monastery → walks to fairy ring → "Last-destination (BKR)"
+- [x] **RETN-02**: Script validates BKR is configured as last destination before interacting
+- [x] **RETN-03**: Script terminates with error if BKR not configured (safety check)
 
 ## v2 Requirements
 
@@ -56,11 +56,11 @@ Which phases cover which requirements. Updated by create-roadmap.
 | MODE-02 | Phase 1 | Complete |
 | COLL-01 | Phase 2 | Complete |
 | COLL-02 | Phase 2 | Complete |
-| BANK-01 | Phase 3 | Pending |
-| BANK-02 | Phase 3 | Pending |
-| RETN-01 | Phase 3 | Pending |
-| RETN-02 | Phase 3 | Pending |
-| RETN-03 | Phase 3 | Pending |
+| BANK-01 | Phase 3 | Complete |
+| BANK-02 | Phase 3 | Complete |
+| RETN-01 | Phase 3 | Complete |
+| RETN-02 | Phase 3 | Complete |
+| RETN-03 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 9 total
