@@ -238,6 +238,17 @@ Run `osmb list` to see all buildable scripts:
 
 **Examples:**
 - `examples/gem-cutting.md` - Gem cutting specifics
+- `examples/discord-post.md` - Discord post template for script releases
+
+## Discord Posts
+
+Every script should have a `discord_post.md` in its root directory for sharing on Discord.
+
+**Guidelines:**
+- Create the main post on initial release with all standard sections
+- Update the main post when new features are added
+- Version updates (v1.1, v1.2, etc.) are added ONLY when explicitly requested by the user
+- See `examples/discord-post.md` for the full template
 
 ## Quick Reference
 
