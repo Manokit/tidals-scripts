@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-01-16)
 ## Current Position
 
 Phase: 1 of 3 (Mode Detection)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-16 — Project initialized
+Plan: 1 of 4 complete
+Status: In progress
+Last activity: 2026-01-16 — Completed 01-01-PLAN.md (Mode Detection)
 
-Progress: ░░░░░░░░░░ 0%
+Progress: █░░░░░░░░░ 11%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 8 min
+- Total execution time: 0.13 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| — | — | — | — |
+| 01-mode-detection | 1/4 | 8 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: —
+- Last 5 plans: 8 min
 - Trend: —
 
 ## Accumulated Context
@@ -40,7 +40,9 @@ Progress: ░░░░░░░░░░ 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-(None yet)
+- Check for Dramen staff first as fairy ring mode indicator
+- FAIRY_RING mode: dramen staff + bloom in inventory + ardy cloak equipped
+- VER_SINHAZA mode: drakan's medallion + bloom equipped
 
 ### Pending Todos
 
@@ -53,5 +55,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-16
-Stopped at: Project initialization complete
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
