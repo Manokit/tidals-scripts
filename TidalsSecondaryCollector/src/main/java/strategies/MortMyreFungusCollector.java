@@ -125,18 +125,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final WorldPosition ZANARIS_BANK_TILE = new WorldPosition(2384, 4459, 0);
     private static final RectangleArea ZANARIS_AREA = new RectangleArea(2375, 4419, 64, 48, 0);
 
-    // zanaris bank path from fairy ring landing to bank chest
-    private static final List<WorldPosition> ZANARIS_BANK_PATH = Arrays.asList(
-        new WorldPosition(2412, 4441, 0),
-        new WorldPosition(2407, 4444, 0),
-        new WorldPosition(2401, 4447, 0),
-        new WorldPosition(2397, 4447, 0),
-        new WorldPosition(2394, 4450, 0),
-        new WorldPosition(2391, 4453, 0),
-        new WorldPosition(2386, 4457, 0),
-        new WorldPosition(2384, 4459, 0)
-    );
-
     // the 3 log positions around the fairy ring standing tile
     private static final WorldPosition[] THREE_LOG_POSITIONS = {
         new WorldPosition(3473, 3418, 0),
@@ -158,23 +146,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     // monastery fairy ring return (fairy ring mode)
     private static final WorldPosition MONASTERY_FAIRY_RING = new WorldPosition(2658, 3230, 0);
     private static final RectangleArea MONASTERY_FAIRY_AREA = new RectangleArea(2653, 3226, 10, 9, 0);
-
-    // path from monastery teleport landing to fairy ring
-    private static final List<WorldPosition> MONASTERY_TO_FAIRY_PATH = Arrays.asList(
-        new WorldPosition(2609, 3221, 0),
-        new WorldPosition(2616, 3222, 0),
-        new WorldPosition(2621, 3222, 0),
-        new WorldPosition(2626, 3221, 0),
-        new WorldPosition(2631, 3222, 0),
-        new WorldPosition(2636, 3221, 0),
-        new WorldPosition(2641, 3224, 0),
-        new WorldPosition(2645, 3226, 0),
-        new WorldPosition(2649, 3229, 0),
-        new WorldPosition(2654, 3230, 0)
-    );
-
-    // mort myre region for fairy ring mode (3-log tile at 3474, 3419 is region 13877)
-    private static final int REGION_MORT_MYRE_FAIRY = 13877;
 
     // track which bloom tool we found during setup
     private int equippedBloomToolId = 0;
@@ -365,7 +336,14 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 script.pollFramesHuman(() -> false, script.random(200, 400));
 
                 ItemGroupResult invCloakCheck = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
-                hasArdyInInventory = invCloakCheck != null && !invCloakCheck.getItems().isEmpty();
+                if (invCloakCheck != null) {
+                    for (int cloakId : ARDOUGNE_CLOAKS) {
+                        if (invCloakCheck.contains(cloakId)) {
+                            hasArdyInInventory = true;
+                            break;
+                        }
+                    }
+                }
 
                 ItemGroupResult invQuestCheck = script.getWidgetManager().getInventory().search(Set.of(QUEST_CAPE));
                 hasQuestCapeInInventory = invQuestCheck != null && invQuestCheck.contains(QUEST_CAPE);
@@ -443,20 +421,24 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             script.log(getClass(), "  - bloom tool: equipped (id=" + equippedBloomToolId + ")");
         }
 
-        // 3. determine banking method (ver sinhaza via drakan's medallion is always available)
-        String bankingMethodUsed = "ver sinhaza (drakan's medallion)";
-
-        // check for crafting cape (best option)
-        try {
-            for (int capeId : CRAFTING_CAPES) {
-                UIResult<ItemSearchResult> cape = script.getWidgetManager().getEquipment().findItem(capeId);
-                if (cape != null && cape.isFound()) {
-                    bankingMethodUsed = "crafting cape";
-                    break;
+        // 3. determine banking method based on mode
+        String bankingMethodUsed;
+        if (isFairyRingMode()) {
+            bankingMethodUsed = "zanaris (fairy ring)";
+        } else {
+            // ver sinhaza mode - check for crafting cape first
+            bankingMethodUsed = "ver sinhaza (drakan's medallion)";
+            try {
+                for (int capeId : CRAFTING_CAPES) {
+                    UIResult<ItemSearchResult> cape = script.getWidgetManager().getEquipment().findItem(capeId);
+                    if (cape != null && cape.isFound()) {
+                        bankingMethodUsed = "crafting cape";
+                        break;
+                    }
                 }
+            } catch (Exception e) {
+                script.log(getClass(), "error checking crafting cape: " + e.getMessage());
             }
-        } catch (Exception e) {
-            script.log(getClass(), "error checking crafting cape: " + e.getMessage());
         }
 
         script.log(getClass(), "banking method: " + bankingMethodUsed);
@@ -1207,7 +1189,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             .timeout(30000)
             .build();
 
-        script.getWalker().walkPath(ZANARIS_BANK_PATH, config);
+        script.getWalker().walkTo(ZANARIS_BANK_TILE, config);
 
         // wait for arrival
         script.pollFramesUntil(() -> {
@@ -1490,109 +1472,84 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private int useFairyRingReturn() {
         script.log(getClass(), "using fairy ring return (ardy cloak -> monastery -> fairy ring)");
 
-        // step 1: check if already near monastery fairy ring
         WorldPosition pos = script.getWorldPosition();
+
+        // check if fairy ring is already interactable on screen
         RSObject fairyRing = script.getObjectManager().getClosestObject(pos, "Fairy ring");
+        boolean ringOnScreen = fairyRing != null && fairyRing.isInteractableOnScreen();
 
-        if (fairyRing == null || fairyRing.getWorldPosition().distanceTo(pos) > 10) {
-            // not near fairy ring, need to teleport to monastery first
-            if (!MONASTERY_AREA.contains(pos)) {
-                script.log(getClass(), "teleporting to monastery");
-                boolean teleported = tryArdougneCloakTeleport();
-                if (!teleported) {
-                    script.log(getClass(), "ERROR: failed to teleport to monastery");
-                    return 600;
-                }
-            }
+        // if fairy ring is on screen or we're in the fairy ring area, interact with it
+        if (ringOnScreen || MONASTERY_FAIRY_AREA.contains(pos)) {
+            return interactWithMonasteryFairyRing();
+        }
 
-            // walk to fairy ring
+        // if in monastery area, walk until fairy ring is on screen
+        if (MONASTERY_AREA.contains(pos)) {
             script.log(getClass(), "walking to monastery fairy ring");
             WalkConfig config = new WalkConfig.Builder()
+                .enableRun(true)
                 .breakCondition(() -> {
                     RSObject ring = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
-                    return ring != null && ring.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+                    return ring != null && ring.isInteractableOnScreen();
                 })
-                .breakDistance(3)
-                .timeout(15000)
                 .build();
 
-            script.getWalker().walkPath(MONASTERY_TO_FAIRY_PATH, config);
-            script.pollFramesHuman(() -> false, script.random(400, 600));
-
-            fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
+            script.getWalker().walkTo(MONASTERY_FAIRY_AREA.getRandomPosition(), config);
+            return 0;  // will re-enter and hit the interactable check above
         }
 
+        // not at monastery, need to teleport there first
+        script.log(getClass(), "teleporting to monastery");
+        boolean teleported = tryArdougneCloakTeleport();
+        if (!teleported) {
+            script.log(getClass(), "ERROR: failed to teleport to monastery");
+            return 600;
+        }
+
+        return 0;  // will re-enter and continue from monastery
+    }
+
+    private int interactWithMonasteryFairyRing() {
+        // find the fairy ring
+        RSObject fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
         if (fairyRing == null) {
-            script.log(getClass(), "fairy ring not found after walking");
+            script.log(getClass(), "fairy ring not found");
             return 600;
         }
 
-        // step 2: validate BKR is configured via menu check
-        Polygon ringPoly = fairyRing.getConvexHull();
-        if (ringPoly == null) {
-            script.log(getClass(), "fairy ring polygon null");
+        // interact with fairy ring using last destination
+        script.log(getClass(), "using fairy ring last-destination (bkr)");
+        if (!fairyRing.interact("last-destination (bkr)")) {
+            script.log(getClass(), "failed to interact with fairy ring");
             return 600;
         }
 
-        // use tapGetResponse to check what menu options are available
-        MenuEntry menuEntry = script.getFinger().tapGetResponse(true, ringPoly);
-        if (menuEntry == null) {
-            script.log(getClass(), "no menu response from fairy ring");
-            return 600;
-        }
+        // wait for teleport animation
+        script.pollFramesHuman(() -> false, script.random(4000, 5000));
 
-        String action = menuEntry.getAction();
-        script.log(getClass(), "fairy ring menu action: " + action);
-
-        // check if BKR is configured as last destination
-        // dkTravel.java uses lowercase "last-destination (dkp)" pattern
-        if (action == null || !action.toLowerCase().contains("last-destination")) {
-            script.log(getClass(), "ERROR: fairy ring last destination not configured");
-            script.log(getClass(), "ERROR: please configure BKR as your fairy ring last destination");
-            script.stop();
-            return 0;
-        }
-
-        if (!action.toLowerCase().contains("bkr")) {
-            script.log(getClass(), "ERROR: fairy ring last destination is not BKR (found: " + action + ")");
-            script.log(getClass(), "ERROR: please set BKR (Mort Myre) as your fairy ring last destination");
-            script.stop();
-            return 0;
-        }
-
-        // step 3: use the last destination (menu is already open from tapGetResponse)
-        // tap to select the last destination option
-        script.log(getClass(), "using fairy ring last-destination (BKR)");
-        boolean success = script.getFinger().tap(ringPoly, action);
-        if (!success) {
-            script.log(getClass(), "failed to use fairy ring");
-            return 600;
-        }
-
-        // wait for teleport
-        script.pollFramesHuman(() -> false, script.random(3500, 4500));
-
-        // verify arrival near 3-log tile
+        // wait for teleport to complete, check if near mort myre fairy ring or at collection tile
         boolean arrived = script.pollFramesUntil(() -> {
             WorldPosition p = script.getWorldPosition();
-            return p != null && THREE_LOG_AREA.contains(p);
+            if (p == null) return false;
+            // either at collection area or near the BKR fairy ring landing spot
+            return THREE_LOG_AREA.contains(p) || p.distanceTo(MORT_MYRE_FAIRY_RING) <= 10;
         }, 10000);
 
-        if (arrived) {
+        if (!arrived) {
+            script.log(getClass(), "failed to arrive in mort myre");
+            return 600;
+        }
+
+        // check if already at collection area
+        WorldPosition currentPos = script.getWorldPosition();
+        if (THREE_LOG_AREA.contains(currentPos)) {
             script.log(getClass(), "arrived at mort myre collection area");
             return 0;
         }
 
-        // may have landed nearby but not exactly at collection tile
-        WorldPosition currentPos = script.getWorldPosition();
-        int currentRegion = (currentPos.getX() >> 6) | ((currentPos.getY() >> 6) << 8);
-        if (currentRegion == REGION_MORT_MYRE_FAIRY) {
-            script.log(getClass(), "arrived in mort myre region, walking to collection tile");
-            return walkToFairyRingLogTile();
-        }
-
-        script.log(getClass(), "failed to arrive in mort myre");
-        return 600;
+        // landed near fairy ring, walk to collection tile
+        script.log(getClass(), "arrived near mort myre fairy ring, walking to collection tile");
+        return walkToFairyRingLogTile();
     }
 
     private int walkToFairyRingLogTile() {

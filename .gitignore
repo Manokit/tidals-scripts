@@ -4,7 +4,6 @@
 **/gradle/
 /dCannonAFKer
 banner PSD.psd
-build.gradle
 */obf/
 **/obf/
 ButterBanner.psd
@@ -14,6 +13,7 @@ dSunbleakWCer/gradlewe
 dSunbleakWCer/gradlew.bat
 dSunbleakWCer/settings.gradle
 .DS_Store
+build.gradle
 
 .claude/
 .vscode/

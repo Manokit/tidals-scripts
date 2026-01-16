@@ -104,7 +104,8 @@ public class TidalsSecondaryCollector extends Script {
                 12850, // lumbridge + altar
                 9776,  // castle wars (dueling ring)
                 11571, // crafting guild
-                12598  // grand exchange
+                12598, // grand exchange
+                9541   // zanaris
         };
     }
 

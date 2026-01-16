@@ -16,7 +16,7 @@ Requirements for v1.1 Flexible Validation milestone.
 
 ### Performance
 
-- [ ] **PERF-01**: Script prioritizes region 13877 (Mort Myre fairy ring) for faster startup in fairy ring mode
+- [x] **PERF-01**: Script prioritizes region 13877 (Mort Myre fairy ring) for faster startup in fairy ring mode
 
 ## v2 Requirements
 
@@ -46,7 +46,7 @@ Which phases cover which requirements. Updated by create-roadmap.
 | VALID-02 | Phase 4 | Complete |
 | VALID-03 | Phase 4 | Complete |
 | VALID-04 | Phase 4 | Complete |
-| PERF-01 | Phase 5 | Pending |
+| PERF-01 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 5 total
@@ -55,4 +55,4 @@ Which phases cover which requirements. Updated by create-roadmap.
 
 ---
 *Requirements defined: 2026-01-16*
-*Last updated: 2026-01-16 after Phase 4 completion*
+*Last updated: 2026-01-16 after Phase 5 completion*
