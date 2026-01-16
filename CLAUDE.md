@@ -2,7 +2,342 @@
 
 > **CRITICAL: OSMB is a COLOR BOT** - It uses visual/pixel detection, NOT injection. You cannot access game memory directly. All detection is done through screen analysis, color matching, and OCR.
 
-**CRITICAL: NEVER ASSUSME A METHOD EXISTS. ALWAYS REFER TO ONE OF THE CORE REFERENCES, OR ANYTHING IN THE DOCS DIR, EXAMPLES DIR, OR OTHER TIDALS SCRIPTS FOR DIRECTION AND CLARIFICATION**
+**CRITICAL: NEVER ASSUME A METHOD EXISTS. ALWAYS REFER TO ONE OF THE CORE REFERENCES, OR ANYTHING IN THE DOCS DIR, EXAMPLES DIR, OR OTHER TIDALS SCRIPTS FOR DIRECTION AND CLARIFICATION**
+
+---
+
+## 🆕 New Script Guidelines
+
+When creating a new script, follow this structure and include ALL of these elements.
+
+### Folder Structure
+```
+TidalsScriptName/
+├── build.gradle
+├── src/main/java/
+│   ├── main/
+│   │   ├── TidalsScriptName.java    # main script class
+│   │   └── ScriptUI.java            # javafx setup ui (optional)
+│   ├── tasks/
+│   │   ├── Setup.java               # initial validation task
+│   │   ├── Process.java             # main activity task
+│   │   └── Bank.java                # banking task
+│   ├── utils/
+│   │   └── Task.java                # task interface
+│   └── obf/
+│       └── Secrets.java             # api keys (gitignored)
+└── src/main/resources/
+    └── logo.png                     # 200x50 transparent png
+```
+
+### build.gradle Template
+```gradle
+plugins {
+    id 'java'
+}
+
+group = 'com.osmb.scripts'
+version = '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly files('../API/API.jar')
+    implementation files('../utilities/jar/TidalsUtilities.jar')
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+jar {
+    archiveFileName = "${project.name}.jar"
+    destinationDirectory = file("${projectDir}/jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    from sourceSets.main.resources
+}
+
+clean {
+    delete "${projectDir}/jar"
+}
+```
+
+### Main Script Template
+```java
+package main;
+
+import com.osmb.api.script.Script;
+import com.osmb.api.script.ScriptDefinition;
+import com.osmb.api.script.SkillCategory;
+import com.osmb.api.scene.RSObject;
+// ... other imports
+
+@ScriptDefinition(
+        name = "TidalsScriptName",
+        description = "Does something useful",
+        skillCategory = SkillCategory.PROCESSING,  // or COMBAT, GATHERING, etc.
+        version = 1.0,
+        author = "Tidaleus"
+)
+public class TidalsScriptName extends Script {
+    public static final String SCRIPT_VERSION = "1.0";
+    private static final String SCRIPT_NAME = "ScriptName";  // short name for stats
+
+    // state
+    public static boolean setupComplete = false;
+    public static String task = "starting...";
+    public static long startTime = System.currentTimeMillis();
+
+    // stats
+    public static int itemsProcessed = 0;
+
+    private List<Task> tasks;
+
+    public TidalsScriptName(Object scriptCore) {
+        super(scriptCore);
+    }
+
+    // CRITICAL: always override this with the standard bank list
+    @Override
+    public int[] regionsToPrioritise() {
+        return BANK_REGIONS;
+    }
+
+    @Override
+    public void onStart() {
+        log(getClass(), "starting " + SCRIPT_NAME + " v" + SCRIPT_VERSION);
+        tasks = Arrays.asList(
+                new Setup(this),
+                new Process(this),
+                new Bank(this)
+        );
+    }
+
+    @Override
+    public int poll() {
+        for (Task task : tasks) {
+            if (task.activate()) {
+                task.execute();
+                return 0;
+            }
+        }
+        return 600;
+    }
+
+    // ... paint, stats, etc.
+}
+```
+
+### CRITICAL: Standard Bank Regions (ALWAYS INCLUDE)
+Every script that uses banking MUST include this regions list. Copy it exactly.
+
+```java
+// standard bank regions - covers 99% of bank locations
+public static final int[] BANK_REGIONS = {
+    13104, // shantay pass
+    13105, // al kharid
+    13363, // duel arena / pvp arena
+    12850, // lumbridge castle
+    12338, // draynor
+    12853, // varrock east
+    12597, // varrock west + cooks guild
+    12598, // grand exchange
+    12342, // edgeville
+    12084, // falador east + mining guild
+    11828, // falador west
+    11571, // crafting guild
+    11319, // warriors guild
+    11061, // catherby
+    10806, // seers
+    11310, // shilo
+    10284, // corsair cove
+    9772,  // myths guild
+    10288, // yanille
+    10545, // port khazard
+    10547, // ardougne east/south
+    10292, // ardougne east/north
+    10293, // fishing guild
+    10039, // barbarian assault
+    9782,  // grand tree
+    9781,  // tree gnome stronghold
+    9776,  // castle wars
+    9265,  // lletya
+    8748,  // soul wars
+    8253,  // lunar isle
+    9275,  // neitiznot
+    9531,  // jatiszo
+    6461,  // wintertodt
+    7227,  // port piscarilius
+    6458,  // arceeus
+    6457,  // kourend castle
+    6968,  // hosidius
+    7223,  // vinery
+    6710,  // sand crabs chest
+    6198,  // woodcutting guild
+    5941,  // land's end
+    5944,  // shayzien
+    5946,  // lovakengj south
+    5691,  // lovekengj north
+    4922,  // farming guild
+    4919,  // chambers of xeric
+    5938,  // quetzacalli
+    6448,  // varlamore west
+    6960,  // varlamore east
+    6191,  // hunter guild
+    5421,  // aldarin
+    5420,  // mistrock
+    14638, // mos'le harmless
+    14642, // tob + ver sinhaza
+    14646, // port phasmatys
+    12344, // ferox enclave
+    12895, // priff north
+    13150, // priff south
+    13907, // museum camp
+    14908, // fossil bank chest island
+    10290, // kandarin monastery (ardy cloak)
+};
+
+@Override
+public int[] regionsToPrioritise() {
+    return BANK_REGIONS;
+}
+```
+
+### Standard Bank Query (ALWAYS USE)
+```java
+public static final String[] BANK_NAMES = {"Bank", "Chest", "Bank booth", "Bank chest", "Grand Exchange booth", "Bank counter", "Bank table"};
+public static final String[] BANK_ACTIONS = {"bank", "open", "use"};
+public static final Predicate<RSObject> BANK_QUERY = obj ->
+        obj.getName() != null && obj.getActions() != null &&
+        Arrays.stream(BANK_NAMES).anyMatch(name -> name.equalsIgnoreCase(obj.getName())) &&
+        Arrays.stream(obj.getActions()).anyMatch(action ->
+            Arrays.stream(BANK_ACTIONS).anyMatch(bankAction -> bankAction.equalsIgnoreCase(action))) &&
+        obj.canReach();
+```
+
+### Task Interface Template
+```java
+package utils;
+
+import com.osmb.api.script.Script;
+
+public abstract class Task {
+    protected Script script;
+
+    public Task(Script script) {
+        this.script = script;
+    }
+
+    public abstract boolean activate();
+    public abstract boolean execute();
+}
+```
+
+### Humanization Patterns (ALWAYS USE)
+
+**Random delays between actions:**
+```java
+// standard delay (200-400ms) - use between most actions
+script.submitTask(() -> false, script.random(200, 400));
+
+// longer delay (300-600ms) - use after bank operations
+script.submitTask(() -> false, script.random(300, 600));
+
+// human-style delay with variance logging
+script.pollFramesHuman(() -> false, script.random(200, 400));
+```
+
+**Variable delays with occasional longer pauses:**
+```java
+// normal 2-3 tick delay, 10% chance of extra pause
+int delay = script.random(1200, 1800);
+if (script.random(10) == 0) {
+    delay += script.random(600, 1200);  // occasional longer pause
+}
+
+// ~20% chance to use human delay (logs the ⏳ message)
+if (script.random(5) == 0) {
+    script.pollFramesHuman(() -> false, delay);
+} else {
+    script.submitTask(() -> false, delay);
+}
+```
+
+### Caching Patterns (USE WHEN POSSIBLE)
+
+**Cache inventory slots to avoid re-scanning:**
+```java
+// cache slots once, process all without re-scanning
+ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(ItemID.GOLD_ORE));
+if (inv == null || !inv.contains(ItemID.GOLD_ORE)) return false;
+
+List<Integer> slots = new ArrayList<>(inv.getSlotsForItem(ItemID.GOLD_ORE));
+script.log(getClass(), "cached " + slots.size() + " slots");
+
+for (int slot : slots) {
+    var boundsResult = script.getWidgetManager().getInventory().getBoundsForSlot(slot);
+    if (boundsResult == null || !boundsResult.isFound()) continue;
+
+    Rectangle bounds = boundsResult.get();
+    script.getFinger().tap(bounds);
+    // ... process
+}
+```
+
+**Cache bank search result:**
+```java
+// search once, use multiple times
+ItemGroupResult bank = script.getWidgetManager().getBank().search(Set.of(ItemID.GOLD_ORE, ItemID.NATURE_RUNE));
+if (bank == null) return false;
+
+int oreCount = bank.getAmount(ItemID.GOLD_ORE);
+int runeCount = bank.getAmount(ItemID.NATURE_RUNE);
+```
+
+### AFK Control Pattern
+```java
+// in main script class
+public static boolean allowAFK = true;
+
+@Override
+public boolean canAFK() {
+    return allowAFK;
+}
+
+// in task when doing critical actions
+TidalsScriptName.allowAFK = false;  // prevent afk during bloom/cast
+// ... do action ...
+TidalsScriptName.allowAFK = true;   // re-enable after
+```
+
+### Level Up Handling (ALWAYS CHECK)
+```java
+// check for level up dialogue after xp-granting actions
+DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
+if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
+    script.log(getClass(), "level up");
+    script.getWidgetManager().getDialogue().continueChatDialogue();
+    script.submitTask(() ->
+        script.getWidgetManager().getDialogue().getDialogueType() != DialogueType.TAP_HERE_TO_CONTINUE,
+        2000);
+}
+```
+
+### Secrets.java Template (gitignored)
+```java
+package obf;
+
+public class Secrets {
+    public static final String STATS_URL = "https://your-dashboard.com/api/stats";
+    public static final String STATS_API = "your-api-key";
+}
+```
+
+---
 
 ## 🛠️ Shared Utilities (TidalsUtilities.jar)
 
@@ -280,7 +615,7 @@ getPixelAnalyzer()      // Color/pixel detection
 getOCR()                // Text recognition
 ```
 
-## Top 5 Critical Concepts
+## Critical Concepts
 
 ### 1. NPCs Aren't in ObjectManager - Use Minimap!
 ```java
@@ -290,7 +625,7 @@ List<WorldPosition> npcPositions = getWidgetManager().getMinimap().getNPCPositio
 for (WorldPosition npcPos : npcPositions) {
     Polygon tileCube = getSceneProjector().getTileCube(npcPos, 60);
     if (tileCube == null) continue;
-    
+
     // Verify what's at this position
     MenuEntry response = getFinger().tapGetResponse(true, tileCube);
     if (response != null && response.getEntityName().contains("Guard")) {
@@ -303,7 +638,7 @@ for (WorldPosition npcPos : npcPositions) {
 ### 2. Items with Identical Sprites CANNOT Be Distinguished
 ```java
 // WRONG - Waterskin(0) through (4) look identical!
-inventory.search(Set.of(ItemID.WATERSKIN_4)); 
+inventory.search(Set.of(ItemID.WATERSKIN_4));
 
 // CORRECT - Use BuffOverlay for items with charges
 BuffOverlay waterskinBuff = new BuffOverlay(core, WATERSKIN_ID);
@@ -311,18 +646,7 @@ String charges = waterskinBuff.getText();
 ```
 → **See `docs/critical-concepts.md` for solutions**
 
-### 3. Items with Identical Sprites CANNOT Be Distinguished
-```java
-// WRONG - Waterskin(0) through (4) look identical!
-inventory.search(Set.of(ItemID.WATERSKIN_4)); 
-
-// CORRECT - Use BuffOverlay for items with charges
-BuffOverlay waterskinBuff = new BuffOverlay(core, WATERSKIN_ID);
-String charges = waterskinBuff.getText();
-```
-→ **See `docs/critical-concepts.md` for solutions**
-
-### 4. Visual Door Detection (Collision Map is Static!)
+### 3. Visual Door Detection (Collision Map is Static!)
 ```java
 // WRONG - Assuming collision map is accurate
 if (collisionMap.isBlocked(doorTile)) { /* door is closed */ }
@@ -335,7 +659,7 @@ if (response != null && response.getAction().equalsIgnoreCase("Open")) {
 ```
 → **See `docs/critical-concepts.md` for details**
 
-### 5. Use Direct tap() for Interactions - Avoid Double-Tap Bug
+### 4. Use Direct tap() for Interactions - Avoid Double-Tap Bug
 ```java
 // WRONG - causes double interaction (tap then menu open)
 MenuEntry response = getFinger().tapGetResponse(true, bounds);
@@ -357,7 +681,7 @@ if (response != null && response.getAction().contains("Pick")) {
 
 → **See `docs/walking-npcs.md` for interaction patterns**
 
-### 6. State Machine Pattern
+### 5. State Machine Pattern
 ```java
 private enum State { IDLE, GATHERING, BANKING, WALKING }
 
@@ -373,7 +697,7 @@ public int poll() {
 }
 ```
 
-### 7. Prioritize Regions for Fast Startup
+### 6. Prioritize Regions for Fast Startup
 ```java
 @Override
 public ScriptOptions getScriptOptions() {
@@ -386,7 +710,7 @@ public ScriptOptions getScriptOptions() {
 }
 ```
 
-### 8. Menu Interaction Retry Pattern (ALWAYS USE THIS)
+### 7. Menu Interaction Retry Pattern (ALWAYS USE THIS)
 **CRITICAL**: Menu interactions can fail due to timing, camera angle, or misclicks. ALWAYS retry menu interactions up to 10 times unless speed is explicitly critical.
 
 ```java
