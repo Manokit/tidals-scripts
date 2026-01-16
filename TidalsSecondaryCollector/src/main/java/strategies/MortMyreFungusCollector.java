@@ -565,6 +565,37 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         return collectGroundFungus();
     }
 
+    // cast bloom from inventory item (fairy ring mode - dramen staff occupies weapon slot)
+    private boolean castBloomFromInventory() {
+        // open inventory tab
+        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+        script.pollFramesUntil(() -> false, script.random(150, 250));
+
+        // find bloom tool in inventory
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(BLOOM_TOOLS));
+        if (inv == null) {
+            script.log(getClass(), "ERROR: no bloom tool in inventory");
+            return false;
+        }
+
+        ItemSearchResult bloomTool = null;
+        for (int toolId : BLOOM_TOOLS) {
+            if (inv.contains(toolId)) {
+                bloomTool = inv.getItem(toolId);
+                break;
+            }
+        }
+
+        if (bloomTool == null) {
+            script.log(getClass(), "ERROR: bloom tool not found in inventory");
+            return false;
+        }
+
+        // cast bloom using inventory interact
+        Integer prayer = script.getWidgetManager().getMinimapOrbs().getPrayerPoints();
+        return RetryUtils.inventoryInteract(script, bloomTool, "Bloom", "casting bloom from inventory (prayer: " + prayer + ")");
+    }
+
     private int collectGroundFungus() {
         // detect which log positions have fungus
         List<WorldPosition> fungusPositions = detectFungusPositions();
