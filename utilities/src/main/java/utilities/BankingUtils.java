@@ -111,7 +111,7 @@ public class BankingUtils {
         }
 
         // interact with bank
-        if (!bank.interact(BANK_ACTIONS)) {
+        if (!RetryUtils.objectInteract(script, bank, BANK_ACTIONS, "bank interaction")) {
             script.log(BankingUtils.class, "bank interact failed");
             return false;
         }
@@ -120,7 +120,7 @@ public class BankingUtils {
         AtomicReference<Timer> posTimer = new AtomicReference<>(new Timer());
         AtomicReference<WorldPosition> prevPos = new AtomicReference<>(null);
 
-        boolean opened = script.pollFramesHuman(() -> {
+        boolean opened = script.pollFramesUntil(() -> {
             WorldPosition current = script.getWorldPosition();
             if (current == null) return false;
 
@@ -332,10 +332,11 @@ public class BankingUtils {
         }
 
         // deposit worn items first
-        depositWornItems(script);
+        boolean wornSuccess = depositWornItems(script);
         script.pollFramesUntil(() -> false, 300);
 
         // deposit inventory
-        return script.getWidgetManager().getBank().depositAll(Collections.emptySet());
+        boolean invSuccess = script.getWidgetManager().getBank().depositAll(Collections.emptySet());
+        return wornSuccess && invSuccess;
     }
 }

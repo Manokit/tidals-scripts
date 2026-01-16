@@ -905,11 +905,7 @@ public class BankSearchUtils {
                 int delay = (int) (75 + RANDOM.nextGaussian() * 25);
                 delay = Math.max(25, Math.min(125, delay));
 
-                try {
-                    Thread.sleep(delay);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+                script.pollFramesUntil(() -> false, delay);
             }
         }
     }

@@ -273,6 +273,9 @@ public class PouchGrid extends VBox {
      * @return the ItemSlot
      */
     public ItemSlot getSlot(int index) {
+        if (index < 0 || index >= slots.length) {
+            throw new IndexOutOfBoundsException("Slot index " + index + " is out of bounds for pouch with " + slotCount + " slots");
+        }
         return slots[index];
     }
 }

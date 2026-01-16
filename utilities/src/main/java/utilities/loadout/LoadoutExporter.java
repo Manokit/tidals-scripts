@@ -225,7 +225,7 @@ public class LoadoutExporter {
             int runeliteIdx = LOADOUT_TO_RUNELITE_SLOT[ourIdx];
             runeliteEquipment[runeliteIdx] = ourEquipment[ourIdx];
         }
-        // slots 11-13 remain null (filler)
+        // slots 6, 8, 11 remain null (filler)
         appendItemArray(sb, runeliteEquipment);
     }
 
@@ -240,7 +240,7 @@ public class LoadoutExporter {
             int runeliteIdx = LOADOUT_TO_RUNELITE_SLOT[ourIdx];
             runeliteEquipment[runeliteIdx] = ourEquipment[ourIdx];
         }
-        // slots 11-13 remain null (filler)
+        // slots 6, 8, 11 remain null (filler)
         appendItemArrayPretty(sb, runeliteEquipment, indent);
     }
 

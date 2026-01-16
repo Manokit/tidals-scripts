@@ -192,6 +192,7 @@ public final class LoadoutRestocker {
             for (int variantId : variants) {
                 if (BankSearchUtils.searchAndWithdrawVerified(script, variantId, 1, true)) {
                     script.log(getClass(), "withdrew equipment: " + variantId);
+                    // reset (not clear) - caller may have more withdrawals; caller clears when done
                     BankSearchUtils.clickSearchToReset(script);
                     return true;
                 }

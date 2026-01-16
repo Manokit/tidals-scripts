@@ -122,7 +122,7 @@ public class LoadoutImporter {
                 // parse all 14 RuneLite slots
                 LoadoutItem[] runeliteEquipment = parseItemArray(eqArray, 14);
                 // map to our slot order
-                for (int runeliteIdx = 0; runeliteIdx < runeliteEquipment.length; runeliteIdx++) {
+                for (int runeliteIdx = 0; runeliteIdx < runeliteEquipment.length && runeliteIdx < RUNELITE_TO_LOADOUT_SLOT.length; runeliteIdx++) {
                     int ourIdx = RUNELITE_TO_LOADOUT_SLOT[runeliteIdx];
                     if (ourIdx >= 0) {
                         loadout.setEquipment(ourIdx, runeliteEquipment[runeliteIdx]);

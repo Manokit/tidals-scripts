@@ -42,7 +42,7 @@ public class TidalsBankTester extends Script {
     public void onStart() {
         // show setup UI
         scriptUI = new ScriptUI(this);
-        Scene scene = scriptUI.buildScene(this);
+        Scene scene = scriptUI.buildScene();
         getStageController().show(scene, "Bank Tester Setup", false);
 
         // get settings from UI

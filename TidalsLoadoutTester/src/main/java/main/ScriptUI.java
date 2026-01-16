@@ -38,7 +38,7 @@ public class ScriptUI {
         this.loadouts = loadouts;
     }
 
-    public Scene buildScene(Script script) {
+    public Scene buildScene(Script coreScript) {
         VBox root = new VBox(16);
         root.setPadding(new Insets(20, 24, 20, 24));
         root.setAlignment(Pos.TOP_CENTER);
