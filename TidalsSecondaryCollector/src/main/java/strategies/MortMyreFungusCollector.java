@@ -296,11 +296,24 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
         // mode detection: check for dramen staff first (fairy ring mode indicator)
+        // check equipment first, then inventory (will auto-equip if in inventory)
         UIResult<ItemSearchResult> dramenStaff = script.getWidgetManager().getEquipment().findItem(DRAMEN_STAFF);
+        boolean dramenEquipped = dramenStaff.isFound();
+        boolean dramenInInventory = false;
 
-        if (dramenStaff.isFound()) {
+        // if not equipped, check inventory for dramen staff
+        if (!dramenEquipped) {
+            script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+
+            ItemGroupResult invCheck = script.getWidgetManager().getInventory().search(Set.of(DRAMEN_STAFF));
+            dramenInInventory = invCheck != null && invCheck.contains(DRAMEN_STAFF);
+        }
+
+        if (dramenEquipped || dramenInInventory) {
             // potential fairy ring mode - check inventory for bloom tool
-            script.log(getClass(), "dramen staff detected, checking for fairy ring mode...");
+            String dramenSource = dramenEquipped ? "equipped" : "in inventory";
+            script.log(getClass(), "dramen staff detected (" + dramenSource + "), checking for fairy ring mode...");
 
             script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
             script.pollFramesHuman(() -> false, script.random(200, 400));
@@ -320,26 +333,69 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             }
 
             if (!bloomInInventory) {
-                script.log(getClass(), "ERROR: dramen staff equipped but no bloom tool in inventory");
+                script.log(getClass(), "ERROR: dramen staff found but no bloom tool in inventory");
                 return false;
             }
 
-            // check if ardy cloak is equipped (required for fairy ring mode)
+            // auto-equip dramen staff if it was in inventory
+            if (dramenInInventory) {
+                script.log(getClass(), "dramen staff in inventory, auto-equipping...");
+                if (!autoEquipDramenStaff()) {
+                    script.log(getClass(), "ERROR: failed to auto-equip dramen staff");
+                    return false;
+                }
+                dramenEquipped = true;
+            }
+
+            // check for ardy cloak or quest cape (required for fairy ring mode)
+            // check equipment first
             script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
             script.pollFramesHuman(() -> false, script.random(200, 400));
 
-            UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(ARDOUGNE_CLOAKS);
-            if (!ardyCloak.isFound()) {
-                script.log(getClass(), "ERROR: fairy ring mode requires ardougne cloak equipped");
+            UIResult<ItemSearchResult> ardyCloakEquipped = script.getWidgetManager().getEquipment().findItem(ARDOUGNE_CLOAKS);
+            UIResult<ItemSearchResult> questCapeEquipped = script.getWidgetManager().getEquipment().findItem(QUEST_CAPE);
+            boolean hasArdyEquipped = ardyCloakEquipped.isFound();
+            boolean hasQuestCapeEquipped = questCapeEquipped.isFound();
+
+            // if not equipped, check inventory for ardy cloak or quest cape
+            boolean hasArdyInInventory = false;
+            boolean hasQuestCapeInInventory = false;
+            if (!hasArdyEquipped && !hasQuestCapeEquipped) {
+                script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+                script.pollFramesHuman(() -> false, script.random(200, 400));
+
+                ItemGroupResult invCloakCheck = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
+                hasArdyInInventory = invCloakCheck != null && !invCloakCheck.getItems().isEmpty();
+
+                ItemGroupResult invQuestCheck = script.getWidgetManager().getInventory().search(Set.of(QUEST_CAPE));
+                hasQuestCapeInInventory = invQuestCheck != null && invQuestCheck.contains(QUEST_CAPE);
+            }
+
+            // determine teleport method availability
+            boolean hasTeleportItem = hasArdyEquipped || hasArdyInInventory || hasQuestCapeEquipped || hasQuestCapeInInventory;
+            if (!hasTeleportItem) {
+                script.log(getClass(), "ERROR: fairy ring mode requires ardougne cloak or quest cape (equipped or in inventory)");
                 return false;
+            }
+
+            // log which teleport item was found
+            String teleportSource;
+            if (hasArdyEquipped) {
+                teleportSource = "ardougne cloak (equipped)";
+            } else if (hasArdyInInventory) {
+                teleportSource = "ardougne cloak (inventory)";
+            } else if (hasQuestCapeEquipped) {
+                teleportSource = "quest cape (equipped)";
+            } else {
+                teleportSource = "quest cape (inventory)";
             }
 
             // fairy ring mode confirmed
             detectedMode = Mode.FAIRY_RING;
             script.log(getClass(), "detected mode: FAIRY_RING");
-            script.log(getClass(), "  - dramen staff: equipped");
+            script.log(getClass(), "  - dramen staff: " + (dramenInInventory ? "auto-equipped from inventory" : "equipped"));
             script.log(getClass(), "  - bloom tool: in inventory (id=" + equippedBloomToolId + ")");
-            script.log(getClass(), "  - ardougne cloak: equipped");
+            script.log(getClass(), "  - teleport item: " + teleportSource);
 
         } else {
             // ver sinhaza mode - check drakan's medallion + equipped bloom tool
