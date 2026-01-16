@@ -116,6 +116,24 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final WorldPosition THREE_LOG_TILE = new WorldPosition(3474, 3419, 0);
     private static final RectangleArea THREE_LOG_AREA = new RectangleArea(3472, 3417, 3476, 3421, 0);
 
+    // zanaris banking (fairy ring mode)
+    private static final WorldPosition MORT_MYRE_FAIRY_RING = new WorldPosition(3469, 3431, 0);
+    private static final WorldPosition ZANARIS_FAIRY_RING = new WorldPosition(2412, 4434, 0);
+    private static final WorldPosition ZANARIS_BANK_TILE = new WorldPosition(2384, 4459, 0);
+    private static final RectangleArea ZANARIS_AREA = new RectangleArea(2375, 4419, 64, 48, 0);
+
+    // zanaris bank path from fairy ring landing to bank chest
+    private static final List<WorldPosition> ZANARIS_BANK_PATH = Arrays.asList(
+        new WorldPosition(2412, 4441, 0),
+        new WorldPosition(2407, 4444, 0),
+        new WorldPosition(2401, 4447, 0),
+        new WorldPosition(2397, 4447, 0),
+        new WorldPosition(2394, 4450, 0),
+        new WorldPosition(2391, 4453, 0),
+        new WorldPosition(2386, 4457, 0),
+        new WorldPosition(2384, 4459, 0)
+    );
+
     // the 3 log positions around the fairy ring standing tile
     private static final WorldPosition[] THREE_LOG_POSITIONS = {
         new WorldPosition(3473, 3418, 0),
