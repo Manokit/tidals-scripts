@@ -56,21 +56,14 @@ BankingUtils.openBankAndWait(script, bank, 15000);  // specific bank
 // deposit all except specified items
 BankingUtils.depositAllExcept(script, Set.of(ItemID.CHISEL));
 
-// withdraw items
-BankingUtils.withdrawToFillInventory(script, ItemID.GOLD_ORE);  // fills all slots
-BankingUtils.withdraw(script, ItemID.NATURE_RUNE, 100);  // specific amount
-
-// check bank contents
-if (BankingUtils.bankContains(script, ItemID.GOLD_ORE)) {
-    int amount = BankingUtils.getBankAmount(script, ItemID.GOLD_ORE);
-}
-
 // close bank and wait
 BankingUtils.closeBankAndWait(script, 5000);
 
 // use the shared bank query predicate
 List<RSObject> banks = script.getObjectManager().getObjects(BankingUtils.BANK_QUERY);
 ```
+
+**For withdrawals, use BankSearchUtils instead** - see BankSearchUtils section below.
 
 **Benefits**:
 - Shared `BANK_QUERY` predicate (no more duplicate code)
@@ -137,6 +130,53 @@ if (DialogueUtils.hasDialogue(script)) {
 - Handles level ups cleanly
 - Retry support for item selection
 - Consistent dialogue state checking
+
+### BankSearchUtils - Bank Search & Withdraw (CRITICAL)
+**ALWAYS USE THIS** for withdrawing items from the bank. The raw `bank.search()` and `bank.withdraw()` APIs only see currently visible items and DO NOT work reliably.
+
+```java
+import utilities.BankSearchUtils;
+
+// withdraw single item (types name in search box, finds visually, verifies)
+BankSearchUtils.searchAndWithdrawVerified(script, ItemID.SHARK, 5, true);
+
+// withdraw all of a stack
+BankSearchUtils.searchAndWithdrawVerified(script, ItemID.DEATH_RUNE, 0, true);  // 0 = all
+
+// CRITICAL: after EVERY successful withdrawal, reset the search for the next item
+BankSearchUtils.clickSearchToReset(script);
+
+// when done with all withdrawals, clear the search completely
+BankSearchUtils.clearSearch(script);
+```
+
+**CRITICAL PATTERN - Multi-item withdrawal loop:**
+```java
+// correct pattern for withdrawing multiple items
+for (int itemId : itemsToWithdraw) {
+    boolean success = BankSearchUtils.searchAndWithdrawVerified(script, itemId, amount, true);
+    if (success) {
+        // MUST reset search after each successful withdrawal
+        BankSearchUtils.clickSearchToReset(script);
+    }
+}
+// clear search when done
+BankSearchUtils.clearSearch(script);
+```
+
+**Why this matters:**
+- `bank.search(Set.of(itemId))` only searches VISIBLE items (no scrolling, no search box)
+- `BankSearchUtils` types the item name in the search box, uses sprite detection, verifies inventory
+- After withdrawal, the search box stays open with old text - MUST click search button to reset
+- `clickSearchToReset()` clears current search and reopens fresh search input
+- `clearSearch()` closes search entirely (use when done with all withdrawals)
+
+**Benefits**:
+- Types item name in bank search box
+- Uses sprite detection to find items visually
+- Scrolls through bank if needed
+- Verifies withdrawal succeeded via inventory count
+- Works regardless of bank tab or scroll position
 
 ### Building Utilities
 ```bash

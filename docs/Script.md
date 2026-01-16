@@ -1,8 +1,20 @@
-# ScriptCore
+# Script
 
-**Type:** Interface
+**Type:** Abstract Class
 
-**All Known Implementing Classes:** Script
+**Implements:** ScriptOptions, ScriptCore
+
+## Fields
+
+| Type | Field |
+|------|-------|
+| `protected long` | `startTime` |
+
+## Constructors
+
+| Constructor |
+|-------------|
+| `Script(Object scriptCore)` |
 
 ## Methods
 
@@ -13,6 +25,7 @@
 | `Integer` | `getCurrentWorld()` |
 | `WorldPosition` | `getExpectedWorldPosition()` |
 | `Finger` | `getFinger()` |
+| `Map<String, List<SearchableImage>>` | `getImportedImages()` |
 | `ImageAnalyzer` | `getImageAnalyzer()` |
 | `ItemManager` | `getItemManager()` |
 | `Keyboard` | `getKeyboard()` |
@@ -28,20 +41,19 @@
 | `Screen` | `getScreen()` |
 | `SpriteManager` | `getSpriteManager()` |
 | `StageController` | `getStageController()` |
+| `long` | `getStartTime()` |
 | `Utils` | `getUtils()` |
 | `Walker` | `getWalker()` |
 | `Direction` | `getWalkingDirection()` |
 | `WidgetManager` | `getWidgetManager()` |
 | `WorldPosition` | `getWorldPosition()` |
 | `Map<SkillType, XPTracker>` | `getXPTrackers()` |
-| `void` | `log(String)` |
+| `void` | `log(String message)` |
 | `void` | `log(Class, String)` |
 | `void` | `log(String, String)` |
-| `default void` | `onGameStateChanged(GameState newGameState)` |
-| `default void` | `onNewFrame()` |
-| `default void` | `onPaint(Canvas c)` |
-| `default void` | `onRegionChange(int newRegionId, int previousRegionId)` |
+| `void` | `onGameStateChanged(GameState newGameState)` |
 | `boolean` | `paused()` |
+| `abstract int` | `poll()` |
 | `boolean` | `pollFramesHuman(BooleanSupplier condition, int timeout)` |
 | `boolean` | `pollFramesHuman(BooleanSupplier condition, int timeout, boolean ignoreTasks)` |
 | `boolean` | `pollFramesUntil(BooleanSupplier condition, int timeout)` |
@@ -51,70 +63,82 @@
 | `int` | `random(int num)` |
 | `int` | `random(int low, int high)` |
 | `int` | `random(long low, long high)` |
-| `void` | `setExpectedRegionId(Integer expectedRegionId)` - **Deprecated** |
+| `void` | `setExpectedRegionId(Integer expectedRegionId)` |
 | `void` | `setPause(boolean pause)` |
 | `void` | `sleep(int millis)` |
 | `void` | `sleep(long millis)` |
 | `void` | `stop()` |
 | `boolean` | `stopped()` |
 | `boolean` | `submitHumanTask(BooleanSupplier condition, int timeout)` |
-| `boolean` | `submitHumanTask(BooleanSupplier condition, int timeout, boolean ignoreGameState, boolean ignoreTasks)` - **Deprecated** |
+| `boolean` | `submitHumanTask(BooleanSupplier condition, int timeout, boolean ignoreGamestate, boolean ignoreTasks)` |
 | `boolean` | `submitTask(BooleanSupplier condition, int timeout)` |
-| `boolean` | `submitTask(BooleanSupplier condition, int timeout, boolean ignoreGameState, boolean ignoreTasks)` - **Deprecated** |
+| `boolean` | `submitTask(BooleanSupplier condition, int timeout, boolean ignoreGamestate, boolean ignoreTasks)` |
 
 ## Method Details
 
-### getOSMBUsername
+### setExpectedRegionId
 ```java
-String getOSMBUsername()
+public void setExpectedRegionId(Integer expectedRegionId)
 ```
 
-### getAppManager
+Sets the expected region ID for the script. The region set will be searched immediately after failing to search the region where we previously found our position. Once the expected region is found, the expected region ID will be set to null.
+
+**Parameters:**
+- `expectedRegionId` - The expected region ID. If null, the expected region ID will be cleared.
+
+### getImportedImages
 ```java
-AppManager getAppManager()
+public Map<String, List<SearchableImage>> getImportedImages()
 ```
 
-### getWidgetManager
+### poll
 ```java
-WidgetManager getWidgetManager()
+public abstract int poll()
+```
+
+### getStartTime
+```java
+public long getStartTime()
+```
+
+### getSceneManager
+```java
+public SceneManager getSceneManager()
 ```
 
 ### getFinger
 ```java
-Finger getFinger()
+public Finger getFinger()
 ```
 
-### getKeyboard
+### log
 ```java
-Keyboard getKeyboard()
+public void log(String message)
+```
+
+```java
+public void log(Class, String)
+```
+
+```java
+public void log(String, String)
 ```
 
 ### getScreen
 ```java
-Screen getScreen()
+public Screen getScreen()
 ```
 
-### getXPTrackers
+### getLocalPosition
 ```java
-Map<SkillType, XPTracker> getXPTrackers()
+public LocalPosition getLocalPosition()
 ```
 
-Gets a map of all current XPTracker instances, keyed by their corresponding SkillType.
-
-Each XPTracker in the map tracks experience gained for its associated skill using the XPDropsComponent. If no experience has been tracked for a skill, it will not appear in the map.
-
-**Returns:** A map of SkillType to XPTracker for all skills with tracked experience.
-
-### getWorldPosition
-```java
-WorldPosition getWorldPosition()
-```
-
-**Returns:** The current WorldPosition of the player, or null if the position is unknown.
+**Returns:** The current LocalPosition of the player, or null if the position is unknown.
 
 ### getExpectedWorldPosition
 ```java
-WorldPosition getExpectedWorldPosition()
+public WorldPosition getExpectedWorldPosition()
 ```
 
 Calculates the expected WorldPosition based on the current position and walking direction.
@@ -129,162 +153,163 @@ This method adjusts the current world position to the next tile boundary in the 
 
 **Returns:** the expected WorldPosition after moving in the current walking direction, or the current position if direction is `null`, or `null` if position is unknown
 
-### getLocalPosition
-```java
-LocalPosition getLocalPosition()
-```
-
-**Returns:** The current LocalPosition of the player, or null if the position is unknown.
-
 ### getWalkingDirection
 ```java
-Direction getWalkingDirection()
+public Direction getWalkingDirection()
 ```
 
 Gets the current walking direction of the player. This is worked out by comparing to the last known position.
 
 **Returns:** The current walking direction of the player, or null if the direction cannot be determined.
 
-### getSceneManager
+### onGameStateChanged
 ```java
-SceneManager getSceneManager()
+public void onGameStateChanged(GameState newGameState)
 ```
 
-### getImageAnalyzer
-```java
-ImageAnalyzer getImageAnalyzer()
-```
+Called whenever the game state changes.
 
-### getPixelAnalyzer
-```java
-PixelAnalyzer getPixelAnalyzer()
-```
+**Parameters:**
+- `newGameState` - The new game state.
 
-### getSceneProjector
+### getWidgetManager
 ```java
-SceneProjector getSceneProjector()
+public WidgetManager getWidgetManager()
 ```
 
 ### getSpriteManager
 ```java
-SpriteManager getSpriteManager()
+public SpriteManager getSpriteManager()
 ```
 
 ### getObjectManager
 ```java
-ObjectManager getObjectManager()
-```
-
-### getItemManager
-```java
-ItemManager getItemManager()
-```
-
-### getProfileManager
-```java
-ProfileManager getProfileManager()
-```
-
-### getWalker
-```java
-Walker getWalker()
-```
-
-### getUtils
-```java
-Utils getUtils()
-```
-
-### random
-```java
-int random(long low, long high)
-```
-
-```java
-int random(int num)
-```
-
-```java
-int random(int low, int high)
+public ObjectManager getObjectManager()
 ```
 
 ### getOCR
 ```java
-OCR getOCR()
+public OCR getOCR()
+```
+
+### getImageAnalyzer
+```java
+public ImageAnalyzer getImageAnalyzer()
+```
+
+### getAppManager
+```java
+public AppManager getAppManager()
+```
+
+### getKeyboard
+```java
+public Keyboard getKeyboard()
+```
+
+### getPixelAnalyzer
+```java
+public PixelAnalyzer getPixelAnalyzer()
+```
+
+### getSceneProjector
+```java
+public SceneProjector getSceneProjector()
 ```
 
 ### getStageController
 ```java
-StageController getStageController()
-```
-
-### log
-```java
-void log(String)
-```
-
-```java
-void log(Class, String)
-```
-
-```java
-void log(String, String)
-```
-
-### getLastPositionChangeMillis
-```java
-long getLastPositionChangeMillis()
+public StageController getStageController()
 ```
 
 ### getCurrentWorld
 ```java
-Integer getCurrentWorld()
+public Integer getCurrentWorld()
 ```
 
 Gets the current world ID.
 
 **Returns:** The current world ID, or null if not set.
 
-### setExpectedRegionId
+### getWalker
 ```java
-@Deprecated
-void setExpectedRegionId(Integer expectedRegionId)
+public Walker getWalker()
 ```
 
-**Deprecated**
+### getUtils
+```java
+public Utils getUtils()
+```
 
-Sets the expected region ID for the script. The region set will be searched immediately after failing to search the region where we previously found our position. Once the expected region is found, the expected region ID will be set to null.
+### setPause
+```java
+public void setPause(boolean pause)
+```
+
+Pauses or unpauses the script.
 
 **Parameters:**
-- `expectedRegionId` - The expected region ID. If null, the expected region ID will be cleared.
+- `pause` - true to pause, false to unpause
 
-### submitHumanTask
+### getWorldPosition
 ```java
-boolean submitHumanTask(BooleanSupplier condition, int timeout)
+public WorldPosition getWorldPosition()
 ```
 
+**Returns:** The current WorldPosition of the player, or null if the position is unknown.
+
+### getLastPositionChangeMillis
 ```java
-@Deprecated
-boolean submitHumanTask(BooleanSupplier condition, int timeout, boolean ignoreGameState, boolean ignoreTasks)
+public long getLastPositionChangeMillis()
 ```
 
 ### submitTask
 ```java
-boolean submitTask(BooleanSupplier condition, int timeout)
+public boolean submitTask(BooleanSupplier condition, int timeout)
 ```
 
 ```java
-@Deprecated
-boolean submitTask(BooleanSupplier condition, int timeout, boolean ignoreGameState, boolean ignoreTasks)
+public boolean submitTask(BooleanSupplier condition, int timeout, boolean ignoreGamestate, boolean ignoreTasks)
 ```
+
+### submitHumanTask
+```java
+public boolean submitHumanTask(BooleanSupplier condition, int timeout, boolean ignoreGamestate, boolean ignoreTasks)
+```
+
+```java
+public boolean submitHumanTask(BooleanSupplier condition, int timeout)
+```
+
+### getProfileManager
+```java
+public ProfileManager getProfileManager()
+```
+
+### stopped
+```java
+public boolean stopped()
+```
+
+Checks if the script has been requested to stop.
+
+**Returns:** true if a stop has been requested, false otherwise
+
+### paused
+```java
+public boolean paused()
+```
+
+### stop
+```java
+public void stop()
+```
+
+Requests the script to stop. The script will stop as soon as possible. This method is non-blocking and returns immediately.
 
 ### sleep
 ```java
-void sleep(long millis)
-```
-
-```java
-void sleep(int millis)
+public void sleep(int millis)
 ```
 
 Sleeps for the specified number of milliseconds, handling interruptions appropriately.
@@ -294,9 +319,33 @@ This method pauses the current thread for the given duration. If the sleep is in
 **Parameters:**
 - `millis` - The number of milliseconds to sleep.
 
+---
+
+```java
+public void sleep(long millis)
+```
+
+### random
+```java
+public int random(int num)
+```
+
+```java
+public int random(int low, int high)
+```
+
+```java
+public int random(long low, long high)
+```
+
+### getItemManager
+```java
+public ItemManager getItemManager()
+```
+
 ### pollFramesHuman
 ```java
-boolean pollFramesHuman(BooleanSupplier condition, int timeout)
+public boolean pollFramesHuman(BooleanSupplier condition, int timeout)
 ```
 
 Same as `pollFramesUntil(BooleanSupplier, int)` but with an additional _human-like delay_ added after the condition is satisfied.
@@ -326,7 +375,7 @@ Override these methods to return `false` if you want to prevent interruptions fr
 ---
 
 ```java
-boolean pollFramesHuman(BooleanSupplier condition, int timeout, boolean ignoreTasks)
+public boolean pollFramesHuman(BooleanSupplier condition, int timeout, boolean ignoreTasks)
 ```
 
 Same as `pollFramesHuman(BooleanSupplier, int)` but allows control over whether higher-priority tasks (breaks, hops, AFK) are ignored.
@@ -359,7 +408,7 @@ Override these methods to return `false` if you want to prevent interruptions fr
 
 ### pollFramesUntil
 ```java
-boolean pollFramesUntil(BooleanSupplier condition, int timeout)
+public boolean pollFramesUntil(BooleanSupplier condition, int timeout)
 ```
 
 Polls the given `condition` once per frame until it evaluates to `true` or the `timeout` (in milliseconds) expires.
@@ -389,7 +438,7 @@ Override these methods to return `false` if you want to prevent interruptions fr
 ---
 
 ```java
-boolean pollFramesUntil(BooleanSupplier condition, int timeout, boolean ignoreTasks)
+public boolean pollFramesUntil(BooleanSupplier condition, int timeout, boolean ignoreTasks)
 ```
 
 Same as `pollFramesUntil(BooleanSupplier, int)` but allows control over whether higher-priority tasks (breaks, hops, AFK) are ignored.
@@ -423,7 +472,7 @@ Override these methods to return `false` if you want to prevent interruptions fr
 ---
 
 ```java
-boolean pollFramesUntil(BooleanSupplier condition, int timeout, boolean ignoreTasks, boolean humanisedDelayAfter)
+public boolean pollFramesUntil(BooleanSupplier condition, int timeout, boolean ignoreTasks, boolean humanisedDelayAfter)
 ```
 
 Polls the given `condition` once per frame until it evaluates to `true` or the `timeout` expires, with options for priority handling and human-like delay.
@@ -458,7 +507,7 @@ Override these methods to return `false` if you want to prevent interruptions fr
 ---
 
 ```java
-boolean pollFramesUntil(BooleanSupplier condition, int timeout, boolean ignoreGameState, boolean ignoreTasks, boolean humanisedDelayAfter, boolean ignoreMenu)
+public boolean pollFramesUntil(BooleanSupplier condition, int timeout, boolean ignoreGameState, boolean ignoreTasks, boolean humanisedDelayAfter, boolean ignoreMenu)
 ```
 
 Polls the given `condition` once per frame until it evaluates to `true` or the `timeout` expires, with options for priority handling and human-like delay.
@@ -491,78 +540,28 @@ Override these methods to return `false` if you want to prevent interruptions fr
 
 **Throws:** TaskInterruptedException - if interrupted and `ignoreTasks` is `false`
 
-### stop
+### getOSMBUsername
 ```java
-void stop()
+public String getOSMBUsername()
 ```
-
-Requests the script to stop. The script will stop as soon as possible. This method is non-blocking and returns immediately.
-
-### stopped
-```java
-boolean stopped()
-```
-
-Checks if the script has been requested to stop.
-
-**Returns:** true if a stop has been requested, false otherwise
-
-### setPause
-```java
-void setPause(boolean pause)
-```
-
-Pauses or unpauses the script.
-
-**Parameters:**
-- `pause` - true to pause, false to unpause
-
-### paused
-```java
-boolean paused()
-```
-
-### onGameStateChanged
-```java
-default void onGameStateChanged(GameState newGameState)
-```
-
-Called whenever the game state changes.
-
-**Parameters:**
-- `newGameState` - The new game state.
-
-### onPaint
-```java
-default void onPaint(Canvas c)
-```
-
-### onNewFrame
-```java
-default void onNewFrame()
-```
-
-Called when a new frame is captured, right after updating the position, scene and widgets. This method is called on the main script thread, so be careful not to block it
-
-**WARNING:** You must only call read-only methods inside the scope of this method. This method is intended for passive monitoring and analysis only.
-
-### onRegionChange
-```java
-default void onRegionChange(int newRegionId, int previousRegionId)
-```
-
-Called whenever the region ID changes.
-
-**Parameters:**
-- `newRegionId` - The new region ID.
-- `previousRegionId` - The previous region ID.
 
 ### addCustomMap
 ```java
-void addCustomMap(MapDefinition mapDefinition)
+public void addCustomMap(MapDefinition mapDefinition)
 ```
 
 Adds a custom map to the location service. This map will be treated as a prioritised region.
 
 **Parameters:**
 - `mapDefinition` - The map definition to add.
+
+### getXPTrackers
+```java
+public Map<SkillType, XPTracker> getXPTrackers()
+```
+
+Gets a map of all current XPTracker instances, keyed by their corresponding SkillType.
+
+Each XPTracker in the map tracks experience gained for its associated skill using the XPDropsComponent. If no experience has been tracked for a skill, it will not appear in the map.
+
+**Returns:** A map of SkillType to XPTracker for all skills with tracked experience.

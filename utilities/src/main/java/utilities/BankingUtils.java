@@ -1,10 +1,17 @@
 package utilities;
 
+import com.osmb.api.definition.SpriteDefinition;
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
+import com.osmb.api.shape.Rectangle;
 import com.osmb.api.utils.timing.Timer;
+import com.osmb.api.visual.color.ColorModel;
+import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
+import com.osmb.api.visual.image.Image;
+import com.osmb.api.visual.image.ImageSearchResult;
+import com.osmb.api.visual.image.SearchableImage;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -269,5 +276,66 @@ public class BankingUtils {
 
         script.getWidgetManager().getBank().close();
         return script.pollFramesHuman(() -> !script.getWidgetManager().getBank().isVisible(), timeout);
+    }
+
+    // sprite ID for deposit worn items button
+    private static final int DEPOSIT_WORN_SPRITE_ID = 1042;
+    private static SearchableImage depositWornImage;
+
+    /**
+     * Taps the "Deposit worn items" button in the bank interface.
+     * Uses sprite detection (ID 1042, frame 0) to find the button.
+     *
+     * <p>Requires bank to be open before calling.
+     *
+     * @param script the script instance
+     * @return true if button was found and tapped
+     */
+    public static boolean depositWornItems(Script script) {
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            return false;
+        }
+
+        // lazy init sprite
+        if (depositWornImage == null) {
+            SpriteDefinition sprite = script.getSpriteManager().getSprite(DEPOSIT_WORN_SPRITE_ID, 0);
+            if (sprite == null) {
+                script.log(BankingUtils.class, "deposit worn items sprite not found");
+                return false;
+            }
+            SingleThresholdComparator tolerance = new SingleThresholdComparator(15);
+            Image image = new Image(sprite);
+            depositWornImage = image.toSearchableImage(tolerance, ColorModel.RGB);
+        }
+
+        List<ImageSearchResult> matches = script.getImageAnalyzer().findLocations(depositWornImage);
+        if (matches == null || matches.isEmpty()) {
+            return false;
+        }
+
+        Rectangle bounds = matches.get(0).getBounds();
+        return script.getFinger().tap(bounds);
+    }
+
+    /**
+     * Deposits all worn equipment and inventory items for a clean slate.
+     * Useful before restocking to ensure starting from empty state.
+     *
+     * <p>Requires bank to be open before calling.
+     *
+     * @param script the script instance
+     * @return true if both deposits succeeded
+     */
+    public static boolean depositAll(Script script) {
+        if (!script.getWidgetManager().getBank().isVisible()) {
+            return false;
+        }
+
+        // deposit worn items first
+        depositWornItems(script);
+        script.pollFramesUntil(() -> false, 300);
+
+        // deposit inventory
+        return script.getWidgetManager().getBank().depositAll(Collections.emptySet());
     }
 }
