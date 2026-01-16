@@ -399,12 +399,17 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         } else {
             // ver sinhaza mode - check drakan's medallion + equipped bloom tool
+            // NOTE: ver sinhaza mode requires both items EQUIPPED (not inventory):
+            //   - bloom tool must be equipped to cast bloom from equipment tab
+            //   - drakan's medallion must be equipped for teleport to work
+            // unlike fairy ring mode, we cannot auto-equip these items
             script.log(getClass(), "no dramen staff, checking for ver sinhaza mode...");
 
-            // check bloom tool (weapon slot)
+            // check bloom tool (weapon slot) - must be equipped for bloom casting
             UIResult<ItemSearchResult> bloomTool = script.getWidgetManager().getEquipment().findItem(BLOOM_TOOLS);
             if (!bloomTool.isFound()) {
                 script.log(getClass(), "ERROR: no bloom tool equipped (blessed sickle or flail)");
+                script.log(getClass(), "NOTE: ver sinhaza mode requires bloom tool equipped (not in inventory)");
                 return false;
             }
 
@@ -423,10 +428,11 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 return false;
             }
 
-            // check drakan's medallion (neck slot)
+            // check drakan's medallion (neck slot) - must be equipped for teleport
             UIResult<ItemSearchResult> medallion = script.getWidgetManager().getEquipment().findItem(DRAKANS_MEDALLION);
             if (!medallion.isFound()) {
                 script.log(getClass(), "ERROR: no drakan's medallion equipped");
+                script.log(getClass(), "NOTE: ver sinhaza mode requires medallion equipped for teleport");
                 return false;
             }
 
