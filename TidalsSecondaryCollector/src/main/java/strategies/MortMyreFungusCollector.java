@@ -30,6 +30,13 @@ import static main.TidalsSecondaryCollector.*;
 
 public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
+    // mode detection
+    public enum Mode { VER_SINHAZA, FAIRY_RING }
+    private Mode detectedMode = null;
+
+    // dramen staff item id
+    private static final int DRAMEN_STAFF = 772;
+
     private final Script script;
 
     // item ids - bloom tools
