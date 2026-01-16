@@ -513,34 +513,34 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 0;
         }
 
-        // verify standing on exact 4-log tile before casting bloom
+        // select target tile based on mode
+        WorldPosition targetTile = isFairyRingMode() ? THREE_LOG_TILE : FOUR_LOG_TILE;
+        String tileName = isFairyRingMode() ? "3-log tile" : "4-log tile";
+
+        // verify standing on exact target tile before casting bloom
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) {
             script.log(getClass(), "can't read position, retrying");
             return 600;
         }
 
-        boolean onExactTile = pos.getX() == FOUR_LOG_TILE.getX()
-                && pos.getY() == FOUR_LOG_TILE.getY();
+        boolean onExactTile = pos.getX() == targetTile.getX()
+                && pos.getY() == targetTile.getY();
 
         if (!onExactTile) {
-            script.log(getClass(), "not on 4-log tile (" + pos.getX() + ", " + pos.getY() + "), walking...");
+            script.log(getClass(), "not on " + tileName + " (" + pos.getX() + ", " + pos.getY() + "), walking...");
             // simple walk with no expensive breakCondition, just reach the tile
             WalkConfig config = new WalkConfig.Builder()
                     .breakDistance(0)
                     .timeout(5000)
                     .build();
-            script.getWalker().walkTo(FOUR_LOG_TILE, config);
+            script.getWalker().walkTo(targetTile, config);
             // short wait after walking to let position settle
             script.pollFramesHuman(() -> false, script.random(200, 400));
             return 600;
         }
 
-        // ensure equipment tab is open (stay here for bloom + collection)
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesUntil(() -> false, script.random(150, 250));
-
-        // cast bloom using equipment interact
+        // cast bloom based on mode
         if (equippedBloomToolId == 0) {
             script.log(getClass(), "ERROR: bloom tool id not set");
             script.stop();
@@ -549,7 +549,17 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         // disable afk/hop for entire bloom + collection cycle
         allowAFK = false;
-        boolean bloomSuccess = RetryUtils.equipmentInteract(script, equippedBloomToolId, "Bloom", "casting bloom (prayer: " + prayer + ")");
+
+        boolean bloomSuccess;
+        if (isFairyRingMode()) {
+            // fairy ring mode: bloom from inventory (dramen staff in weapon slot)
+            bloomSuccess = castBloomFromInventory();
+        } else {
+            // ver sinhaza mode: bloom from equipment
+            script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
+            script.pollFramesUntil(() -> false, script.random(150, 250));
+            bloomSuccess = RetryUtils.equipmentInteract(script, equippedBloomToolId, "Bloom", "casting bloom (prayer: " + prayer + ")");
+        }
 
         if (!bloomSuccess) {
             allowAFK = true;
