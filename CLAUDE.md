@@ -6,6 +6,20 @@
 
 ---
 
+
+WHEN USER POSTS LOGS → THERE IS A BUG. INVESTIGATE.
+WHEN TESTS FAIL → Test is source of truth unless PROVEN otherwise.
+TEST BEHAVIOR, NOT IMPLEMENTATION. TESTS FIND BUGS, NOT PASS.
+READ THE STACK TRACE. FIX ROOT CAUSE, NOT SYMPTOM.
+FAIL FAST. Silent failures are worst. Errors > Warnings.
+VERIFY ASSUMPTIONS. Don't assume - check.
+BUILD WHAT WAS ASKED. Not what you think should be built.
+DON'T OVERENGINEER. No abstractions before they're needed.
+DON'T REINVENT. Read existing code before writing new.
+DON'T SWALLOW ERRORS. Try/catch that ignores = hidden bugs.
+IS THIS HOW A SENIOR STAFF ARCHITECT WOULD DO IT? ACT LIKE ONE.
+
+
 ## 🆕 New Script Guidelines
 
 When creating a new script, follow this structure and include ALL of these elements.
@@ -27,7 +41,7 @@ TidalsScriptName/
 │   └── obf/
 │       └── Secrets.java             # api keys (gitignored)
 └── src/main/resources/
-    └── logo.png                     # 200x50 transparent png
+    └── logo.png                     # 208x91 png
 ```
 
 ### build.gradle Template
