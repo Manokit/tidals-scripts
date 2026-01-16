@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-16)
 
 ## Current Position
 
-Phase: 2 of 3 (Collection) — COMPLETE
-Plan: All plans complete (1/1)
-Status: Ready for Phase 3
-Last activity: 2026-01-16 — Phase 2 executed and verified
+Phase: 3 of 3 (Banking & Return)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-01-16 — Completed 03-01-PLAN.md (Zanaris banking)
 
-Progress: ██████░░░░ 67%
+Progress: ████████░░ 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 5 min
-- Total execution time: 0.17 hours
+- Total plans completed: 3
+- Average duration: 4 min
+- Total execution time: 0.20 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: ██████░░░░ 67%
 |-------|-------|-------|----------|
 | 01-mode-detection | 1/1 | 8 min | 8 min |
 | 02-collection | 1/1 | 2 min | 2 min |
+| 03-banking-return | 1/2 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 8 min, 2 min
+- Last 5 plans: 8 min, 2 min, 2 min
 - Trend: improving
 
 ## Accumulated Context
@@ -46,6 +47,8 @@ Recent decisions affecting current work:
 - VER_SINHAZA mode: drakan's medallion + bloom equipped
 - 3-log tile at (3474, 3419, 0) for fairy ring mode
 - Inventory bloom via RetryUtils.inventoryInteract() for fairy ring mode
+- "Zanaris" menu action for fairy ring direct teleport (capital Z)
+- 8-waypoint path from zanaris fairy ring to bank chest
 
 ### Pending Todos
 
@@ -58,5 +61,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-16
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
