@@ -104,12 +104,23 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         new WorldPosition(3668, 3255, 0)
     );
     
-    // the 4 log positions around the standing tile
+    // the 4 log positions around the standing tile (ver sinhaza mode)
     private static final WorldPosition[] LOG_POSITIONS = {
         new WorldPosition(3666, 3256, 0),
         new WorldPosition(3666, 3254, 0),
         new WorldPosition(3668, 3254, 0),
         new WorldPosition(3668, 3255, 0)
+    };
+
+    // 3-log tile location for fairy ring mode
+    private static final WorldPosition THREE_LOG_TILE = new WorldPosition(3474, 3419, 0);
+    private static final RectangleArea THREE_LOG_AREA = new RectangleArea(3472, 3417, 3476, 3421, 0);
+
+    // the 3 log positions around the fairy ring standing tile
+    private static final WorldPosition[] THREE_LOG_POSITIONS = {
+        new WorldPosition(3473, 3418, 0),
+        new WorldPosition(3473, 3420, 0),
+        new WorldPosition(3475, 3420, 0)
     };
     private static final WorldPosition CRAFTING_GUILD_BANK_CHEST = new WorldPosition(2936, 3280, 0);
     private static final WorldPosition VER_SINHAZA_BANK_TILE = new WorldPosition(3651, 3211, 0);
