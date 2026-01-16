@@ -684,7 +684,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     
     private List<WorldPosition> detectFungusPositions() {
         List<WorldPosition> positions = new ArrayList<>();
-        
+
         // create searchable pixels for fungus colors
         SingleThresholdComparator tolerance = new SingleThresholdComparator(COLOR_TOLERANCE);
         SearchablePixel[] fungusColors = {
@@ -693,14 +693,18 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             new SearchablePixel(FUNGUS_COLOR_3, tolerance, ColorModel.RGB),
             new SearchablePixel(FUNGUS_COLOR_4, tolerance, ColorModel.RGB)
         };
-        
+
+        // select log positions based on mode
+        WorldPosition[] logPositions = isFairyRingMode() ? THREE_LOG_POSITIONS : LOG_POSITIONS;
+        int expectedLogs = isFairyRingMode() ? 3 : 4;
+
         // check each log position for fungus pixels
-        for (WorldPosition logPos : LOG_POSITIONS) {
+        for (WorldPosition logPos : logPositions) {
             Polygon tilePoly = script.getSceneProjector().getTileCube(logPos, 80);
             if (tilePoly == null) {
                 continue;
             }
-            
+
             // search for fungus pixels within this tile's area
             Point fungusPixel = script.getPixelAnalyzer().findPixel(tilePoly, fungusColors);
             if (fungusPixel != null) {
@@ -708,7 +712,8 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 script.log(getClass(), "fungus detected at " + logPos.getX() + "," + logPos.getY());
             }
         }
-        
+
+        script.log(getClass(), "detected " + positions.size() + "/" + expectedLogs + " log(s) with fungus");
         return positions;
     }
 
