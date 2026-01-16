@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A lower-level Mort Myre fungus collection mode for TidalsSecondaryCollector that uses fairy rings instead of Drakan's Medallion. Designed for players without access to high-level Morytania content who can still use fairy rings (Dramen staff) and have Ardougne diary completion.
+TidalsSecondaryCollector with dual-mode Mort Myre fungus collection. Auto-detects equipment to seamlessly support both Ver Sinhaza (Drakan's Medallion) and Fairy Ring (Dramen staff) modes without user configuration.
 
 ## Core Value
 
@@ -18,16 +18,16 @@ Auto-detect equipment to seamlessly support both Ver Sinhaza (Drakan's Medallion
 - ✓ Ardy cloak prayer restoration — existing
 - ✓ Lumbridge teleport fallback — existing
 - ✓ Bloom casting from equipment — existing
+- ✓ Auto-detect mode from equipment (Drakan's Medallion vs Dramen staff) — v1.0
+- ✓ Fairy ring mode: 3-log tile collection at 3474, 3419, 0 — v1.0
+- ✓ Cast bloom from inventory instead of equipment slot — v1.0
+- ✓ Banking via fairy ring → Zanaris → walk to bank chest — v1.0
+- ✓ Return via fairy ring "Last-destination (BKR)" with validation — v1.0
+- ✓ Safety check: terminate if BKR not configured as last destination — v1.0
 
 ### Active
 
-- [ ] Auto-detect mode based on equipment (Drakan's Medallion vs Dramen staff)
-- [ ] Fairy ring mode: 3-log tile collection at 3474, 3419, 0
-- [ ] Cast bloom from inventory instead of equipment slot
-- [ ] Banking via fairy ring → Zanaris → walk to bank chest
-- [ ] Return via fairy ring "Last-destination (BKR)" with validation
 - [ ] Quest cape support for return teleport (Legends Guild fairy ring)
-- [ ] Safety check: terminate if BKR not configured as last destination
 
 ### Out of Scope
 
@@ -78,10 +78,19 @@ Auto-detect equipment to seamlessly support both Ver Sinhaza (Drakan's Medallion
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Auto-detect mode from equipment | Simpler UX, no configuration needed | — Pending |
-| Separate strategy class vs mode flag | Keeps code clean, strategies are already separate | — Pending |
-| Bloom from inventory for fairy ring mode | Dramen staff occupies weapon slot | — Pending |
-| Always use ardy cloak for prayer | Simplifies logic, quest cape doesn't restore prayer | — Pending |
+| Auto-detect mode from equipment | Simpler UX, no configuration needed | ✓ Good - works seamlessly |
+| Mode flag instead of separate class | Single strategy file with mode branching | ✓ Good - keeps code maintainable |
+| Bloom from inventory for fairy ring mode | Dramen staff occupies weapon slot | ✓ Good - required for fairy ring |
+| Always use ardy cloak for prayer | Simplifies logic, quest cape doesn't restore prayer | ✓ Good - required for monastery teleport |
+| BKR validation via tapGetResponse | Safety check before return teleport | ✓ Good - prevents stuck states |
+| Script termination on BKR misconfiguration | Safety-first approach | ✓ Good - clear user guidance |
+
+## Context
+
+Shipped v1.0 with 2,010 lines changed in MortMyreFungusCollector.java.
+Tech stack: OSMB color bot, Java.
+Both modes fully functional with auto-detection at startup.
+One low-priority tech debt item: region IDs not added to regionsToPrioritise() (performance only).
 
 ---
-*Last updated: 2026-01-16 after initialization*
+*Last updated: 2026-01-16 after v1.0 milestone*
