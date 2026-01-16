@@ -68,6 +68,9 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             ARDOUGNE_CLOAK_1, ARDOUGNE_CLOAK_2, ARDOUGNE_CLOAK_3, ARDOUGNE_CLOAK_4
     };
 
+    // quest cape (alternative to ardy cloak for fairy ring mode teleport)
+    private static final int QUEST_CAPE = 9813;
+
     // return teleport
     private static final int DRAKANS_MEDALLION = 22400;
 
@@ -237,6 +240,51 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         }
 
         return State.COLLECTING;
+    }
+
+    // auto-equip dramen staff from inventory (for fairy ring mode)
+    private boolean autoEquipDramenStaff() {
+        script.log(getClass(), "attempting to auto-equip dramen staff from inventory...");
+
+        // open inventory tab
+        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+        script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        // search for dramen staff in inventory
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(DRAMEN_STAFF));
+        if (inv == null || !inv.contains(DRAMEN_STAFF)) {
+            script.log(getClass(), "ERROR: dramen staff not found in inventory");
+            return false;
+        }
+
+        ItemSearchResult dramenItem = inv.getItem(DRAMEN_STAFF);
+        if (dramenItem == null) {
+            script.log(getClass(), "ERROR: could not get dramen staff item reference");
+            return false;
+        }
+
+        // equip dramen staff using RetryUtils
+        boolean equipped = RetryUtils.inventoryInteract(script, dramenItem, "Wield", "auto-equip dramen staff");
+        if (!equipped) {
+            script.log(getClass(), "ERROR: failed to equip dramen staff");
+            return false;
+        }
+
+        // wait for equip animation
+        script.pollFramesHuman(() -> false, script.random(400, 600));
+
+        // verify dramen staff is now equipped
+        script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
+        script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        UIResult<ItemSearchResult> dramenEquipped = script.getWidgetManager().getEquipment().findItem(DRAMEN_STAFF);
+        if (!dramenEquipped.isFound()) {
+            script.log(getClass(), "ERROR: dramen staff not equipped after wield attempt");
+            return false;
+        }
+
+        script.log(getClass(), "dramen staff auto-equipped successfully");
+        return true;
     }
 
     @Override
