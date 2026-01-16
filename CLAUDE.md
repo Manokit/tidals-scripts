@@ -42,6 +42,142 @@ RetryUtils.equipmentInteract(script, itemId, "Teleport", "ring teleport", 5);
 - 300-500ms random delay between attempts
 - Consistent error handling across all scripts
 
+### BankingUtils - Banking Operations
+```java
+import utilities.BankingUtils;
+
+// find nearest bank using standard query
+RSObject bank = BankingUtils.findNearestBank(script);
+
+// open bank and wait (with movement tracking)
+BankingUtils.openBankAndWait(script, 15000);  // finds nearest bank
+BankingUtils.openBankAndWait(script, bank, 15000);  // specific bank
+
+// deposit all except specified items
+BankingUtils.depositAllExcept(script, Set.of(ItemID.CHISEL));
+
+// close bank and wait
+BankingUtils.closeBankAndWait(script, 5000);
+
+// use the shared bank query predicate
+List<RSObject> banks = script.getObjectManager().getObjects(BankingUtils.BANK_QUERY);
+```
+
+**For withdrawals, use BankSearchUtils instead** - see BankSearchUtils section below.
+
+**Benefits**:
+- Shared `BANK_QUERY` predicate (no more duplicate code)
+- Movement tracking - waits until player stops moving
+- Human-like delays built into deposit/withdraw
+- Null-safe with proper logging
+
+### TabUtils - Tab Opening with Verification
+```java
+import utilities.TabUtils;
+
+// open inventory and verify accessible
+TabUtils.openAndVerifyInventory(script, 3000);  // with timeout
+TabUtils.openAndVerifyInventory(script);  // default 3000ms
+
+// open equipment tab (uses delay since no isVisible check)
+TabUtils.openAndWaitEquipment(script);  // default 200-400ms
+TabUtils.openAndWaitEquipment(script, 500);  // custom delay
+
+// open equipment and verify specific item equipped
+TabUtils.openAndVerifyEquipment(script, new int[]{ItemID.CRAFTING_CAPE}, 3000);
+
+// open skills tab
+TabUtils.openAndVerifySkills(script, 3000);
+TabUtils.openAndVerifySkills(script);  // default 3000ms
+
+// generic tab opening with wait
+TabUtils.openTabAndWait(script, Tab.Type.COMBAT, 300);
+```
+
+**Benefits**:
+- Verifies tab contents are accessible before returning
+- Eliminates duplicate tab opening patterns
+- Human-like delays
+
+### DialogueUtils - Dialogue Handling
+```java
+import utilities.DialogueUtils;
+
+// level up handling
+if (DialogueUtils.isLevelUp(script)) {
+    DialogueUtils.handleLevelUp(script);  // clicks continue, waits for close
+}
+
+// wait for dialogues
+DialogueUtils.waitForDialogue(script, DialogueType.ITEM_OPTION, 5000);
+DialogueUtils.waitForItemDialogue(script, 5000);  // shorthand
+
+// item selection dialogue
+DialogueUtils.selectItem(script, ItemID.GOLD_BAR);
+DialogueUtils.selectItemWithRetry(script, ItemID.GOLD_BAR, 10);  // with retries
+
+// continue chat dialogues
+DialogueUtils.continueChatDialogue(script);
+DialogueUtils.dismissContinueDialogue(script, 2000);  // click and wait
+
+// check dialogue state
+if (DialogueUtils.hasDialogue(script)) {
+    DialogueType type = DialogueUtils.getDialogueType(script);
+}
+```
+
+**Benefits**:
+- Handles level ups cleanly
+- Retry support for item selection
+- Consistent dialogue state checking
+
+### BankSearchUtils - Bank Search & Withdraw (CRITICAL)
+**ALWAYS USE THIS** for withdrawing items from the bank. The raw `bank.search()` and `bank.withdraw()` APIs only see currently visible items and DO NOT work reliably.
+
+```java
+import utilities.BankSearchUtils;
+
+// withdraw single item (types name in search box, finds visually, verifies)
+BankSearchUtils.searchAndWithdrawVerified(script, ItemID.SHARK, 5, true);
+
+// withdraw all of a stack
+BankSearchUtils.searchAndWithdrawVerified(script, ItemID.DEATH_RUNE, 0, true);  // 0 = all
+
+// CRITICAL: after EVERY successful withdrawal, reset the search for the next item
+BankSearchUtils.clickSearchToReset(script);
+
+// when done with all withdrawals, clear the search completely
+BankSearchUtils.clearSearch(script);
+```
+
+**CRITICAL PATTERN - Multi-item withdrawal loop:**
+```java
+// correct pattern for withdrawing multiple items
+for (int itemId : itemsToWithdraw) {
+    boolean success = BankSearchUtils.searchAndWithdrawVerified(script, itemId, amount, true);
+    if (success) {
+        // MUST reset search after each successful withdrawal
+        BankSearchUtils.clickSearchToReset(script);
+    }
+}
+// clear search when done
+BankSearchUtils.clearSearch(script);
+```
+
+**Why this matters:**
+- `bank.search(Set.of(itemId))` only searches VISIBLE items (no scrolling, no search box)
+- `BankSearchUtils` types the item name in the search box, uses sprite detection, verifies inventory
+- After withdrawal, the search box stays open with old text - MUST click search button to reset
+- `clickSearchToReset()` clears current search and reopens fresh search input
+- `clearSearch()` closes search entirely (use when done with all withdrawals)
+
+**Benefits**:
+- Types item name in bank search box
+- Uses sprite detection to find items visually
+- Scrolls through bank if needed
+- Verifies withdrawal succeeded via inventory count
+- Works regardless of bank tab or scroll position
+
 ### Building Utilities
 ```bash
 cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build

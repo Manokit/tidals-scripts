@@ -69,6 +69,25 @@ public class RetryUtils {
         return false;
     }
 
+    public static boolean objectInteract(Script script, RSObject obj, String[] actions, String description) {
+        return objectInteract(script, obj, actions, description, DEFAULT_MAX_ATTEMPTS);
+    }
+
+    public static boolean objectInteract(Script script, RSObject obj, String[] actions, String description, int maxAttempts) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            script.log(RetryUtils.class, description + " attempt " + attempt + "/" + maxAttempts);
+
+            boolean success = obj.interact(actions);
+            if (success) {
+                return true;
+            }
+
+            script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
+        }
+        script.log(RetryUtils.class, description + " failed after " + maxAttempts + " attempts");
+        return false;
+    }
+
     /**
      * Retry polygon tap interaction up to maxAttempts times.
      * Logs each attempt as "description attempt X/Y".

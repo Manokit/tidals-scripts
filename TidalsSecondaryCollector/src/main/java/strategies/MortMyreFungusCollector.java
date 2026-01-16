@@ -82,6 +82,20 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     // locations
     private static final WorldPosition FOUR_LOG_TILE = new WorldPosition(3667, 3255, 0);
     private static final RectangleArea LOG_AREA = new RectangleArea(3665, 3253, 3669, 3257, 0);
+
+    // waypoint path from ver sinhaza teleport to log tile for smooth walking
+    private static final List<WorldPosition> VER_SINHAZA_TO_LOGS_PATH = Arrays.asList(
+        new WorldPosition(3654, 3231, 0),
+        new WorldPosition(3661, 3232, 0),
+        new WorldPosition(3662, 3236, 0),
+        new WorldPosition(3662, 3240, 0),
+        new WorldPosition(3660, 3244, 0),
+        new WorldPosition(3660, 3251, 0),
+        new WorldPosition(3662, 3256, 0),
+        new WorldPosition(3666, 3260, 0),
+        new WorldPosition(3666, 3257, 0),
+        new WorldPosition(3668, 3255, 0)
+    );
     
     // the 4 log positions around the standing tile
     private static final WorldPosition[] LOG_POSITIONS = {
@@ -1070,15 +1084,17 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 0;
         }
 
-        script.log(getClass(), "walking to 4 log tile");
+        script.log(getClass(), "walking to 4 log tile via waypoint path");
 
-        // use breakDistance only, avoid expensive breakCondition checks during walk
+        // smooth walking config: minimap-only, low randomization for predictable pathing
         WalkConfig config = new WalkConfig.Builder()
-                .breakDistance(0)
-                .timeout(20000)
+                .setWalkMethods(false, true)  // minimap only for long distance
+                .tileRandomisationRadius(0)   // deterministic targeting
+                .breakDistance(2)
+                .timeout(30000)
                 .build();
 
-        boolean arrived = script.getWalker().walkTo(FOUR_LOG_TILE, config);
+        boolean arrived = script.getWalker().walkPath(VER_SINHAZA_TO_LOGS_PATH, config);
 
         if (arrived) {
             script.log(getClass(), "arrived at log area");
