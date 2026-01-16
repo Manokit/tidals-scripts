@@ -883,7 +883,12 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private int teleportToBank() {
         script.log(getClass(), "teleporting to bank");
 
-        // priority 1: crafting cape
+        // fairy ring mode: use zanaris banking
+        if (isFairyRingMode()) {
+            return useZanarisBanking();
+        }
+
+        // priority 1: crafting cape (ver sinhaza mode only, since fairy ring mode has dramen staff in weapon slot)
         try {
             for (int capeId : CRAFTING_CAPES) {
                 UIResult<ItemSearchResult> cape = script.getWidgetManager().getEquipment().findItem(capeId);
@@ -895,7 +900,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             script.log(getClass(), "error checking crafting cape: " + e.getMessage());
         }
 
-        // priority 2: ver sinhaza bank (drakan's medallion - always available)
+        // priority 2: ver sinhaza bank (drakan's medallion - always available in ver sinhaza mode)
         return useVerSinhazaBanking();
     }
 
