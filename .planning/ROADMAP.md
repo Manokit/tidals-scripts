@@ -12,7 +12,7 @@ Add fairy ring support to TidalsSecondaryCollector for players without Drakan's 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Mode Detection** - Auto-detect equipment configuration
+- [x] **Phase 1: Mode Detection** - Auto-detect equipment configuration
 - [ ] **Phase 2: Collection** - 3-log tile fungus collection with inventory bloom
 - [ ] **Phase 3: Banking & Return** - Zanaris banking + monastery return loop
 
@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 
 Plans:
-- [ ] 01-01: Equipment detection and mode selection logic
+- [x] 01-01: Equipment detection and mode selection logic
 
 ### Phase 2: Collection
 **Goal**: Collect fungus at 3-log tile with inventory bloom
@@ -70,6 +70,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Mode Detection | 0/1 | Not started | - |
+| 1. Mode Detection | 1/1 | Complete | 2026-01-16 |
 | 2. Collection | 0/1 | Not started | - |
 | 3. Banking & Return | 0/2 | Not started | - |

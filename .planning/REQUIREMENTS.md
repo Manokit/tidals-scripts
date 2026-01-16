@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Mode Detection
 
-- [ ] **MODE-01**: Script auto-detects Fairy Ring mode when Dramen staff equipped + bloom tool in inventory + ardy cloak equipped
-- [ ] **MODE-02**: Script auto-detects Ver Sinhaza mode when Drakan's Medallion equipped + bloom tool equipped (existing behavior)
+- [x] **MODE-01**: Script auto-detects Fairy Ring mode when Dramen staff equipped + bloom tool in inventory + ardy cloak equipped
+- [x] **MODE-02**: Script auto-detects Ver Sinhaza mode when Drakan's Medallion equipped + bloom tool equipped (existing behavior)
 
 ### Collection
 
@@ -52,8 +52,8 @@ Which phases cover which requirements. Updated by create-roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MODE-01 | Phase 1 | Pending |
-| MODE-02 | Phase 1 | Pending |
+| MODE-01 | Phase 1 | Complete |
+| MODE-02 | Phase 1 | Complete |
 | COLL-01 | Phase 2 | Pending |
 | COLL-02 | Phase 2 | Pending |
 | BANK-01 | Phase 3 | Pending |
