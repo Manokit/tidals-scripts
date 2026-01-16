@@ -1003,6 +1003,92 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         return 600;
     }
 
+    private int useZanarisBanking() {
+        script.log(getClass(), "using zanaris bank (fairy ring mode)");
+
+        // check if already in zanaris
+        WorldPosition pos = script.getWorldPosition();
+        if (pos != null && ZANARIS_AREA.contains(pos)) {
+            script.log(getClass(), "already in zanaris, walking to bank");
+            return walkToZanarisBank();
+        }
+
+        // find fairy ring near 3-log collection tile
+        RSObject fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
+        if (fairyRing == null || fairyRing.getWorldPosition().distanceTo(script.getWorldPosition()) > 15) {
+            script.log(getClass(), "fairy ring not nearby, walking to it first");
+            WalkConfig config = new WalkConfig.Builder()
+                .breakCondition(() -> {
+                    RSObject ring = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
+                    return ring != null && ring.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+                })
+                .breakDistance(3)
+                .timeout(10000)
+                .build();
+            script.getWalker().walkTo(MORT_MYRE_FAIRY_RING, config);
+            script.pollFramesHuman(() -> false, script.random(400, 600));
+            fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
+        }
+
+        if (fairyRing == null) {
+            script.log(getClass(), "ERROR: fairy ring not found");
+            return 600;
+        }
+
+        // interact with fairy ring to teleport to zanaris
+        boolean success = RetryUtils.objectInteract(script, fairyRing, "Zanaris", "fairy ring to zanaris");
+        if (!success) {
+            script.log(getClass(), "failed to interact with fairy ring");
+            return 600;
+        }
+
+        // wait for teleport animation
+        script.pollFramesHuman(() -> false, script.random(3000, 4000));
+
+        // verify arrival in zanaris
+        boolean arrived = script.pollFramesUntil(() -> {
+            WorldPosition p = script.getWorldPosition();
+            return p != null && ZANARIS_AREA.contains(p);
+        }, 10000);
+
+        if (!arrived) {
+            script.log(getClass(), "failed to arrive in zanaris");
+            return 600;
+        }
+
+        return walkToZanarisBank();
+    }
+
+    private int walkToZanarisBank() {
+        script.log(getClass(), "walking to zanaris bank");
+
+        WalkConfig config = new WalkConfig.Builder()
+            .breakCondition(() -> {
+                RSObject bank = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank chest");
+                return bank != null && bank.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+            })
+            .breakDistance(3)
+            .timeout(30000)
+            .build();
+
+        script.getWalker().walkPath(ZANARIS_BANK_PATH, config);
+
+        // wait for arrival
+        script.pollFramesUntil(() -> {
+            RSObject bank = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank chest");
+            return bank != null && bank.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+        }, 10000);
+
+        // find and open bank
+        RSObject bankChest = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank chest");
+        if (bankChest != null) {
+            return openBank(bankChest);
+        }
+
+        script.log(getClass(), "zanaris bank chest not found");
+        return 600;
+    }
+
     @Override
     public int restorePrayer() {
         // check if already at an altar
