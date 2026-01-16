@@ -99,6 +99,7 @@ public class TidalsSecondaryCollector extends Script {
     public int[] regionsToPrioritise() {
         return new int[]{
                 14642, // ver sinhaza + 4 log tile (mort myre)
+                13877, // mort myre fairy ring (3-log tile)
                 10290, // kandarin monastery (ardy cloak)
                 12850, // lumbridge + altar
                 9776,  // castle wars (dueling ring)
