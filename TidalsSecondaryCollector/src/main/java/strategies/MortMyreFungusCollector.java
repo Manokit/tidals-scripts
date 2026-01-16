@@ -1365,6 +1365,131 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         return 600;
     }
 
+    private int useFairyRingReturn() {
+        script.log(getClass(), "using fairy ring return (ardy cloak -> monastery -> fairy ring)");
+
+        // step 1: check if already near monastery fairy ring
+        WorldPosition pos = script.getWorldPosition();
+        RSObject fairyRing = script.getObjectManager().getClosestObject(pos, "Fairy ring");
+
+        if (fairyRing == null || fairyRing.getWorldPosition().distanceTo(pos) > 10) {
+            // not near fairy ring, need to teleport to monastery first
+            if (!MONASTERY_AREA.contains(pos)) {
+                script.log(getClass(), "teleporting to monastery");
+                boolean teleported = tryArdougneCloakTeleport();
+                if (!teleported) {
+                    script.log(getClass(), "ERROR: failed to teleport to monastery");
+                    return 600;
+                }
+            }
+
+            // walk to fairy ring
+            script.log(getClass(), "walking to monastery fairy ring");
+            WalkConfig config = new WalkConfig.Builder()
+                .breakCondition(() -> {
+                    RSObject ring = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
+                    return ring != null && ring.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+                })
+                .breakDistance(3)
+                .timeout(15000)
+                .build();
+
+            script.getWalker().walkPath(MONASTERY_TO_FAIRY_PATH, config);
+            script.pollFramesHuman(() -> false, script.random(400, 600));
+
+            fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
+        }
+
+        if (fairyRing == null) {
+            script.log(getClass(), "fairy ring not found after walking");
+            return 600;
+        }
+
+        // step 2: validate BKR is configured via menu check
+        Polygon ringPoly = fairyRing.getConvexHull();
+        if (ringPoly == null) {
+            script.log(getClass(), "fairy ring polygon null");
+            return 600;
+        }
+
+        // use tapGetResponse to check what menu options are available
+        MenuEntry menuEntry = script.getFinger().tapGetResponse(true, ringPoly);
+        if (menuEntry == null) {
+            script.log(getClass(), "no menu response from fairy ring");
+            return 600;
+        }
+
+        String action = menuEntry.getAction();
+        script.log(getClass(), "fairy ring menu action: " + action);
+
+        // check if BKR is configured as last destination
+        // dkTravel.java uses lowercase "last-destination (dkp)" pattern
+        if (action == null || !action.toLowerCase().contains("last-destination")) {
+            script.log(getClass(), "ERROR: fairy ring last destination not configured");
+            script.log(getClass(), "ERROR: please configure BKR as your fairy ring last destination");
+            script.stop();
+            return 0;
+        }
+
+        if (!action.toLowerCase().contains("bkr")) {
+            script.log(getClass(), "ERROR: fairy ring last destination is not BKR (found: " + action + ")");
+            script.log(getClass(), "ERROR: please set BKR (Mort Myre) as your fairy ring last destination");
+            script.stop();
+            return 0;
+        }
+
+        // step 3: use the last destination (menu is already open from tapGetResponse)
+        // tap to select the last destination option
+        script.log(getClass(), "using fairy ring last-destination (BKR)");
+        boolean success = script.getFinger().tap(ringPoly, action);
+        if (!success) {
+            script.log(getClass(), "failed to use fairy ring");
+            return 600;
+        }
+
+        // wait for teleport
+        script.pollFramesHuman(() -> false, script.random(3500, 4500));
+
+        // verify arrival near 3-log tile
+        boolean arrived = script.pollFramesUntil(() -> {
+            WorldPosition p = script.getWorldPosition();
+            return p != null && THREE_LOG_AREA.contains(p);
+        }, 10000);
+
+        if (arrived) {
+            script.log(getClass(), "arrived at mort myre collection area");
+            return 0;
+        }
+
+        // may have landed nearby but not exactly at collection tile
+        WorldPosition currentPos = script.getWorldPosition();
+        int currentRegion = (currentPos.getX() >> 6) | ((currentPos.getY() >> 6) << 8);
+        if (currentRegion == REGION_MORT_MYRE_FAIRY) {
+            script.log(getClass(), "arrived in mort myre region, walking to collection tile");
+            return walkToFairyRingLogTile();
+        }
+
+        script.log(getClass(), "failed to arrive in mort myre");
+        return 600;
+    }
+
+    private int walkToFairyRingLogTile() {
+        WorldPosition pos = script.getWorldPosition();
+        if (pos != null && THREE_LOG_AREA.contains(pos)) {
+            script.log(getClass(), "arrived at 3-log area");
+            return 0;
+        }
+
+        script.log(getClass(), "walking to 3-log tile");
+        WalkConfig config = new WalkConfig.Builder()
+            .breakDistance(2)
+            .timeout(10000)
+            .build();
+
+        script.getWalker().walkTo(THREE_LOG_TILE, config);
+        return 0;
+    }
+
     // helper to convert int array to Set<Integer>
     private Set<Integer> toIntegerSet(int[] arr) {
         Set<Integer> set = new HashSet<>();
