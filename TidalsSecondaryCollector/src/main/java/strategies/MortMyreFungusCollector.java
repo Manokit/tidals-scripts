@@ -1294,8 +1294,20 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
     @Override
     public int returnToArea() {
-        // check if already at log area
         WorldPosition pos = script.getWorldPosition();
+
+        // fairy ring mode: use ardy cloak -> monastery -> fairy ring -> BKR
+        if (isFairyRingMode()) {
+            // check if already at 3-log collection area
+            if (pos != null && THREE_LOG_AREA.contains(pos)) {
+                script.log(getClass(), "already at 3-log area");
+                return 0;
+            }
+            return useFairyRingReturn();
+        }
+
+        // ver sinhaza mode (existing logic)
+        // check if already at log area
         if (pos != null && LOG_AREA.contains(pos)) {
             script.log(getClass(), "already at log area");
             return 0;
