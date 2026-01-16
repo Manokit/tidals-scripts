@@ -152,6 +152,27 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     // prayer restoration areas
     private static final RectangleArea MONASTERY_AREA = new RectangleArea(2601, 3207, 10, 14, 0);
 
+    // monastery fairy ring return (fairy ring mode)
+    private static final WorldPosition MONASTERY_FAIRY_RING = new WorldPosition(2658, 3230, 0);
+    private static final RectangleArea MONASTERY_FAIRY_AREA = new RectangleArea(2653, 3226, 10, 9, 0);
+
+    // path from monastery teleport landing to fairy ring
+    private static final List<WorldPosition> MONASTERY_TO_FAIRY_PATH = Arrays.asList(
+        new WorldPosition(2609, 3221, 0),
+        new WorldPosition(2616, 3222, 0),
+        new WorldPosition(2621, 3222, 0),
+        new WorldPosition(2626, 3221, 0),
+        new WorldPosition(2631, 3222, 0),
+        new WorldPosition(2636, 3221, 0),
+        new WorldPosition(2641, 3224, 0),
+        new WorldPosition(2645, 3226, 0),
+        new WorldPosition(2649, 3229, 0),
+        new WorldPosition(2654, 3230, 0)
+    );
+
+    // mort myre region for fairy ring mode (3-log tile at 3474, 3419 is region 13877)
+    private static final int REGION_MORT_MYRE_FAIRY = 13877;
+
     // track which bloom tool we found during setup
     private int equippedBloomToolId = 0;
 
