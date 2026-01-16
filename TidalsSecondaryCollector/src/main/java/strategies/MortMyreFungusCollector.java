@@ -183,39 +183,95 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     public boolean verifyRequirements() {
         script.log(getClass(), "verifying equipment requirements...");
 
-        // open equipment tab
+        // open equipment tab first
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // 1. check bloom tool (weapon slot)
-        UIResult<ItemSearchResult> bloomTool = script.getWidgetManager().getEquipment().findItem(BLOOM_TOOLS);
-        if (!bloomTool.isFound()) {
-            script.log(getClass(), "ERROR: no bloom tool equipped (blessed sickle or flail)");
-            return false;
-        }
+        // mode detection: check for dramen staff first (fairy ring mode indicator)
+        UIResult<ItemSearchResult> dramenStaff = script.getWidgetManager().getEquipment().findItem(DRAMEN_STAFF);
 
-        // remember which tool we found for later use
-        for (int toolId : BLOOM_TOOLS) {
-            UIResult<ItemSearchResult> check = script.getWidgetManager().getEquipment().findItem(toolId);
-            if (check.isFound()) {
-                equippedBloomToolId = toolId;
-                script.log(getClass(), "bloom tool found: id=" + toolId);
-                break;
+        if (dramenStaff.isFound()) {
+            // potential fairy ring mode - check inventory for bloom tool
+            script.log(getClass(), "dramen staff detected, checking for fairy ring mode...");
+
+            script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+
+            // check if bloom tool is in inventory (not equipped - dramen staff occupies weapon slot)
+            ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(BLOOM_TOOLS));
+            boolean bloomInInventory = false;
+            if (inv != null) {
+                for (int toolId : BLOOM_TOOLS) {
+                    if (inv.contains(toolId)) {
+                        equippedBloomToolId = toolId;  // track which bloom tool for later
+                        bloomInInventory = true;
+                        script.log(getClass(), "bloom tool in inventory: id=" + toolId);
+                        break;
+                    }
+                }
             }
-        }
 
-        if (equippedBloomToolId == 0) {
-            script.log(getClass(), "ERROR: could not determine bloom tool id");
-            return false;
-        }
+            if (!bloomInInventory) {
+                script.log(getClass(), "ERROR: dramen staff equipped but no bloom tool in inventory");
+                return false;
+            }
 
-        // 2. check drakan's medallion (neck slot)
-        UIResult<ItemSearchResult> medallion = script.getWidgetManager().getEquipment().findItem(DRAKANS_MEDALLION);
-        if (!medallion.isFound()) {
-            script.log(getClass(), "ERROR: no drakan's medallion equipped");
-            return false;
+            // check if ardy cloak is equipped (required for fairy ring mode)
+            script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+
+            UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(ARDOUGNE_CLOAKS);
+            if (!ardyCloak.isFound()) {
+                script.log(getClass(), "ERROR: fairy ring mode requires ardougne cloak equipped");
+                return false;
+            }
+
+            // fairy ring mode confirmed
+            detectedMode = Mode.FAIRY_RING;
+            script.log(getClass(), "detected mode: FAIRY_RING");
+            script.log(getClass(), "  - dramen staff: equipped");
+            script.log(getClass(), "  - bloom tool: in inventory (id=" + equippedBloomToolId + ")");
+            script.log(getClass(), "  - ardougne cloak: equipped");
+
+        } else {
+            // ver sinhaza mode - check drakan's medallion + equipped bloom tool
+            script.log(getClass(), "no dramen staff, checking for ver sinhaza mode...");
+
+            // check bloom tool (weapon slot)
+            UIResult<ItemSearchResult> bloomTool = script.getWidgetManager().getEquipment().findItem(BLOOM_TOOLS);
+            if (!bloomTool.isFound()) {
+                script.log(getClass(), "ERROR: no bloom tool equipped (blessed sickle or flail)");
+                return false;
+            }
+
+            // remember which tool we found for later use
+            for (int toolId : BLOOM_TOOLS) {
+                UIResult<ItemSearchResult> check = script.getWidgetManager().getEquipment().findItem(toolId);
+                if (check.isFound()) {
+                    equippedBloomToolId = toolId;
+                    script.log(getClass(), "bloom tool equipped: id=" + toolId);
+                    break;
+                }
+            }
+
+            if (equippedBloomToolId == 0) {
+                script.log(getClass(), "ERROR: could not determine bloom tool id");
+                return false;
+            }
+
+            // check drakan's medallion (neck slot)
+            UIResult<ItemSearchResult> medallion = script.getWidgetManager().getEquipment().findItem(DRAKANS_MEDALLION);
+            if (!medallion.isFound()) {
+                script.log(getClass(), "ERROR: no drakan's medallion equipped");
+                return false;
+            }
+
+            // ver sinhaza mode confirmed
+            detectedMode = Mode.VER_SINHAZA;
+            script.log(getClass(), "detected mode: VER_SINHAZA");
+            script.log(getClass(), "  - drakan's medallion: equipped");
+            script.log(getClass(), "  - bloom tool: equipped (id=" + equippedBloomToolId + ")");
         }
-        script.log(getClass(), "drakan's medallion: found");
 
         // 3. determine banking method (ver sinhaza via drakan's medallion is always available)
         String bankingMethodUsed = "ver sinhaza (drakan's medallion)";
