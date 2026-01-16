@@ -9,10 +9,10 @@ Requirements for v1.1 Flexible Validation milestone.
 
 ### Validation
 
-- [ ] **VALID-01**: Script accepts bloom items (silver sickle/flails) in inventory without requiring them equipped
-- [ ] **VALID-02**: Script accepts ardy cloak in inventory without requiring it equipped
-- [ ] **VALID-03**: Script accepts quest cape in inventory without requiring it equipped
-- [ ] **VALID-04**: Script auto-equips dramen staff from inventory at startup if not already equipped
+- [x] **VALID-01**: Script accepts bloom items (silver sickle/flails) in inventory without requiring them equipped
+- [x] **VALID-02**: Script accepts ardy cloak in inventory without requiring it equipped
+- [x] **VALID-03**: Script accepts quest cape in inventory without requiring it equipped
+- [x] **VALID-04**: Script auto-equips dramen staff from inventory at startup if not already equipped
 
 ### Performance
 
@@ -42,10 +42,10 @@ Which phases cover which requirements. Updated by create-roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VALID-01 | Phase 4 | Pending |
-| VALID-02 | Phase 4 | Pending |
-| VALID-03 | Phase 4 | Pending |
-| VALID-04 | Phase 4 | Pending |
+| VALID-01 | Phase 4 | Complete |
+| VALID-02 | Phase 4 | Complete |
+| VALID-03 | Phase 4 | Complete |
+| VALID-04 | Phase 4 | Complete |
 | PERF-01 | Phase 5 | Pending |
 
 **Coverage:**
@@ -55,4 +55,4 @@ Which phases cover which requirements. Updated by create-roadmap.
 
 ---
 *Requirements defined: 2026-01-16*
-*Last updated: 2026-01-16 after roadmap creation*
+*Last updated: 2026-01-16 after Phase 4 completion*

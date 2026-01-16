@@ -15,7 +15,7 @@ Flexible Validation milestone: Make equipment validation more permissive by acce
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 4: Flexible Equipment Validation** - Accept items in inventory, not just equipped
+- [x] **Phase 4: Flexible Equipment Validation** - Accept items in inventory, not just equipped
 - [ ] **Phase 5: Region Optimization** - Add region 13877 for faster startup
 
 ## Phase Details
@@ -64,7 +64,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 04-01: TBD
+- [x] 04-01: Flexible equipment validation with inventory fallback
 
 #### Phase 5: Region Optimization
 **Goal**: Faster startup in fairy ring mode
@@ -88,5 +88,5 @@ Phases execute in numeric order: 4 → 5
 | 1. Mode Detection | v1.0 | 1/1 | Complete | 2026-01-16 |
 | 2. Fairy Ring Collection | v1.0 | 1/1 | Complete | 2026-01-16 |
 | 3. Banking & Return | v1.0 | 2/2 | Complete | 2026-01-16 |
-| 4. Flexible Equipment Validation | v1.1 | 0/1 | Not started | - |
+| 4. Flexible Equipment Validation | v1.1 | 1/1 | Complete | 2026-01-16 |
 | 5. Region Optimization | v1.1 | 0/1 | Not started | - |
