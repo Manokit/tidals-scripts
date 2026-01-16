@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-16)
 
 **Core value:** Auto-detect equipment to seamlessly support both Ver Sinhaza (Drakan's Medallion) and Fairy Ring modes without requiring user configuration.
-**Current focus:** Phase 2 — Collection
+**Current focus:** Phase 3 — Banking & Return
 
 ## Current Position
 
-Phase: 2 of 3 (Collection)
-Plan: 1 of 3 in phase
-Status: In progress
-Last activity: 2026-01-16 — Completed 02-01-PLAN.md
+Phase: 2 of 3 (Collection) — COMPLETE
+Plan: All plans complete (1/1)
+Status: Ready for Phase 3
+Last activity: 2026-01-16 — Phase 2 executed and verified
 
-Progress: ████░░░░░░ 40%
+Progress: ██████░░░░ 67%
 
 ## Performance Metrics
 
@@ -28,7 +28,7 @@ Progress: ████░░░░░░ 40%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-mode-detection | 1/1 | 8 min | 8 min |
-| 02-collection | 1/3 | 2 min | 2 min |
+| 02-collection | 1/1 | 2 min | 2 min |
 
 **Recent Trend:**
 - Last 5 plans: 8 min, 2 min

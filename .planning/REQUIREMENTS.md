@@ -14,8 +14,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Collection
 
-- [ ] **COLL-01**: Fairy Ring mode uses 3-log tile at position 3474, 3419, 0
-- [ ] **COLL-02**: Fairy Ring mode casts bloom from inventory (not equipment slot)
+- [x] **COLL-01**: Fairy Ring mode uses 3-log tile at position 3474, 3419, 0
+- [x] **COLL-02**: Fairy Ring mode casts bloom from inventory (not equipment slot)
 
 ### Banking
 
@@ -54,8 +54,8 @@ Which phases cover which requirements. Updated by create-roadmap.
 |-------------|-------|--------|
 | MODE-01 | Phase 1 | Complete |
 | MODE-02 | Phase 1 | Complete |
-| COLL-01 | Phase 2 | Pending |
-| COLL-02 | Phase 2 | Pending |
+| COLL-01 | Phase 2 | Complete |
+| COLL-02 | Phase 2 | Complete |
 | BANK-01 | Phase 3 | Pending |
 | BANK-02 | Phase 3 | Pending |
 | RETN-01 | Phase 3 | Pending |
