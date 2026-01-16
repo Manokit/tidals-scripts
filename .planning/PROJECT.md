@@ -27,6 +27,13 @@ Auto-detect equipment to seamlessly support both Ver Sinhaza (Drakan's Medallion
 
 ### Active
 
+**Current Milestone: v1.1 Flexible Validation**
+
+- [ ] Flexible equipment validation — check equipment AND inventory for required items
+- [ ] Add region 13877 to regionsToPrioritise() — faster startup in fairy ring mode
+
+**Backlog:**
+
 - [ ] Quest cape support for return teleport (Legends Guild fairy ring)
 
 ### Out of Scope
@@ -93,4 +100,4 @@ Both modes fully functional with auto-detection at startup.
 One low-priority tech debt item: region IDs not added to regionsToPrioritise() (performance only).
 
 ---
-*Last updated: 2026-01-16 after v1.0 milestone*
+*Last updated: 2026-01-16 after v1.1 milestone start*

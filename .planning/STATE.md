@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-16)
 
 **Core value:** Auto-detect equipment to seamlessly support both Ver Sinhaza (Drakan's Medallion) and Fairy Ring modes without requiring user configuration.
-**Current focus:** Planning next milestone
+**Current focus:** v1.1 Flexible Validation
 
 ## Current Position
 
-Phase: v1.0 complete
-Plan: Not started
-Status: Ready to plan next milestone
-Last activity: 2026-01-16 — v1.0 milestone complete
+Phase: Not started (run /gsd:create-roadmap)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-01-16 — Milestone v1.1 started
 
-Progress: v1.0 shipped
+Progress: v1.0 shipped, v1.1 in progress
 
 ## Performance Metrics
 
@@ -39,7 +39,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-None - milestone complete.
+None.
 
 ### Blockers/Concerns
 
@@ -48,12 +48,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-16
-Stopped at: v1.0 milestone complete
+Stopped at: Milestone v1.1 initialized
 Resume file: None
 
 ## Next Steps
 
-1. `/gsd:discuss-milestone` — thinking partner, creates context file
-2. `/gsd:new-milestone` — update PROJECT.md with new goals
-3. `/gsd:define-requirements` — scope what to build
-4. `/gsd:create-roadmap` — plan how to build it
+1. `/gsd:define-requirements` — define what "done" looks like
+2. `/gsd:create-roadmap` — plan how to build it
