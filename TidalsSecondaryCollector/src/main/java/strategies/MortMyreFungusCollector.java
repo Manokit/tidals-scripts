@@ -185,13 +185,14 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             }
         }
 
-        // priority 3: check if at collection area
+        // priority 3: check if at collection area (mode-aware)
         WorldPosition pos = script.getWorldPosition();
         if (pos == null) {
             return State.IDLE;
         }
 
-        if (!LOG_AREA.contains(pos)) {
+        RectangleArea targetArea = isFairyRingMode() ? THREE_LOG_AREA : LOG_AREA;
+        if (!targetArea.contains(pos)) {
             script.log(getClass(), "not at log area, need to return");
             return State.RETURNING;
         }
