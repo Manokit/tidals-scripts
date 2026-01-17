@@ -228,13 +228,13 @@ public class TidalsSecondaryCollector extends Script {
         double hours = Math.max(1e-9, elapsed / 3_600_000.0);
         String runtime = formatRuntime(elapsed);
 
-        // colors - dark brown theme to match fungus
-        final Color bgColor = new Color(47, 27, 16);          // #2f1b10 - dark brown background
-        final Color borderColor = new Color(78, 52, 36);      // lighter brown border
-        final Color accentColor = new Color(205, 170, 125);   // golden tan accent
+        // colors - dark teal theme to match tidals scripts
+        final Color bgColor = new Color(22, 49, 52);          // #163134 - dark teal background
+        final Color borderColor = new Color(38, 78, 82);      // lighter teal border
+        final Color accentColor = new Color(100, 180, 180);   // teal accent
         final Color textLight = new Color(238, 237, 233);     // #eeede9 - off-white text
-        final Color textMuted = new Color(180, 165, 145);     // muted tan for labels
-        final Color valueHighlight = new Color(230, 190, 130); // warm gold for highlights
+        final Color textMuted = new Color(150, 180, 180);     // muted teal for labels
+        final Color valueHighlight = new Color(180, 220, 220); // light teal for highlights
 
         // layout
         final int x = 5;
