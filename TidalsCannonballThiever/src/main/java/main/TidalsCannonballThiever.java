@@ -18,7 +18,9 @@ import utils.XPTracking;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -31,10 +33,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @ScriptDefinition(name = "TidalsCannonballThiever", description = "Thieves cannonballs from Port Roberts stalls while avoiding guards", skillCategory = SkillCategory.THIEVING, version = 1.0, author = "Tidalus")
 public class TidalsCannonballThiever extends Script {
-    public static final String scriptVersion = "1.6";
+    public static final String scriptVersion = "1.7";
     private static final String SCRIPT_NAME = "CannonballThiever";
     private static final String SESSION_ID = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -44,7 +47,13 @@ public class TidalsCannonballThiever extends Script {
     private static int lastSentXp = 0;
     private static int lastSentCannonballs = 0;
     private static int lastSentOres = 0;
+    private static int lastSentGp = 0;
     private static long lastSentRuntime = 0;
+
+    // gp tracking - prices locked in at theft time
+    public static long totalGpEarned = 0;
+    private static final Map<Integer, Integer> itemPrices = new ConcurrentHashMap<>();
+    private static boolean pricesLoaded = false;
 
     public static int screenWidth = 0;
     public static int screenHeight = 0;
@@ -176,6 +185,9 @@ public class TidalsCannonballThiever extends Script {
     public void onStart() {
         log("INFO", "Starting TidalsCannonballThiever v" + scriptVersion);
 
+        // fetch item prices in background (locked in for session)
+        updateItemPrices();
+
         scriptUI = new ScriptUI(this);
         Scene scene = scriptUI.buildScene(this);
         getStageController().show(scene, "Cannonball Thieving Options", false);
@@ -224,14 +236,16 @@ public class TidalsCannonballThiever extends Script {
             int xpIncrement = xpGained - lastSentXp;
             int cannonballIncrement = cannonballsStolen - lastSentCannonballs;
             int oreIncrement = oresStolen - lastSentOres;
+            int gpIncrement = (int) (totalGpEarned - lastSentGp);
             long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
 
-            sendStats(xpIncrement, cannonballIncrement, oreIncrement, runtimeIncrement);
+            sendStats(xpIncrement, cannonballIncrement, oreIncrement, gpIncrement, runtimeIncrement);
 
             // update last sent values
             lastSentXp = xpGained;
             lastSentCannonballs = cannonballsStolen;
             lastSentOres = oresStolen;
+            lastSentGp = (int) totalGpEarned;
             lastSentRuntime = elapsed / 1000;
             lastStatsSent = nowMs;
         }
@@ -338,7 +352,13 @@ public class TidalsCannonballThiever extends Script {
                     int gained = currentCount - lastCount;
                     cannonballCounts.merge(type, gained, Integer::sum);
                     cannonballsStolen += gained;
-                    log("LOOT", "+" + gained + " " + type + " (total: " + cannonballCounts.get(type) + ")");
+
+                    // calculate gp earned using locked-in price
+                    int price = getItemPrice(itemId);
+                    long gpGained = (long) gained * price;
+                    totalGpEarned += gpGained;
+
+                    log("LOOT", "+" + gained + " " + type + " (total: " + cannonballCounts.get(type) + ", +" + gpGained + " gp)");
                     cannonballGained = true;
                 }
                 lastInventorySnapshot.put(itemId, currentCount);
@@ -355,7 +375,13 @@ public class TidalsCannonballThiever extends Script {
                     int gained = currentCount - lastCount;
                     oreCounts.merge(type, gained, Integer::sum);
                     oresStolen += gained;
-                    log("LOOT", "+" + gained + " " + type + " (total: " + oreCounts.get(type) + ")");
+
+                    // calculate gp earned using locked-in price
+                    int price = getItemPrice(itemId);
+                    long gpGained = (long) gained * price;
+                    totalGpEarned += gpGained;
+
+                    log("LOOT", "+" + gained + " " + type + " (total: " + oreCounts.get(type) + ", +" + gpGained + " gp)");
                     oreGained = true;
                 }
                 lastInventorySnapshot.put(itemId, currentCount);
@@ -383,6 +409,97 @@ public class TidalsCannonballThiever extends Script {
     // public method for manual inventory check (called for first xp drop assumption)
     public void checkInventoryForChangesManual() {
         checkInventoryForChanges();
+    }
+
+    /**
+     * Fetches current prices from GE Tracker API for all tracked items.
+     * Prices are locked in at script start and don't change during the session.
+     */
+    private void updateItemPrices() {
+        Thread t = new Thread(() -> {
+            try {
+                Set<Integer> allItemIds = getAllTrackedItemIds();
+                log("PRICES", "Fetching prices for " + allItemIds.size() + " items...");
+
+                for (int itemId : allItemIds) {
+                    try {
+                        URL url = new URL("https://www.ge-tracker.com/api/items/" + itemId);
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+                        conn.setConnectTimeout(5000);
+                        conn.setReadTimeout(5000);
+
+                        int responseCode = conn.getResponseCode();
+                        if (responseCode != 200) {
+                            continue;
+                        }
+
+                        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) {
+                            response.append(line);
+                        }
+                        in.close();
+
+                        String json = response.toString();
+
+                        // parse "selling" price from json
+                        int sellingIdx = json.indexOf("\"selling\":");
+                        if (sellingIdx != -1) {
+                            int start = sellingIdx + 10;
+                            int end = json.indexOf(",", start);
+                            if (end == -1) end = json.indexOf("}", start);
+                            if (end != -1) {
+                                String priceStr = json.substring(start, end).trim();
+                                try {
+                                    int price = Integer.parseInt(priceStr);
+                                    itemPrices.put(itemId, price);
+                                } catch (NumberFormatException ignored) {}
+                            }
+                        }
+
+                        // small delay between requests to avoid rate limiting
+                        Thread.sleep(100);
+
+                    } catch (Exception e) {
+                        // silently skip failed items
+                    }
+                }
+
+                pricesLoaded = true;
+                log("PRICES", "Loaded prices for " + itemPrices.size() + " items from GE Tracker");
+
+                // log loaded prices for debugging
+                for (Map.Entry<String, Integer> entry : CANNONBALL_TYPES.entrySet()) {
+                    int itemId = entry.getValue();
+                    Integer price = itemPrices.get(itemId);
+                    if (price != null) {
+                        log("PRICES", entry.getKey() + " (" + itemId + "): " + price + " gp");
+                    }
+                }
+                for (Map.Entry<String, Integer> entry : ORE_TYPES.entrySet()) {
+                    int itemId = entry.getValue();
+                    Integer price = itemPrices.get(itemId);
+                    if (price != null) {
+                        log("PRICES", entry.getKey() + " (" + itemId + "): " + price + " gp");
+                    }
+                }
+
+            } catch (Exception e) {
+                log("PRICES", "Failed to update prices: " + e.getMessage());
+            }
+        }, "PriceUpdater");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Gets the price of an item, returning 0 if not loaded.
+     */
+    private int getItemPrice(int itemId) {
+        return itemPrices.getOrDefault(itemId, 0);
     }
 
     @Override
@@ -501,7 +618,8 @@ public class TidalsCannonballThiever extends Script {
         int oreLines = (oresStolen > 0 || nonZeroOreTypes > 0) ? 1 + nonZeroOreTypes : 0;
         int dividerLines = (cbLines > 0 && oreLines > 0) ? 1 : 0;
         int modeLines = twoStallMode ? 1 : 0;
-        int totalLines = 9 + cbLines + dividerLines + oreLines + modeLines;
+        int gpLines = (totalGpEarned > 0) ? 2 : 0; // gp earned + gp/hr
+        int totalLines = 9 + cbLines + dividerLines + oreLines + gpLines + modeLines;
         int separatorCount = 1 + dividerLines;
         int separatorOverhead = separatorCount * 12; // separator padding (per separator)
         int bottomPadding = 20; // bottom padding
@@ -574,6 +692,18 @@ public class TidalsCannonballThiever extends Script {
             String oresText = intFmt.format(oresStolen) + " (" + intFmt.format(oresHr) + "/hr)";
             drawStatLine(c, innerX, innerWidth, paddingX, curY, "Total Ores", oresText, textMuted.getRGB(),
                     accentGold.getRGB());
+        }
+
+        // gp earned (only show if prices were loaded and we have gp)
+        if (totalGpEarned > 0) {
+            curY += lineGap;
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "GP earned", intFmt.format(totalGpEarned), textMuted.getRGB(),
+                    accentGold.getRGB());
+
+            curY += lineGap;
+            long gpPerHour = Math.round(totalGpEarned / hours);
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "GP/hr", intFmt.format(gpPerHour), textMuted.getRGB(),
+                    accentYellow.getRGB());
         }
 
         curY += lineGap;
@@ -693,21 +823,22 @@ public class TidalsCannonballThiever extends Script {
         }
     }
 
-    private void sendStats(int xpIncrement, int cannonballIncrement, int oreIncrement, long runtimeSecs) {
+    private void sendStats(int xpIncrement, int cannonballIncrement, int oreIncrement, int gpIncrement, long runtimeSecs) {
         try {
             if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
                 return;
             }
 
             // skip if nothing to report
-            if (xpIncrement == 0 && cannonballIncrement == 0 && oreIncrement == 0 && runtimeSecs == 0) {
+            if (xpIncrement == 0 && cannonballIncrement == 0 && oreIncrement == 0 && gpIncrement == 0 && runtimeSecs == 0) {
                 return;
             }
 
             String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"cannonballsStolen\":%d,\"oresStolen\":%d}",
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":%d,\"xp\":%d,\"runtime\":%d,\"cannonballsStolen\":%d,\"oresStolen\":%d}",
                     SCRIPT_NAME,
                     SESSION_ID,
+                    gpIncrement,
                     xpIncrement,
                     runtimeSecs,
                     cannonballIncrement,
@@ -728,7 +859,7 @@ public class TidalsCannonballThiever extends Script {
 
             int code = conn.getResponseCode();
             if (code == 200) {
-                log("STATS", "Stats reported: xp=" + xpIncrement + ", cannonballs=" + cannonballIncrement + ", ores="
+                log("STATS", "Stats reported: xp=" + xpIncrement + ", gp=" + gpIncrement + ", cannonballs=" + cannonballIncrement + ", ores="
                         + oreIncrement + ", runtime=" + runtimeSecs + "s");
             }
         } catch (Exception e) {
