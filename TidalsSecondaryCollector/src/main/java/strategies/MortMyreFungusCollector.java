@@ -695,7 +695,8 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             // ver sinhaza mode: bloom from equipment
             script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
             script.pollFramesUntil(() -> false, script.random(150, 250));
-            bloomSuccess = RetryUtils.equipmentInteract(script, equippedBloomToolId, "Bloom", "casting bloom (prayer: " + prayer + ")");
+            // menu shows "cast bloom" (lowercase) for all bloom tools
+            bloomSuccess = RetryUtils.equipmentInteract(script, equippedBloomToolId, "cast bloom", "casting bloom (prayer: " + prayer + ")");
         }
 
         if (!bloomSuccess) {
@@ -738,9 +739,9 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return false;
         }
 
-        // cast bloom using inventory interact
+        // cast bloom using inventory interact - menu shows "cast bloom" (lowercase)
         Integer prayer = script.getWidgetManager().getMinimapOrbs().getPrayerPoints();
-        return RetryUtils.inventoryInteract(script, bloomTool, "Bloom", "casting bloom from inventory (prayer: " + prayer + ")");
+        return RetryUtils.inventoryInteract(script, bloomTool, "cast bloom", "casting bloom from inventory (prayer: " + prayer + ")");
     }
 
     private int collectGroundFungus() {
