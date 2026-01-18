@@ -10,6 +10,7 @@ import com.osmb.api.ui.depositbox.DepositBox;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
+import utilities.RetryUtils;
 
 import java.util.Collections;
 import java.util.Objects;
@@ -141,16 +142,15 @@ public class Bank extends Task {
         // wait for deposit box to load
         script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        // deposit gems individually (avoid depositing chisel)
         task = "Depositing";
-        script.log(getClass(), "depositing gems individually");
-
         if (cuttingEnabled) {
-            // deposit cut gems only
+            // deposit cut gems only (keep chisel)
+            script.log(getClass(), "depositing cut gems individually");
             depositGemsIndividually(depositBox, CUT_GEM_IDS);
         } else {
-            // deposit uncut gems only
-            depositGemsIndividually(depositBox, ALL_UNCUT_GEM_IDS.stream().mapToInt(Integer::intValue).toArray());
+            // no chisel needed, deposit everything
+            script.log(getClass(), "depositing all");
+            depositBox.depositAll(Set.of());
         }
 
         // wait for deposit to complete
@@ -177,7 +177,7 @@ public class Bank extends Task {
             return;
         }
 
-        boolean interacted = depositObject.interact(action);
+        boolean interacted = RetryUtils.objectInteract(script, depositObject, action, objectName + " interact");
         if (!interacted) {
             script.log(getClass(), "interact failed");
             return;
@@ -217,7 +217,7 @@ public class Bank extends Task {
             }
 
             script.log(getClass(), "depositing gem: " + gemId);
-            boolean deposited = gem.interact("Deposit-All");
+            boolean deposited = RetryUtils.inventoryInteract(script, gem, "Deposit-All", "deposit gem " + gemId);
             if (deposited) {
                 script.pollFramesHuman(() -> false, script.random(200, 400));
             } else {

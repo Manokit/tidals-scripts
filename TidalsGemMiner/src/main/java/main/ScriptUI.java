@@ -245,7 +245,7 @@ public class ScriptUI {
         if (cuttingCheckBox.isSelected()) {
             label.setText("Cuts gems when inventory full. Crushed gems are dropped. Banks only cut gems.");
         } else {
-            label.setText("Banks raw gems without cutting. Faster but less profitable.");
+            label.setText("Banks raw gems without cutting.");
         }
     }
 

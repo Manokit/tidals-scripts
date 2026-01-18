@@ -10,6 +10,7 @@ import com.osmb.api.ui.component.tabs.skill.SkillType;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
+import utilities.RetryUtils;
 
 import java.util.Collections;
 import java.util.Map;
@@ -212,7 +213,7 @@ public class Cut extends Task {
         int secondID = firstIsGem ? CHISEL_ID : gemID;
 
         task = "Use item 1";
-        if (!inv.getRandomItem(firstID).interact()) {
+        if (!RetryUtils.inventoryInteract(script, inv.getRandomItem(firstID), "Use", "use first item")) {
             script.log(getClass(), "first item failed");
             return false;
         }
@@ -220,7 +221,7 @@ public class Cut extends Task {
         script.pollFramesUntil(() -> false, script.random(150, 300), true);
 
         task = "Use item 2";
-        if (!inv.getRandomItem(secondID).interact()) {
+        if (!RetryUtils.inventoryInteract(script, inv.getRandomItem(secondID), "Use", "use second item")) {
             script.log(getClass(), "second item failed");
             return false;
         }
@@ -270,9 +271,7 @@ public class Cut extends Task {
 
             // check if done (no more uncut gems of this type)
             ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(consumedID));
-            if (inv == null) return false;
-
-            return !inv.contains(consumedID);
+            return inv == null || !inv.contains(consumedID);
         };
 
         script.log(getClass(), "waiting for cutting to finish");
@@ -303,7 +302,7 @@ public class Cut extends Task {
                 break;
             }
 
-            boolean dropped = inventory.getRandomItem(CRUSHED_GEM_ID).interact("Drop");
+            boolean dropped = RetryUtils.inventoryInteract(script, inventory.getRandomItem(CRUSHED_GEM_ID), "Drop", "drop crushed gem");
             if (dropped) {
                 script.log(getClass(), "dropped crushed gem");
                 // brief wait between drops
