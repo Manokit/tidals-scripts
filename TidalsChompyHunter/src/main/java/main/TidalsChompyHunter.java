@@ -36,11 +36,11 @@ import java.util.List;
         name = "TidalsChompyHunter",
         description = "Hunts chompy birds for Western Provinces Diary",
         skillCategory = SkillCategory.COMBAT,
-        version = 1.0,
+        version = 1.1,
         author = "Tidaleus"
 )
 public class TidalsChompyHunter extends Script {
-    public static final String SCRIPT_VERSION = "1.0";
+    public static final String SCRIPT_VERSION = "1.1";
     private static final String SCRIPT_NAME = "ChompyHunter";
 
     // state

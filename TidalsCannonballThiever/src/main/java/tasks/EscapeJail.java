@@ -5,9 +5,13 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.ui.tab.Tab;
+import com.osmb.api.utils.UIResult;
 import com.osmb.api.utils.UIResultList;
+import com.osmb.api.visual.SearchResult;
 import com.osmb.api.walker.WalkConfig;
 import utilities.RetryUtils;
+import utilities.TabUtils;
 import utils.Task;
 
 import java.util.Arrays;
@@ -17,6 +21,10 @@ import static main.TidalsCannonballThiever.*;
 
 public class EscapeJail extends Task {
     public static final RectangleArea JAIL_CELL = new RectangleArea(1883, 3272, 2, 2, 0);
+
+    // sailor's amulet for fast escape via teleport
+    private static final int SAILORS_AMULET = 32399;
+    private static final RectangleArea PORT_ROBERTS_DOCK = new RectangleArea(1880, 3354, 1895, 3370, 0);
 
     // waypoint path from jail back to stalls (tight path for better minimap visibility)
     private static final WorldPosition[] JAIL_PATH = {
@@ -73,6 +81,15 @@ public class EscapeJail extends Task {
                 return false;
             }
 
+            // check for sailor's amulet - fast escape via teleport
+            if (hasSailorsAmulet()) {
+                script.log("JAIL", "Sailor's Amulet detected - teleporting to Port Roberts");
+                if (teleportWithAmulet()) {
+                    escapeAttempts = 0;
+                    return walkFromDockToStall();
+                }
+                script.log("JAIL", "Amulet teleport failed, falling back to lock pick...");
+            }
 
             // standard lock pick escape
             if (isOutOfCell()) {

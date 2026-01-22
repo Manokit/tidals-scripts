@@ -10,6 +10,8 @@ import com.osmb.api.utils.UIResultList;
 import main.TidalsChompyHunter;
 import utils.Task;
 
+import static main.TidalsChompyHunter.task;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -50,6 +52,9 @@ public class Setup extends Task {
     // minimum requirements
     private static final int MIN_BELLOWS = 2;
     private static final int MIN_FREE_SLOTS = 3;
+
+    // zoom level
+    private static final int TARGET_ZOOM_LEVEL = 3;
 
     public Setup(Script script) {
         super(script);
@@ -143,6 +148,9 @@ public class Setup extends Task {
             script.stop();
             return false;
         }
+
+        // check and set zoom level
+        checkZoomLevel();
 
         // check bow for total kills (nice-to-have, don't stop if fails)
         try {
@@ -264,5 +272,47 @@ public class Setup extends Task {
             set.add(id);
         }
         return set;
+    }
+
+    /**
+     * check and set zoom level to optimal for chompy detection
+     */
+    private void checkZoomLevel() {
+        try {
+            task = "checking zoom";
+            boolean opened = script.getWidgetManager().getSettings().open();
+            if (!opened) {
+                script.log(getClass(), "could not open settings tab to check zoom");
+                return;
+            }
+
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+            UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
+            if (zoomResult != null && zoomResult.isFound()) {
+                int currentZoom = zoomResult.get();
+                script.log(getClass(), "current zoom level: " + currentZoom);
+
+                if (currentZoom != TARGET_ZOOM_LEVEL) {
+                    script.log(getClass(), "setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
+                    boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
+                    if (set) {
+                        script.log(getClass(), "zoom level set to " + TARGET_ZOOM_LEVEL);
+                    } else {
+                        script.log(getClass(), "failed to set zoom level");
+                    }
+                } else {
+                    script.log(getClass(), "zoom level already optimal");
+                }
+            } else {
+                script.log(getClass(), "could not read zoom level, attempting to set anyway...");
+                script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
+            }
+
+            script.getWidgetManager().getSettings().close();
+            script.pollFramesHuman(() -> false, script.random(200, 400));
+
+        } catch (Exception e) {
+            script.log(getClass(), "error checking zoom level: " + e.getMessage());
+        }
     }
 }

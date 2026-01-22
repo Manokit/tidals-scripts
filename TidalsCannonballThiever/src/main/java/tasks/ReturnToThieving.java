@@ -91,14 +91,20 @@ public class ReturnToThieving extends Task {
             script.log("RETURN", "Walking to thieving tile...");
         }
 
-        boolean walked = script.getWalker().walkTo(target, config);
+        try {
+            boolean walked = script.getWalker().walkTo(target, config);
 
-        // brief settle time after walk
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+            // brief settle time after walk
+            script.pollFramesHuman(() -> false, script.random(300, 500));
 
-        if (walked || isAtThievingTile()) {
-            script.log("RETURN", "Arrived at stall position");
-            return true;
+            if (walked || isAtThievingTile()) {
+                script.log("RETURN", "Arrived at stall position");
+                return true;
+            }
+        } catch (NullPointerException e) {
+            // position can become null mid-walk (loading screens, game state changes)
+            script.log("RETURN", "Walker NPE - position became null mid-walk, retrying...");
+            return false;
         }
 
         script.log("RETURN", "Did not reach stall position, will retry");

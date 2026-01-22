@@ -282,15 +282,16 @@ public class TidalsCannonballThiever extends Script {
         // this triggers addThievingXp() when items are gained
         checkInventoryForChanges();
 
-        // cycle tracking in two-stall mode
+        // cycle tracking in two-stall mode - xp tracking only
+        // note: shouldSwitchToX() calls removed - they do pixel analysis
+        // which can trigger recursive frame updates. guard checking happens
+        // properly in MonitorThieving.java inside pollFramesUntil() lambdas
         if (twoStallMode && guardTracker != null) {
             double currentXp = xpTracking.getCurrentXp();
             if (atOreStall) {
                 guardTracker.checkOreXpDrop(currentXp);
-                guardTracker.shouldSwitchToCannonball();
             } else {
                 guardTracker.checkCbXpDrop(currentXp);
-                guardTracker.shouldSwitchToOre();
             }
         }
     }
