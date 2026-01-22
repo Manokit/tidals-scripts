@@ -77,10 +77,10 @@ public class PrepareForHop extends Task {
         hopPending = true;
 
         try {
+            // wait for ground toads to be consumed before hopping
             TidalsChompyHunter.task = "draining toads...";
             script.log(getClass(), "waiting for toads to drain");
 
-            // wait for ground toads to be consumed
             boolean toadsDrained = waitForToadsDrained();
             if (!toadsDrained) {
                 script.log(getClass(), "toad drain timed out, proceeding anyway");

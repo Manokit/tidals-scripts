@@ -177,10 +177,48 @@ public class AttackChompy extends Task {
             return true;
         }
 
-        // no valid chompy found - set cooldown
+        // no valid chompy found - set cooldown and refresh arrow count
         script.log(getClass(), "[activate] no chompy found, entering " + NO_CHOMPY_COOLDOWN_MS + "ms cooldown");
         lastNoChompyTime = System.currentTimeMillis();
+        refreshArrowCount();
         return false;
+    }
+
+    /**
+     * refresh arrow count from equipment during idle time
+     * opens equipment tab, reads arrow stack, updates currentArrowCount
+     */
+    private void refreshArrowCount() {
+        // open equipment tab
+        script.getWidgetManager().getTabManager().openTab(com.osmb.api.ui.tabs.Tab.Type.EQUIPMENT);
+        script.submitTask(() -> false, script.random(200, 300));
+
+        // search for any valid arrow type
+        com.osmb.api.utils.UIResult<com.osmb.api.item.ItemSearchResult> arrowCheck =
+            script.getWidgetManager().getEquipment().findItem(new int[]{
+                2866,  // ogre arrow
+                4773,  // bronze brutal
+                4778,  // iron brutal
+                4783,  // steel brutal
+                4788,  // black brutal
+                4793,  // mithril brutal
+                4798,  // adamant brutal
+                4803   // rune brutal
+            });
+
+        if (arrowCheck.isFound()) {
+            com.osmb.api.item.ItemSearchResult result = arrowCheck.get();
+            if (result != null) {
+                int count = result.getStackAmount();
+                if (count != TidalsChompyHunter.currentArrowCount) {
+                    script.log(getClass(), "arrow count updated: " + count);
+                    TidalsChompyHunter.currentArrowCount = count;
+                }
+            }
+        }
+
+        // return to inventory tab
+        script.getWidgetManager().getTabManager().openTab(com.osmb.api.ui.tabs.Tab.Type.INVENTORY);
     }
 
     /**
@@ -677,7 +715,7 @@ public class AttackChompy extends Task {
 
             if (plucked) {
                 script.log(getClass(), "pluck action sent - waiting for animation");
-                script.pollFramesHuman(() -> false, script.random(800, 1200));
+                script.pollFramesHuman(() -> false, script.random(2000, 2400));
                 TidalsChompyHunter.corpsePositions.remove(corpsePos);
                 ignoredPositionTimestamps.put(posKey(corpsePos), System.currentTimeMillis());
                 script.log(getClass(), "corpse plucked (" + TidalsChompyHunter.corpsePositions.size() + " remaining)");
@@ -724,7 +762,7 @@ public class AttackChompy extends Task {
             boolean plucked = script.getFinger().tap(npcTileCube, "Pluck");
             if (plucked) {
                 script.log(getClass(), "[fallback] plucked at " + npcPos.getX() + "," + npcPos.getY());
-                script.pollFramesHuman(() -> false, script.random(800, 1200));
+                script.pollFramesHuman(() -> false, script.random(2000, 2400));
                 TidalsChompyHunter.corpsePositions.remove(corpsePos);
                 ignoredPositionTimestamps.put(posKey(npcPos), System.currentTimeMillis());
                 return true;

@@ -55,6 +55,7 @@ public class TidalsChompyHunter extends Script {
 
     // ammo tracking
     public static int initialArrowCount = 0;
+    public static int currentArrowCount = -1;  // -1 = not yet checked, updated during idle
     public static volatile boolean outOfAmmo = false;
 
     // logical ground toad counter (tracks drops/kills instead of unreliable sprite detection)
@@ -575,8 +576,10 @@ public class TidalsChompyHunter extends Script {
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Next", nextText, textMuted.getRGB(), textMuted.getRGB());
         curY += lineGap;
 
-        // arrows (estimated remaining = initial - kills used)
-        int arrowsRemaining = Math.max(0, initialArrowCount - killCount);
+        // arrows (use live count if available, else estimate from initial - kills)
+        int arrowsRemaining = (currentArrowCount >= 0)
+            ? currentArrowCount
+            : Math.max(0, initialArrowCount - killCount);
         String arrowText = intFmt.format(arrowsRemaining) + " remaining";
         // color warning if low (under 100)
         int arrowColor = arrowsRemaining < 100 ? new Color(255, 100, 100).getRGB() : textMuted.getRGB();
