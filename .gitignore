@@ -2,6 +2,7 @@
 **/.gradle/
 **/build/
 **/gradle/
+**/bin/
 /dCannonAFKer
 banner PSD.psd
 /build.gradle

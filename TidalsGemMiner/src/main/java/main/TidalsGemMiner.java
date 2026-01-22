@@ -373,9 +373,9 @@ public class TidalsGemMiner extends Script {
             return;
         }
 
-        try (InputStream in = getClass().getResourceAsStream("/Tidals Gem Miner.png")) {
+        try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
             if (in == null) {
-                log(getClass(), "logo '/Tidals Gem Miner.png' not found in resources");
+                log(getClass(), "logo '/logo.png' not found in resources");
                 return;
             }
 

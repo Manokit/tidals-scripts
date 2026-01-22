@@ -227,7 +227,7 @@ public class ScriptUI {
     }
 
     private ImageView loadLogo() {
-        try (InputStream in = getClass().getResourceAsStream("/Tidals Gem Miner.png")) {
+        try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
             if (in == null) {
                 return null;
             }
