@@ -1,0 +1,38 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.tidals'
+version = '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // osmb api jar dependency
+    compileOnly files('../API/API.jar')
+}
+
+java {
+    // api.jar requires java 17 (class version 61.0)
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+jar {
+    archiveFileName = "TidalsUtilities.jar"
+    destinationDirectory = file("${projectDir}/jar")
+
+    // prevent duplicate file errors when bundling resources
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+// clean task to remove old jars
+clean {
+    delete "${projectDir}/jar"
+}
