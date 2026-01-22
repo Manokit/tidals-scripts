@@ -1,14 +1,13 @@
 package tasks;
 
+import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
-import com.osmb.api.ui.tab.Tab;
 import com.osmb.api.utils.UIResult;
 import com.osmb.api.utils.UIResultList;
-import com.osmb.api.visual.SearchResult;
 import com.osmb.api.walker.WalkConfig;
 import utilities.RetryUtils;
 import utilities.TabUtils;
@@ -24,7 +23,8 @@ public class EscapeJail extends Task {
 
     // sailor's amulet for fast escape via teleport
     private static final int SAILORS_AMULET = 32399;
-    private static final RectangleArea PORT_ROBERTS_DOCK = new RectangleArea(1880, 3354, 1895, 3370, 0);
+    // teleport lands around (1889, 3291) - near the market, not the actual dock
+    private static final RectangleArea PORT_ROBERTS_TELEPORT = new RectangleArea(1885, 3288, 1895, 3295, 0);
 
     // waypoint path from jail back to stalls (tight path for better minimap visibility)
     private static final WorldPosition[] JAIL_PATH = {
@@ -321,5 +321,84 @@ public class EscapeJail extends Task {
         int x = (int) pos.getX();
         int y = (int) pos.getY();
         return x == (int) target.getX() && y == (int) target.getY();
+    }
+
+    private boolean hasSailorsAmulet() {
+        try {
+            TabUtils.openAndWaitEquipment(script);
+            UIResult<ItemSearchResult> amulet = script.getWidgetManager().getEquipment().findItem(SAILORS_AMULET);
+            return amulet != null && amulet.isFound();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean teleportWithAmulet() {
+        script.log("JAIL", "Attempting Sailor's Amulet teleport...");
+
+        // save current position to detect teleport
+        WorldPosition startPos = script.getWorldPosition();
+        if (startPos == null) return false;
+
+        boolean success = RetryUtils.equipmentInteract(script, SAILORS_AMULET, "Port Roberts", "sailor's amulet teleport", 5);
+        if (!success) {
+            script.log("JAIL", "Failed to interact with amulet");
+            return false;
+        }
+
+        // wait for teleport - check we're out of jail and near teleport area
+        boolean teleported = script.pollFramesUntil(() -> {
+            WorldPosition pos = script.getWorldPosition();
+            if (pos == null) return false;
+            // out of jail cell and either in teleport area or moved significantly
+            return !JAIL_CELL.contains(pos) &&
+                   (PORT_ROBERTS_TELEPORT.contains(pos) || pos.distanceTo(startPos) > 10);
+        }, 5000);
+
+        if (teleported) {
+            WorldPosition newPos = script.getWorldPosition();
+            script.log("JAIL", "Teleport successful! Now at " + (newPos != null ?
+                (int)newPos.getX() + ", " + (int)newPos.getY() : "unknown"));
+            script.pollFramesHuman(() -> false, script.random(600, 1000));
+            return true;
+        }
+
+        script.log("JAIL", "Teleport did not complete");
+        return false;
+    }
+
+    private boolean walkFromDockToStall() {
+        script.log("JAIL", "Walking from dock to stall...");
+
+        try {
+            WalkConfig config = new WalkConfig.Builder()
+                    .breakDistance(2)
+                    .tileRandomisationRadius(1)
+                    .timeout(30000)
+                    .build();
+
+            boolean walked = script.getWalker().walkTo(getThievingTile(), config);
+            script.pollFramesHuman(() -> false, script.random(300, 500));
+
+            if (walked || isAtThievingTile()) {
+                script.log("JAIL", "Arrived at stall from dock!");
+
+                // reset thieving cycle state
+                StartThieving.resetForNewCycle();
+                if (guardTracker != null) {
+                    guardTracker.resetCbCycle();
+                    guardTracker.resetGuardTracking();
+                    guardTracker.enableGuardSync();
+                }
+
+                return true;
+            }
+        } catch (NullPointerException e) {
+            script.log("JAIL", "Walker NPE during dock walk, retrying...");
+            return false;
+        }
+
+        script.log("JAIL", "Failed to walk from dock to stall");
+        return false;
     }
 }
