@@ -38,7 +38,7 @@ public class DetectPlayers extends Task {
 
     // state
     public static volatile boolean crashDetected = false;
-    private static Map<String, DetectedPlayer> trackedPlayers = new HashMap<>();
+    private static Map<Integer, DetectedPlayer> trackedPlayers = new HashMap<>();
     private static long lastLogTime = 0;
 
     public DetectPlayers(Script script) {
@@ -46,11 +46,20 @@ public class DetectPlayers extends Task {
     }
 
     /**
-     * convert WorldPosition to string key for HashMap lookup
-     * avoids object identity issues with WorldPosition equality
+     * convert WorldPosition to integer key for HashMap lookup
+     * uses bit packing: plane(2 bits) | y(15 bits) | x(15 bits) = 32 bits
+     * avoids string concatenation overhead while maintaining uniqueness
      */
-    private static String posKey(WorldPosition pos) {
-        return pos.getX() + "," + pos.getY() + "," + pos.getPlane();
+    private static int posKey(WorldPosition pos) {
+        // pack position into single int: x uses bits 0-14, y uses bits 15-29, plane uses bits 30-31
+        return (pos.getPlane() << 30) | ((pos.getY() & 0x7FFF) << 15) | (pos.getX() & 0x7FFF);
+    }
+
+    /**
+     * format position for logging (only used in log statements, not hot paths)
+     */
+    private static String formatPos(WorldPosition pos) {
+        return pos.getX() + "," + pos.getY();
     }
 
     @Override
@@ -122,21 +131,21 @@ public class DetectPlayers extends Task {
 
             // check if player is in the chompy hunting area
             if (CHOMPY_HUNTING_AREA.contains(otherPlayer)) {
-                String key = posKey(otherPlayer);
+                int key = posKey(otherPlayer);
 
                 // track if new player - set random threshold
                 if (!trackedPlayers.containsKey(key)) {
                     // randomize threshold between 7-12 seconds for this player
                     crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
                     trackedPlayers.put(key, new DetectedPlayer(otherPlayer));
-                    script.log(getClass(), "player entered hunting area: " + key + " (threshold: " + crashThresholdMs + "ms)");
+                    script.log(getClass(), "player entered hunting area: " + formatPos(otherPlayer) + " (threshold: " + crashThresholdMs + "ms)");
                 }
 
                 // check if player is crashing (lingering in our area)
                 DetectedPlayer tracked = trackedPlayers.get(key);
                 if (tracked.isCrashing(crashThresholdMs)) {
                     script.log(getClass(), "=== CRASH DETECTED ===");
-                    script.log(getClass(), "player at " + key + " in hunting area for " + tracked.getDuration() + "ms");
+                    script.log(getClass(), "player at " + formatPos(otherPlayer) + " in hunting area for " + tracked.getDuration() + "ms");
                     script.log(getClass(), "threshold: " + crashThresholdMs + "ms, exceeded by: " + (tracked.getDuration() - crashThresholdMs) + "ms");
                     crashDetected = true;
                     TidalsChompyHunter.task = "crash detected!";
@@ -153,7 +162,7 @@ public class DetectPlayers extends Task {
             long now = System.currentTimeMillis();
             if (now - lastLogTime >= 3000) {
                 for (DetectedPlayer player : trackedPlayers.values()) {
-                    script.log(getClass(), "tracking player at " + posKey(player.getPosition()) +
+                    script.log(getClass(), "tracking player at " + formatPos(player.getPosition()) +
                                " for " + player.getDuration() + "ms / " + crashThresholdMs + "ms");
                 }
                 lastLogTime = now;
@@ -172,7 +181,7 @@ public class DetectPlayers extends Task {
 
             // remove if outside hunting area
             if (!CHOMPY_HUNTING_AREA.contains(trackedPos)) {
-                script.log(getClass(), "player left hunting area at " + entry.getKey() + " after " +
+                script.log(getClass(), "player left hunting area at " + formatPos(trackedPos) + " after " +
                            entry.getValue().getDuration() + "ms (no crash triggered)");
                 return true;
             }
@@ -237,13 +246,13 @@ public class DetectPlayers extends Task {
 
             // skip self - our own dot can appear offset from reported position
             if (distance <= SELF_FILTER_DISTANCE) {
-                script.log(DetectPlayers.class, "  dot at " + posKey(otherPlayer) + " - likely self, skipping");
+                script.log(DetectPlayers.class, "  dot at " + formatPos(otherPlayer) + " - likely self, skipping");
                 continue;
             }
 
             // check if player is in the chompy hunting area
             if (CHOMPY_HUNTING_AREA.contains(otherPlayer)) {
-                script.log(DetectPlayers.class, "  dot at " + posKey(otherPlayer) + " - IN HUNTING AREA");
+                script.log(DetectPlayers.class, "  dot at " + formatPos(otherPlayer) + " - IN HUNTING AREA");
                 return true;
             }
         }

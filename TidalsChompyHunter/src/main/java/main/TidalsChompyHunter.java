@@ -102,6 +102,12 @@ public class TidalsChompyHunter extends Script {
     public static volatile boolean bellowsEmpty = false;
     public static volatile boolean toadAlreadyPlaced = false;
 
+    // performance: throttle onNewFrame operations (don't need 60 FPS)
+    private static final long CHAT_PARSE_INTERVAL_MS = 500;
+    private static final long PLAYER_DETECT_INTERVAL_MS = 500;
+    private long lastChatParseTime = 0;
+    private long lastPlayerDetectTime = 0;
+
     private List<Task> tasks;
     private DetectPlayers detectPlayers;
 
@@ -435,10 +441,18 @@ public class TidalsChompyHunter extends Script {
 
     @Override
     public void onNewFrame() {
-        updateChatBoxLines();
-        // run player detection (sets crashDetected flag for HopWorld task)
-        if (detectPlayers != null) {
+        long now = System.currentTimeMillis();
+
+        // throttle chat parsing to every 500ms (doesn't need 60 FPS)
+        if (now - lastChatParseTime >= CHAT_PARSE_INTERVAL_MS) {
+            updateChatBoxLines();
+            lastChatParseTime = now;
+        }
+
+        // throttle player detection to every 500ms (doesn't need 60 FPS)
+        if (detectPlayers != null && now - lastPlayerDetectTime >= PLAYER_DETECT_INTERVAL_MS) {
             detectPlayers.runDetection();
+            lastPlayerDetectTime = now;
         }
     }
 

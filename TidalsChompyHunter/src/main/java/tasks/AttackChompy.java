@@ -100,24 +100,36 @@ public class AttackChompy extends Task {
     // tracked chompies for spawn-order priority
     private static List<SpawnedChompy> trackedChompies = new ArrayList<>();
 
-    // positions to ignore (corpses we already checked) - uses string keys to avoid WorldPosition equality issues
+    // positions to ignore (corpses we already checked) - uses integer keys for performance
     private static final long IGNORE_DURATION_MS = 30000; // ignore for 30s
-    private static java.util.Map<String, Long> ignoredPositionTimestamps = new java.util.HashMap<>();
+    private static java.util.Map<Integer, Long> ignoredPositionTimestamps = new java.util.HashMap<>();
 
     // detection cooldown when only corpses found
     private static long lastNoChompyTime = 0;
     private static final long NO_CHOMPY_COOLDOWN_MS = 3000; // 3 second cooldown
+
+    // pixel cluster cache - avoids repeated expensive full-screen scans
+    private static final long CLUSTER_CACHE_TTL_MS = 300; // cache for 300ms
+    private static List<PixelCluster> cachedChompyClusters = null;
+    private static long cachedChompyClustersTime = 0;
 
     public AttackChompy(Script script) {
         super(script);
     }
 
     /**
-     * convert WorldPosition to string key for HashMap lookup
-     * avoids object identity issues with WorldPosition equality
+     * convert WorldPosition to integer key for HashMap lookup
+     * uses bit packing for performance - avoids string concatenation
      */
-    private static String posKey(WorldPosition pos) {
-        return pos.getX() + "," + pos.getY() + "," + pos.getPlane();
+    private static int posKey(WorldPosition pos) {
+        return (pos.getPlane() << 30) | ((pos.getY() & 0x7FFF) << 15) | (pos.getX() & 0x7FFF);
+    }
+
+    /**
+     * format position for logging (only used in log statements, not hot paths)
+     */
+    private static String formatPos(WorldPosition pos) {
+        return pos.getX() + "," + pos.getY();
     }
 
     @Override
@@ -842,12 +854,18 @@ public class AttackChompy extends Task {
     }
 
     /**
-     * find chompy using RGB pixel cluster detection
-     * iterates through clusters (largest first) until finding a non-ignored NPC
+     * get chompy pixel clusters, using cache if available and fresh
+     * reduces expensive full-screen scans when called multiple times in quick succession
      */
-    private WorldPosition findChompyByPixelCluster() {
-        script.log(getClass(), "[pixelScan] starting pixel cluster search...");
+    private List<PixelCluster> getChompyClustersCached() {
+        long now = System.currentTimeMillis();
 
+        // return cached if fresh
+        if (cachedChompyClusters != null && now - cachedChompyClustersTime < CLUSTER_CACHE_TTL_MS) {
+            return cachedChompyClusters;
+        }
+
+        // fresh scan
         PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
                 CHOMPY_CLUSTER_MAX_DISTANCE,
                 CHOMPY_CLUSTER_MIN_SIZE,
@@ -856,11 +874,24 @@ public class AttackChompy extends Task {
 
         PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(null, query);
         if (result == null) {
-            script.log(getClass(), "[pixelScan] findClusters returned null");
+            cachedChompyClusters = null;
+            cachedChompyClustersTime = now;
             return null;
         }
 
-        List<PixelCluster> clusters = result.getClusters();
+        cachedChompyClusters = result.getClusters();
+        cachedChompyClustersTime = now;
+        return cachedChompyClusters;
+    }
+
+    /**
+     * find chompy using RGB pixel cluster detection
+     * iterates through clusters (largest first) until finding a non-ignored NPC
+     */
+    private WorldPosition findChompyByPixelCluster() {
+        script.log(getClass(), "[pixelScan] starting pixel cluster search...");
+
+        List<PixelCluster> clusters = getChompyClustersCached();
         if (clusters == null || clusters.isEmpty()) {
             script.log(getClass(), "[pixelScan] no clusters found matching chompy color");
             return null;
@@ -904,7 +935,7 @@ public class AttackChompy extends Task {
         script.log(getClass(), "[pixelScan] " + nearbyNpcs.size() + " NPCs within " + SCAN_RANGE + " tiles");
         for (WorldPosition npc : nearbyNpcs) {
             String ignored = ignoredPositionTimestamps.containsKey(posKey(npc)) ? " [IGNORED]" : "";
-            script.log(getClass(), "[pixelScan]   NPC at " + npc.getX() + "," + npc.getY() +
+            script.log(getClass(), "[pixelScan]   NPC at " + formatPos(npc) +
                     " dist=" + (int)npc.distanceTo(playerPos) + ignored);
         }
 
@@ -986,8 +1017,25 @@ public class AttackChompy extends Task {
      * fast check for any chompy sprite on screen
      * used by other tasks to interrupt and yield to AttackChompy
      * does NOT do NPC matching or ignore checking - just raw pixel detection
+     * uses cluster cache to avoid repeated expensive scans
      */
     public static boolean hasVisibleChompySprite(Script script) {
+        List<PixelCluster> clusters = getChompyClustersCachedStatic(script);
+        return clusters != null && !clusters.isEmpty();
+    }
+
+    /**
+     * get chompy pixel clusters with caching (static version for interrupt checks)
+     */
+    private static List<PixelCluster> getChompyClustersCachedStatic(Script script) {
+        long now = System.currentTimeMillis();
+
+        // return cached if fresh
+        if (cachedChompyClusters != null && now - cachedChompyClustersTime < CLUSTER_CACHE_TTL_MS) {
+            return cachedChompyClusters;
+        }
+
+        // fresh scan
         PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
                 CHOMPY_CLUSTER_MAX_DISTANCE,
                 CHOMPY_CLUSTER_MIN_SIZE,
@@ -995,10 +1043,15 @@ public class AttackChompy extends Task {
         );
 
         PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(null, query);
-        if (result == null) return false;
+        if (result == null) {
+            cachedChompyClusters = null;
+            cachedChompyClustersTime = now;
+            return null;
+        }
 
-        List<PixelCluster> clusters = result.getClusters();
-        return clusters != null && !clusters.isEmpty();
+        cachedChompyClusters = result.getClusters();
+        cachedChompyClustersTime = now;
+        return cachedChompyClusters;
     }
 
     /**
@@ -1011,17 +1064,8 @@ public class AttackChompy extends Task {
         long now = System.currentTimeMillis();
         ignoredPositionTimestamps.entrySet().removeIf(e -> now - e.getValue() > IGNORE_DURATION_MS);
 
-        // find pixel clusters
-        PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
-                CHOMPY_CLUSTER_MAX_DISTANCE,
-                CHOMPY_CLUSTER_MIN_SIZE,
-                new SearchablePixel[]{CHOMPY_SPRITE}
-        );
-
-        PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(null, query);
-        if (result == null) return false;
-
-        List<PixelCluster> clusters = result.getClusters();
+        // use cached clusters
+        List<PixelCluster> clusters = getChompyClustersCachedStatic(script);
         if (clusters == null || clusters.isEmpty()) return false;
 
         // get NPC positions to match clusters
@@ -1208,6 +1252,10 @@ public class AttackChompy extends Task {
 
         // cooldown
         lastNoChompyTime = 0;
+
+        // clear cluster cache
+        cachedChompyClusters = null;
+        cachedChompyClustersTime = 0;
     }
 
     /**
