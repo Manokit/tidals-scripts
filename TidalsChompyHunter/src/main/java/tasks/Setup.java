@@ -121,11 +121,13 @@ public class Setup extends Task {
         if (!arrowCheck.isFound()) {
             errors.add("brutal arrows or ogre arrows equipped");
         } else {
-            // capture initial arrow count for tracking
+            // capture initial arrow count and item ID for BuffOverlay tracking
             ItemSearchResult arrowResult = arrowCheck.get();
             if (arrowResult != null) {
                 TidalsChompyHunter.initialArrowCount = arrowResult.getStackAmount();
-                script.log(getClass(), "initial arrow count: " + TidalsChompyHunter.initialArrowCount);
+                TidalsChompyHunter.equippedArrowId = arrowResult.getId();
+                script.log(getClass(), "initial arrow count: " + TidalsChompyHunter.initialArrowCount +
+                           ", item ID: " + TidalsChompyHunter.equippedArrowId);
             }
         }
 
@@ -177,6 +179,7 @@ public class Setup extends Task {
         // all validations passed
         script.log(getClass(), "Setup complete - all requirements verified");
         TidalsChompyHunter.setupComplete = true;
+
         return false;
     }
 

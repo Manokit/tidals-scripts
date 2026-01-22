@@ -5,6 +5,7 @@ import com.osmb.api.script.Script;
 import com.osmb.api.script.ScriptDefinition;
 import com.osmb.api.script.SkillCategory;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.ui.overlay.BuffOverlay;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
@@ -15,7 +16,6 @@ import tasks.DropToads;
 import tasks.FillBellows;
 import tasks.HopWorld;
 import tasks.InflateToads;
-import tasks.PrepareForHop;
 import tasks.Setup;
 import utils.Task;
 
@@ -57,12 +57,16 @@ public class TidalsChompyHunter extends Script {
     public static int initialArrowCount = 0;
     public static int currentArrowCount = -1;  // -1 = not yet checked, updated during idle
     public static volatile boolean outOfAmmo = false;
+    public static int equippedArrowId = -1;  // set by Setup, used for BuffOverlay
+    private BuffOverlay ammoOverlay = null;
+    private long ammoOverlayMissingStart = 0;  // track when overlay went missing
 
     // logical ground toad counter (tracks drops/kills instead of unreliable sprite detection)
     public static int groundToadCount = 0;
 
-    // track dropped toad positions (cleared when eaten by chompy)
-    public static List<WorldPosition> droppedToadPositions = new ArrayList<>();
+    // track dropped toad positions with timestamps (cleared when eaten by chompy or after 60s timeout)
+    public static java.util.Map<WorldPosition, Long> droppedToadPositions = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long TOAD_TIMEOUT_MS = 60_000;  // 60 seconds max lifetime
 
     // track chompy corpse positions (cleared when plucked or despawned)
     public static List<WorldPosition> corpsePositions = new ArrayList<>();
@@ -73,6 +77,9 @@ public class TidalsChompyHunter extends Script {
     public static String webhookUrl = "";
     public static boolean webhookIncludeUsername = true;
     public static int webhookIntervalMinutes = 5;
+
+    // anti-crash settings
+    public static boolean antiCrashEnabled = true;
 
     // periodic webhook tracking
     private static long lastWebhookSent = 0;
@@ -172,6 +179,67 @@ public class TidalsChompyHunter extends Script {
         return BANK_REGIONS;
     }
 
+    /**
+     * remove toads that have been on the ground longer than TOAD_TIMEOUT_MS
+     * prevents getting stuck waiting for toads that won't be eaten
+     */
+    public void cleanupStaleToads() {
+        if (droppedToadPositions.isEmpty()) return;
+
+        long now = System.currentTimeMillis();
+        int beforeCount = droppedToadPositions.size();
+
+        droppedToadPositions.entrySet().removeIf(entry -> {
+            long age = now - entry.getValue();
+            if (age > TOAD_TIMEOUT_MS) {
+                log(getClass(), "removing stale toad at " + entry.getKey() + " (age: " + (age / 1000) + "s)");
+                return true;
+            }
+            return false;
+        });
+
+        int removed = beforeCount - droppedToadPositions.size();
+        if (removed > 0) {
+            log(getClass(), "cleaned up " + removed + " stale toads");
+        }
+    }
+
+    /**
+     * block world hops until toads are drained from ground
+     * OSMB ProfileManager checks this before executing scheduled hops
+     */
+    @Override
+    public boolean canHopWorlds() {
+        // clean up stale toads first
+        cleanupStaleToads();
+
+        // allow hop if no toads on ground
+        if (droppedToadPositions.isEmpty()) {
+            return true;
+        }
+        // block hop - toads need to drain first
+        log(getClass(), "blocking hop - " + droppedToadPositions.size() + " toads on ground");
+        return false;
+    }
+
+    /**
+     * block breaks until toads are drained from ground
+     * OSMB ProfileManager checks this before executing scheduled breaks
+     */
+    @Override
+    public boolean canBreak() {
+        // clean up stale toads first
+        cleanupStaleToads();
+
+        // allow break if no toads on ground
+        if (droppedToadPositions.isEmpty()) {
+            return true;
+        }
+        // block break - toads need to drain first
+        log(getClass(), "blocking break - " + droppedToadPositions.size() + " toads on ground");
+        return false;
+    }
+
     @Override
     public void onStart() {
         log(getClass(), "Starting " + SCRIPT_NAME + " v" + SCRIPT_VERSION);
@@ -185,7 +253,6 @@ public class TidalsChompyHunter extends Script {
         detectPlayers = new DetectPlayers(this);
         tasks = Arrays.asList(
             new HopWorld(this),       // highest priority - crash response
-            new PrepareForHop(this),  // scheduled hop/break with toad drain
             new Setup(this),
             new AttackChompy(this),   // chompies interrupt everything else
             new FillBellows(this),
@@ -216,6 +283,11 @@ public class TidalsChompyHunter extends Script {
         // set waiting status when nothing to do
         if (!taskRan && setupComplete) {
             task = "waiting for chompies...";
+        }
+
+        // update ammo count via BuffOverlay (lightweight, no tab switching)
+        if (setupComplete) {
+            updateAmmoFromOverlay();
         }
 
         // check for milestone when kills change
@@ -466,10 +538,63 @@ public class TidalsChompyHunter extends Script {
         }
     }
 
+    /**
+     * update ammo count from BuffOverlay (lightweight, no tab switching)
+     * also detects out of ammo when overlay is missing for 10+ seconds
+     */
+    private void updateAmmoFromOverlay() {
+        // initialize overlay if we have arrow ID but no overlay yet
+        if (ammoOverlay == null && equippedArrowId > 0) {
+            ammoOverlay = new BuffOverlay(this, equippedArrowId);
+            log(getClass(), "ammo overlay initialized for item ID: " + equippedArrowId);
+        }
+
+        if (ammoOverlay == null) {
+            return;
+        }
+
+        if (ammoOverlay.isVisible()) {
+            // reset missing timer
+            ammoOverlayMissingStart = 0;
+
+            // parse ammo count from overlay text
+            String buffText = ammoOverlay.getBuffText();
+            if (buffText != null && !buffText.isEmpty()) {
+                try {
+                    String digits = buffText.replaceAll("\\D", "");
+                    if (!digits.isEmpty()) {
+                        int count = Integer.parseInt(digits);
+                        if (count != currentArrowCount) {
+                            currentArrowCount = count;
+                            // only log significant changes to reduce spam
+                            if (count < 100 || count % 50 == 0) {
+                                log(getClass(), "ammo count: " + count);
+                            }
+                        }
+                    }
+                } catch (NumberFormatException e) {
+                    // ignore parse errors
+                }
+            }
+        } else {
+            // overlay not visible - start tracking missing time
+            if (ammoOverlayMissingStart == 0) {
+                ammoOverlayMissingStart = System.currentTimeMillis();
+            }
+
+            // if missing for 10+ seconds, assume out of ammo
+            long missingTime = System.currentTimeMillis() - ammoOverlayMissingStart;
+            if (missingTime > 10000) {
+                log(getClass(), "ammo overlay missing for 10+ seconds - out of ammo");
+                outOfAmmo = true;
+            }
+        }
+    }
+
     @Override
     public void onPaint(Canvas c) {
         // draw tileCubes around tracked toad positions (green)
-        for (WorldPosition toadPos : droppedToadPositions) {
+        for (WorldPosition toadPos : droppedToadPositions.keySet()) {
             Polygon tileCube = getSceneProjector().getTileCube(toadPos, 30);
             if (tileCube != null) {
                 c.fillPolygon(tileCube, new Color(0, 255, 0, 50).getRGB(), 0.3);
@@ -528,8 +653,8 @@ public class TidalsChompyHunter extends Script {
         ensureLogoLoaded();
         int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        // calculate height: runtime, kills, total, next, arrows, separator, status, separator, version
-        int totalLines = 7;
+        // calculate height: runtime, kills, total, next, arrows, can hop, separator, status, separator, version
+        int totalLines = 8;
         int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 24 + 20;
         int innerHeight = Math.max(200, contentHeight);
 
@@ -584,6 +709,13 @@ public class TidalsChompyHunter extends Script {
         // color warning if low (under 100)
         int arrowColor = arrowsRemaining < 100 ? new Color(255, 100, 100).getRGB() : textMuted.getRGB();
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Arrows", arrowText, textMuted.getRGB(), arrowColor);
+        curY += lineGap;
+
+        // can hop status - shows if toads need to drain before scheduled hop/break
+        boolean canHop = droppedToadPositions.isEmpty();
+        String canHopText = canHop ? "Yes" : "No (" + droppedToadPositions.size() + " toads)";
+        int canHopColor = canHop ? new Color(100, 255, 100).getRGB() : new Color(255, 100, 100).getRGB();
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Can hop", canHopText, textMuted.getRGB(), canHopColor);
 
         // separator before status
         curY += lineGap - 4;

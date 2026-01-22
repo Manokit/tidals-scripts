@@ -1,5 +1,6 @@
 package tasks;
 
+import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.utils.UIResultList;
@@ -12,17 +13,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * detects nearby players and tracks how long they linger in detection radius
- * sets crashDetected flag when player exceeds threshold (crashing behavior)
+ * detects players in the chompy hunting area and triggers hop when occupied
+ * uses area-based detection instead of radius for more accurate crash detection
  */
 public class DetectPlayers extends Task {
 
-    // configurable settings (defaults match ScriptUI)
-    public static int detectionRadius = 9;  // tiles
-    public static long crashThresholdMs = 3000;  // 3 seconds
+    // chompy hunting area - covers the swamp where chompies spawn
+    private static final RectangleArea CHOMPY_HUNTING_AREA = new RectangleArea(2379, 3039, 25, 19, 0);
+
+    // crash threshold - random between 7-12 seconds (set on each new detection)
+    public static long crashThresholdMs = 7000;
+    private static final long MIN_THRESHOLD_MS = 7000;
+    private static final long MAX_THRESHOLD_MS = 12000;
+
+    // legacy setting kept for UI compatibility (not used in area-based detection)
+    public static int detectionRadius = 9;
 
     // self-detection filter - our own dot can appear offset from reported position
-    private static final int SELF_FILTER_DISTANCE = 5;
+    private static final int SELF_FILTER_DISTANCE = 3;
 
     // post-hop grace period - skip occupied check while OSMB stabilizes position
     private static final long POST_HOP_GRACE_MS = 5000;
@@ -62,6 +70,11 @@ public class DetectPlayers extends Task {
      * returns true if crash detected this frame
      */
     public boolean runDetection() {
+        // skip if anti-crash disabled in settings
+        if (!TidalsChompyHunter.antiCrashEnabled) {
+            return false;
+        }
+
         if (!TidalsChompyHunter.setupComplete) {
             return false;
         }
@@ -70,15 +83,15 @@ public class DetectPlayers extends Task {
             return false;
         }
 
-        // clean up stale entries (players who left radius)
-        cleanupStaleEntries(playerPos);
+        // clean up stale entries (players who left the hunting area)
+        cleanupStaleEntries();
 
         // get current player positions from minimap
         UIResultList<WorldPosition> result = script.getWidgetManager().getMinimap().getPlayerPositions();
         if (result == null || result.isNotFound()) {
             // no players detected
             if (!trackedPlayers.isEmpty()) {
-                script.log(getClass(), "all players left radius");
+                script.log(getClass(), "all players left hunting area");
                 trackedPlayers.clear();
             }
             return false;
@@ -88,42 +101,42 @@ public class DetectPlayers extends Task {
         if (playerPositions.isEmpty()) {
             // empty list - clear tracking
             if (!trackedPlayers.isEmpty()) {
-                script.log(getClass(), "all players left radius");
+                script.log(getClass(), "all players left hunting area");
                 trackedPlayers.clear();
             }
             return false;
         }
 
-        // track new players and check durations
+        // track players in the chompy hunting area
         for (WorldPosition otherPlayer : playerPositions) {
             // filter same plane only
             if (otherPlayer.getPlane() != playerPos.getPlane()) {
                 continue;
             }
 
-            // calculate distance
-            double distance = otherPlayer.distanceTo(playerPos);
-
             // skip self - our own dot can appear offset from reported position
+            double distance = otherPlayer.distanceTo(playerPos);
             if (distance <= SELF_FILTER_DISTANCE) {
                 continue;
             }
 
-            // check if in detection radius
-            if (distance <= detectionRadius) {
+            // check if player is in the chompy hunting area
+            if (CHOMPY_HUNTING_AREA.contains(otherPlayer)) {
                 String key = posKey(otherPlayer);
 
-                // track if new player
+                // track if new player - set random threshold
                 if (!trackedPlayers.containsKey(key)) {
+                    // randomize threshold between 7-12 seconds for this player
+                    crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
                     trackedPlayers.put(key, new DetectedPlayer(otherPlayer));
-                    script.log(getClass(), "player entered radius: " + key + " (distance: " + distance + ")");
+                    script.log(getClass(), "player entered hunting area: " + key + " (threshold: " + crashThresholdMs + "ms)");
                 }
 
-                // check if player is crashing (lingering)
+                // check if player is crashing (lingering in our area)
                 DetectedPlayer tracked = trackedPlayers.get(key);
                 if (tracked.isCrashing(crashThresholdMs)) {
                     script.log(getClass(), "=== CRASH DETECTED ===");
-                    script.log(getClass(), "player at " + key + " lingered for " + tracked.getDuration() + "ms");
+                    script.log(getClass(), "player at " + key + " in hunting area for " + tracked.getDuration() + "ms");
                     script.log(getClass(), "threshold: " + crashThresholdMs + "ms, exceeded by: " + (tracked.getDuration() - crashThresholdMs) + "ms");
                     crashDetected = true;
                     TidalsChompyHunter.task = "crash detected!";
@@ -134,7 +147,7 @@ public class DetectPlayers extends Task {
 
         // update status if tracking players
         if (!trackedPlayers.isEmpty()) {
-            TidalsChompyHunter.task = "monitoring " + trackedPlayers.size() + " nearby player(s)";
+            TidalsChompyHunter.task = "player in area...";
 
             // log player durations every 3 seconds to avoid spam
             long now = System.currentTimeMillis();
@@ -151,16 +164,15 @@ public class DetectPlayers extends Task {
     }
 
     /**
-     * remove players who left the detection radius
+     * remove players who left the chompy hunting area
      */
-    private void cleanupStaleEntries(WorldPosition playerPos) {
+    private void cleanupStaleEntries() {
         trackedPlayers.entrySet().removeIf(entry -> {
             WorldPosition trackedPos = entry.getValue().getPosition();
-            double distance = trackedPos.distanceTo(playerPos);
 
-            // remove if outside radius
-            if (distance > detectionRadius) {
-                script.log(getClass(), "player left radius at " + entry.getKey() + " after " +
+            // remove if outside hunting area
+            if (!CHOMPY_HUNTING_AREA.contains(trackedPos)) {
+                script.log(getClass(), "player left hunting area at " + entry.getKey() + " after " +
                            entry.getValue().getDuration() + "ms (no crash triggered)");
                 return true;
             }
@@ -177,14 +189,19 @@ public class DetectPlayers extends Task {
     }
 
     /**
-     * quick check for any players on minimap (white dots)
+     * quick check for any players in the chompy hunting area
      * used on startup/hop to immediately detect occupied world
-     * returns true if ANY other player is visible on minimap within radius
+     * returns true if ANY other player is in the hunting area
      *
      * @param script the script instance
-     * @param radius max distance to check (use large value like 50 for full minimap)
+     * @param radius ignored - kept for compatibility, uses area-based detection
      */
     public static boolean hasPlayersOnMinimap(Script script, int radius) {
+        // skip if anti-crash disabled in settings
+        if (!TidalsChompyHunter.antiCrashEnabled) {
+            return false;
+        }
+
         // skip check during post-hop grace period - position may not be stable yet
         long timeSinceHop = System.currentTimeMillis() - lastHopTimestamp;
         if (lastHopTimestamp > 0 && timeSinceHop < POST_HOP_GRACE_MS) {
@@ -208,9 +225,9 @@ public class DetectPlayers extends Task {
             return false;
         }
 
-        script.log(DetectPlayers.class, "checking " + playerPositions.size() + " minimap dots, our pos: " + posKey(playerPos));
+        script.log(DetectPlayers.class, "checking " + playerPositions.size() + " minimap dots for hunting area occupancy");
 
-        // check if any player dot is within radius (excluding self)
+        // check if any player dot is in the hunting area (excluding self)
         for (WorldPosition otherPlayer : playerPositions) {
             if (otherPlayer.getPlane() != playerPos.getPlane()) {
                 continue;
@@ -220,13 +237,13 @@ public class DetectPlayers extends Task {
 
             // skip self - our own dot can appear offset from reported position
             if (distance <= SELF_FILTER_DISTANCE) {
-                script.log(DetectPlayers.class, "  dot at " + posKey(otherPlayer) + " distance " + (int)distance + " - likely self, skipping");
+                script.log(DetectPlayers.class, "  dot at " + posKey(otherPlayer) + " - likely self, skipping");
                 continue;
             }
 
-            // any other player within specified radius = occupied world
-            if (distance <= radius) {
-                script.log(DetectPlayers.class, "  dot at " + posKey(otherPlayer) + " distance " + (int)distance + " - OTHER PLAYER");
+            // check if player is in the chompy hunting area
+            if (CHOMPY_HUNTING_AREA.contains(otherPlayer)) {
+                script.log(DetectPlayers.class, "  dot at " + posKey(otherPlayer) + " - IN HUNTING AREA");
                 return true;
             }
         }
@@ -235,10 +252,10 @@ public class DetectPlayers extends Task {
     }
 
     /**
-     * check for players using the configured detection radius
+     * check for players in the hunting area
      * (convenience method for runtime crash detection)
      */
     public static boolean hasPlayersOnMinimap(Script script) {
-        return hasPlayersOnMinimap(script, detectionRadius);
+        return hasPlayersOnMinimap(script, 0);  // radius ignored, uses area-based
     }
 }

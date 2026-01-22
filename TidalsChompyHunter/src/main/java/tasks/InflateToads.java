@@ -66,8 +66,8 @@ public class InflateToads extends Task {
             return false;
         }
 
-        // don't place toads when hop/break is pending - let them drain
-        if (PrepareForHop.hopPending) {
+        // don't inflate new toads when hop/break is due - let ground drain
+        if (script.getProfileManager().isDueToHop() || script.getProfileManager().isDueToBreak()) {
             return false;
         }
 

@@ -177,48 +177,10 @@ public class AttackChompy extends Task {
             return true;
         }
 
-        // no valid chompy found - set cooldown and refresh arrow count
+        // no valid chompy found - set cooldown (ammo updated via BuffOverlay in main script)
         script.log(getClass(), "[activate] no chompy found, entering " + NO_CHOMPY_COOLDOWN_MS + "ms cooldown");
         lastNoChompyTime = System.currentTimeMillis();
-        refreshArrowCount();
         return false;
-    }
-
-    /**
-     * refresh arrow count from equipment during idle time
-     * opens equipment tab, reads arrow stack, updates currentArrowCount
-     */
-    private void refreshArrowCount() {
-        // open equipment tab
-        script.getWidgetManager().getTabManager().openTab(com.osmb.api.ui.tabs.Tab.Type.EQUIPMENT);
-        script.submitTask(() -> false, script.random(200, 300));
-
-        // search for any valid arrow type
-        com.osmb.api.utils.UIResult<com.osmb.api.item.ItemSearchResult> arrowCheck =
-            script.getWidgetManager().getEquipment().findItem(new int[]{
-                2866,  // ogre arrow
-                4773,  // bronze brutal
-                4778,  // iron brutal
-                4783,  // steel brutal
-                4788,  // black brutal
-                4793,  // mithril brutal
-                4798,  // adamant brutal
-                4803   // rune brutal
-            });
-
-        if (arrowCheck.isFound()) {
-            com.osmb.api.item.ItemSearchResult result = arrowCheck.get();
-            if (result != null) {
-                int count = result.getStackAmount();
-                if (count != TidalsChompyHunter.currentArrowCount) {
-                    script.log(getClass(), "arrow count updated: " + count);
-                    TidalsChompyHunter.currentArrowCount = count;
-                }
-            }
-        }
-
-        // return to inventory tab
-        script.getWidgetManager().getTabManager().openTab(com.osmb.api.ui.tabs.Tab.Type.INVENTORY);
     }
 
     /**
@@ -406,7 +368,7 @@ public class AttackChompy extends Task {
 
         // check each position and collect ones to remove
         List<WorldPosition> toRemove = new ArrayList<>();
-        for (WorldPosition toadPos : TidalsChompyHunter.droppedToadPositions) {
+        for (WorldPosition toadPos : TidalsChompyHunter.droppedToadPositions.keySet()) {
             if (!isToadVisibleAt(script, toadPos)) {
                 toRemove.add(toadPos);
                 script.log(AttackChompy.class, "toad gone at " + toadPos.getX() + "," + toadPos.getY());
@@ -414,7 +376,9 @@ public class AttackChompy extends Task {
         }
 
         // remove all gone positions
-        TidalsChompyHunter.droppedToadPositions.removeAll(toRemove);
+        for (WorldPosition pos : toRemove) {
+            TidalsChompyHunter.droppedToadPositions.remove(pos);
+        }
 
         if (!toRemove.isEmpty()) {
             script.log(AttackChompy.class, "verified toads: " + toRemove.size() + " removed, " +

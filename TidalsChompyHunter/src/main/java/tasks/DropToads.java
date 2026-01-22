@@ -52,8 +52,8 @@ public class DropToads extends Task {
             return false;
         }
 
-        // don't place toads when hop/break is pending - let them drain
-        if (PrepareForHop.hopPending) {
+        // don't place new toads when hop/break is due - let them drain
+        if (script.getProfileManager().isDueToHop() || script.getProfileManager().isDueToBreak()) {
             return false;
         }
 
@@ -122,9 +122,9 @@ public class DropToads extends Task {
                     continue;  // retry drop without incrementing dropped
                 }
 
-                // no collision - NOW track the position
+                // no collision - NOW track the position with timestamp
                 if (lastDropPosition != null) {
-                    TidalsChompyHunter.droppedToadPositions.add(lastDropPosition);
+                    TidalsChompyHunter.droppedToadPositions.put(lastDropPosition, System.currentTimeMillis());
                     script.log(getClass(), "tracking toad at " + lastDropPosition.getX() + "," + lastDropPosition.getY() +
                             " (" + TidalsChompyHunter.droppedToadPositions.size() + " tracked)");
                 }
