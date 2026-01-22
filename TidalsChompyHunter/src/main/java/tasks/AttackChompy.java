@@ -566,7 +566,8 @@ public class AttackChompy extends Task {
 
                 // detect corpse position NOW via pixel cluster - chompy moved during combat
                 // must scan immediately while sprite is still visible at death location
-                WorldPosition corpsePos = findCorpseAtDeath();
+                // pass killPosition to find cluster nearest to where we were attacking
+                WorldPosition corpsePos = findCorpseAtDeath(killPosition);
                 if (corpsePos != null) {
                     TidalsChompyHunter.corpsePositions.add(corpsePos);
                     script.log(getClass(), "tracking corpse at death position " + corpsePos.getX() + "," + corpsePos.getY() +
@@ -599,10 +600,15 @@ public class AttackChompy extends Task {
     /**
      * find corpse position at moment of death using pixel cluster detection
      * called immediately when HP hits 0 to capture actual death location
-     * does NOT filter ignored positions - we want the fresh corpse
+     * uses attackPosition to find the cluster closest to where we were attacking
      */
-    private WorldPosition findCorpseAtDeath() {
-        script.log(getClass(), "[corpseDetect] scanning for corpse sprite...");
+    private WorldPosition findCorpseAtDeath(WorldPosition attackPosition) {
+        script.log(getClass(), "[corpseDetect] scanning for corpse sprite near attack position...");
+
+        if (attackPosition == null) {
+            script.log(getClass(), "[corpseDetect] no attack position provided");
+            return null;
+        }
 
         PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
                 CHOMPY_CLUSTER_MAX_DISTANCE,
@@ -624,6 +630,42 @@ public class AttackChompy extends Task {
 
         script.log(getClass(), "[corpseDetect] found " + clusters.size() + " sprite clusters");
 
+        // get screen position of where we were attacking
+        Polygon attackTileCube = script.getSceneProjector().getTileCube(attackPosition, TILE_CUBE_HEIGHT);
+        if (attackTileCube == null) {
+            script.log(getClass(), "[corpseDetect] could not project attack position to screen");
+            return null;
+        }
+        Rectangle attackBounds = attackTileCube.getBounds();
+        int attackScreenX = attackBounds.x + attackBounds.width / 2;
+        int attackScreenY = attackBounds.y + attackBounds.height / 2;
+        script.log(getClass(), "[corpseDetect] attack position screen(" + attackScreenX + "," + attackScreenY + ")");
+
+        // find the cluster closest to where we were attacking (not largest)
+        PixelCluster closestCluster = null;
+        double closestClusterDist = Double.MAX_VALUE;
+
+        for (PixelCluster cluster : clusters) {
+            Rectangle bounds = cluster.getBounds();
+            int clusterX = bounds.x + bounds.width / 2;
+            int clusterY = bounds.y + bounds.height / 2;
+            double dist = Math.sqrt(Math.pow(clusterX - attackScreenX, 2) + Math.pow(clusterY - attackScreenY, 2));
+
+            if (dist < closestClusterDist) {
+                closestClusterDist = dist;
+                closestCluster = cluster;
+            }
+        }
+
+        if (closestCluster == null) {
+            return null;
+        }
+
+        Rectangle bounds = closestCluster.getBounds();
+        Point screenCenter = new Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        script.log(getClass(), "[corpseDetect] closest cluster at screen(" + screenCenter.x + "," + screenCenter.y +
+                ") dist=" + (int)closestClusterDist + " size=" + closestCluster.getPoints().size());
+
         // get NPC positions from minimap
         UIResultList<WorldPosition> npcPositions = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcPositions == null || npcPositions.isNotFound()) {
@@ -637,21 +679,7 @@ public class AttackChompy extends Task {
             return null;
         }
 
-        // find the largest cluster (most likely to be the corpse we just killed)
-        PixelCluster largestCluster = clusters.stream()
-                .max(Comparator.comparingInt(c -> c.getPoints().size()))
-                .orElse(null);
-
-        if (largestCluster == null) {
-            return null;
-        }
-
-        Rectangle bounds = largestCluster.getBounds();
-        Point screenCenter = new Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-        script.log(getClass(), "[corpseDetect] largest cluster at screen(" + screenCenter.x + "," + screenCenter.y +
-                ") size=" + largestCluster.getPoints().size());
-
-        // match to nearest NPC position (no ignore filtering - we want the corpse)
+        // match to nearest NPC position
         WorldPosition closestNpc = null;
         double closestDistance = 50; // max screen distance
 

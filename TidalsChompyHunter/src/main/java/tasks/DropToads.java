@@ -133,10 +133,10 @@ public class DropToads extends Task {
                 TidalsChompyHunter.groundToadCount++;
                 script.log(getClass(), "dropped toad " + dropped + "/" + toDrop + " (ground count: " + TidalsChompyHunter.groundToadCount + ")");
 
-                // move to new position after each successful drop to prevent stacking
-                // visual detection counts clusters, stacked toads = 1 cluster
+                // wait for game to auto-move player after drop (creates straight line of toads)
                 if (dropped < toDrop) {
-                    walkToNewPosition();
+                    script.log(getClass(), "waiting for auto-move...");
+                    script.submitTask(() -> false, script.random(1800, 2200));
                 }
             } else {
                 script.log(getClass(), "failed to drop toad");
