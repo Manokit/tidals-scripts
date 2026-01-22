@@ -697,7 +697,24 @@ if (response != null && response.getAction().contains("Pick")) {
 
 → **See `docs/walking-npcs.md` for interaction patterns**
 
-### 5. State Machine Pattern
+### 5. Screen Edge Bounds - tap() Fails Near Edges
+```java
+// WRONG - pixel cluster at y=693 with 30x30 click area goes off 700px screen
+Point clickPoint = new Point(x, 693);
+Rectangle clickArea = new Rectangle(clickPoint.x - 15, clickPoint.y - 15, 30, 30);
+script.getFinger().tap(clickArea, "Inflate");  // ArrayIndexOutOfBoundsException!
+
+// CORRECT - filter out points too close to screen edges
+private static final int SCREEN_EDGE_MARGIN = 25;
+
+if (clickPoint.x < SCREEN_EDGE_MARGIN || clickPoint.y < SCREEN_EDGE_MARGIN ||
+    clickPoint.x > 750 - SCREEN_EDGE_MARGIN || clickPoint.y > 700 - SCREEN_EDGE_MARGIN) {
+    continue;  // skip this target
+}
+```
+**Rule: When using pixel clusters or screen coordinates, always validate bounds before tapping. Screen is approximately 750x700.**
+
+### 6. State Machine Pattern
 ```java
 private enum State { IDLE, GATHERING, BANKING, WALKING }
 
@@ -713,7 +730,7 @@ public int poll() {
 }
 ```
 
-### 6. Prioritize Regions for Fast Startup
+### 7. Prioritize Regions for Fast Startup
 ```java
 @Override
 public ScriptOptions getScriptOptions() {
@@ -726,7 +743,7 @@ public ScriptOptions getScriptOptions() {
 }
 ```
 
-### 7. Menu Interaction Retry Pattern (ALWAYS USE THIS)
+### 8. Menu Interaction Retry Pattern (ALWAYS USE THIS)
 **CRITICAL**: Menu interactions can fail due to timing, camera angle, or misclicks. ALWAYS retry menu interactions up to 10 times unless speed is explicitly critical.
 
 ```java
