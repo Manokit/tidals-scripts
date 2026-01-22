@@ -91,6 +91,10 @@ public class AttackChompy extends Task {
     public static boolean inCombat = false;
     public static WorldPosition currentChompyPosition = null;
 
+    // combat timeout - safety valve for stuck combat state
+    private static final long COMBAT_TIMEOUT_MS = 30000; // 30 seconds max
+    private static long combatStartTime = 0;
+
     // kill detection via chat message (set by main script onNewFrame)
     public static volatile boolean killDetected = false;
 
@@ -139,10 +143,19 @@ public class AttackChompy extends Task {
             return false;
         }
 
-        // don't activate if already in combat
+        // don't activate if already in combat (with timeout safety valve)
         if (inCombat) {
-            script.log(getClass(), "[activate] skipping - already in combat");
-            return false;
+            // safety valve: if combat has lasted more than 30s, something is stuck
+            long combatDuration = System.currentTimeMillis() - combatStartTime;
+            if (combatDuration > COMBAT_TIMEOUT_MS) {
+                script.log(getClass(), "[activate] STUCK STATE DETECTED - combat timeout exceeded (" + combatDuration + "ms) - resetting");
+                inCombat = false;
+                currentChompyPosition = null;
+                // continue to normal activation
+            } else {
+                script.log(getClass(), "[activate] skipping - already in combat (" + (combatDuration / 1000) + "s)");
+                return false;
+            }
         }
 
         // cooldown after finding no chompies (all corpses)
@@ -288,54 +301,60 @@ public class AttackChompy extends Task {
             return true;
         }
 
-        // attack sent - wait for combat confirmation (health overlay becomes visible)
+        // attack sent - enter combat state with guaranteed cleanup
         inCombat = true;
-        TidalsChompyHunter.task = "engaging chompy";
-        script.log(getClass(), "[execute] attack sent - waiting up to 3s for combat confirmation via health overlay...");
+        combatStartTime = System.currentTimeMillis();
 
-        HealthOverlay healthOverlay = new HealthOverlay(script);
+        try {
+            TidalsChompyHunter.task = "engaging chompy";
+            script.log(getClass(), "[execute] attack sent - waiting up to 3s for combat confirmation via health overlay...");
 
-        // wait for health overlay to appear (confirms combat started)
-        long combatWaitStart = System.currentTimeMillis();
-        boolean combatStarted = script.pollFramesUntil(() -> {
-            boolean visible = healthOverlay.isVisible();
-            Integer hp = getHealthOverlayHitpoints(healthOverlay);
-            if (visible && hp != null && hp > 0) {
+            HealthOverlay healthOverlay = new HealthOverlay(script);
+
+            // wait for health overlay to appear (confirms combat started)
+            long combatWaitStart = System.currentTimeMillis();
+            boolean combatStarted = script.pollFramesUntil(() -> {
+                boolean visible = healthOverlay.isVisible();
+                Integer hp = getHealthOverlayHitpoints(healthOverlay);
+                if (visible && hp != null && hp > 0) {
+                    return true;
+                }
+                return false;
+            }, 3000);
+            long combatWaitTime = System.currentTimeMillis() - combatWaitStart;
+
+            if (!combatStarted) {
+                // attack failed to connect - don't count kill, reset and retry
+                script.log(getClass(), "[execute] COMBAT NOT CONFIRMED after " + combatWaitTime + "ms - overlay never showed HP > 0");
+                script.log(getClass(), "[execute] attack likely missed or target was invalid/moved");
                 return true;
             }
-            return false;
-        }, 3000);
-        long combatWaitTime = System.currentTimeMillis() - combatWaitStart;
 
-        if (!combatStarted) {
-            // attack failed to connect - don't count kill, reset and retry
-            script.log(getClass(), "[execute] COMBAT NOT CONFIRMED after " + combatWaitTime + "ms - overlay never showed HP > 0");
-            script.log(getClass(), "[execute] attack likely missed or target was invalid/moved");
+            Integer initialHP = getHealthOverlayHitpoints(healthOverlay);
+            script.log(getClass(), "[execute] COMBAT CONFIRMED after " + combatWaitTime + "ms - chompy HP: " + initialHP);
+            TidalsChompyHunter.task = "killing chompy";
+            script.log(getClass(), "[execute] waiting for kill (timeout: " + KILL_CONFIRMATION_TIMEOUT_MS + "ms)...");
+
+            boolean killed = waitForKillConfirmation(healthOverlay);
+            if (killed) {
+                script.log(getClass(), "[execute] === KILL CONFIRMED ===");
+            } else {
+                script.log(getClass(), "[execute] kill timed out or failed - combat state will be reset");
+            }
+
+            // pluck tracked corpses when no live chompies remain
+            if (TidalsChompyHunter.pluckingEnabled && !TidalsChompyHunter.corpsePositions.isEmpty()) {
+                if (!hasLiveChompy(script)) {
+                    script.log(getClass(), "[execute] no live chompies - plucking " + TidalsChompyHunter.corpsePositions.size() + " corpse(s)");
+                    pluckAllTrackedCorpses();
+                } else {
+                    script.log(getClass(), "[execute] live chompy detected - deferring pluck");
+                }
+            }
+        } finally {
+            // GUARANTEED cleanup - prevents stuck inCombat state
             inCombat = false;
             currentChompyPosition = null;
-            return true;
-        }
-
-        Integer initialHP = getHealthOverlayHitpoints(healthOverlay);
-        script.log(getClass(), "[execute] COMBAT CONFIRMED after " + combatWaitTime + "ms - chompy HP: " + initialHP);
-        TidalsChompyHunter.task = "killing chompy";
-        script.log(getClass(), "[execute] waiting for kill (timeout: " + KILL_CONFIRMATION_TIMEOUT_MS + "ms)...");
-
-        boolean killed = waitForKillConfirmation(healthOverlay);
-        if (killed) {
-            script.log(getClass(), "[execute] === KILL CONFIRMED ===");
-        } else {
-            script.log(getClass(), "[execute] kill timed out or failed - combat state will be reset");
-        }
-
-        // pluck tracked corpses when no live chompies remain
-        if (TidalsChompyHunter.pluckingEnabled && !TidalsChompyHunter.corpsePositions.isEmpty()) {
-            if (!hasLiveChompy(script)) {
-                script.log(getClass(), "[execute] no live chompies - plucking " + TidalsChompyHunter.corpsePositions.size() + " corpse(s)");
-                pluckAllTrackedCorpses();
-            } else {
-                script.log(getClass(), "[execute] live chompy detected - deferring pluck");
-            }
         }
 
         script.log(getClass(), "[execute] === CHOMPY HUNT CYCLE END ===");
@@ -1233,6 +1252,7 @@ public class AttackChompy extends Task {
     public static void resetCombatState() {
         inCombat = false;
         currentChompyPosition = null;
+        combatStartTime = 0;
     }
 
     /**
@@ -1243,6 +1263,7 @@ public class AttackChompy extends Task {
         // combat state
         inCombat = false;
         currentChompyPosition = null;
+        combatStartTime = 0;
         killDetected = false;
         pluckStarted = false;
 

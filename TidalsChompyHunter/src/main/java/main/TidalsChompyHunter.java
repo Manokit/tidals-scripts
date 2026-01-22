@@ -26,22 +26,34 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 @ScriptDefinition(
         name = "TidalsChompyHunter",
         description = "Hunts chompy birds for Western Provinces Diary",
         skillCategory = SkillCategory.COMBAT,
-        version = 1.1,
+        version = 1.2,
         author = "Tidaleus"
 )
 public class TidalsChompyHunter extends Script {
-    public static final String SCRIPT_VERSION = "1.1";
+    public static final String SCRIPT_VERSION = "1.2";
     private static final String SCRIPT_NAME = "ChompyHunter";
+    private static final String SESSION_ID = UUID.randomUUID().toString();
+
+    // stats reporting
+    private static long lastStatsSent = 0;
+    private static final long STATS_INTERVAL_MS = 600_000L; // 10 minutes
+    private static int lastSentKillCount = 0;
+    private static long lastSentRuntime = 0;
 
     // state
     public static boolean setupComplete = false;
@@ -310,6 +322,25 @@ public class TidalsChompyHunter extends Script {
             } else if (now - lastWebhookSent >= webhookIntervalMinutes * 60_000L) {
                 sendPeriodicWebhookAsync();
                 lastWebhookSent = now;
+            }
+        }
+
+        // dashboard stats reporting (every 10 minutes after setup)
+        if (setupComplete) {
+            long nowMs = System.currentTimeMillis();
+            if (nowMs - lastStatsSent >= STATS_INTERVAL_MS) {
+                long elapsed = nowMs - startTime;
+
+                // calculate increments since last send
+                int killIncrement = killCount - lastSentKillCount;
+                long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
+
+                sendStats(killIncrement, runtimeIncrement);
+
+                // update last sent values
+                lastSentKillCount = killCount;
+                lastSentRuntime = elapsed / 1000;
+                lastStatsSent = nowMs;
             }
         }
 
@@ -824,6 +855,53 @@ public class TidalsChompyHunter extends Script {
             logoImage = new Image(px, w, h);
         } catch (Exception e) {
             log(getClass(), "error loading logo: " + e.getMessage());
+        }
+    }
+
+    /**
+     * send stats to dashboard API (incremental values)
+     */
+    private void sendStats(int killIncrement, long runtimeSecs) {
+        try {
+            // only send if Secrets are configured
+            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
+                return;
+            }
+
+            // skip if nothing to report
+            if (killIncrement == 0 && runtimeSecs == 0) {
+                return;
+            }
+
+            String json = String.format(
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":0,\"runtime\":%d,\"chompyKills\":%d}",
+                    SCRIPT_NAME,
+                    SESSION_ID,
+                    runtimeSecs,
+                    killIncrement
+            );
+
+            URL url = new URL(obf.Secrets.STATS_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                log(getClass(), "stats reported: kills=" + killIncrement + ", runtime=" + runtimeSecs + "s");
+            } else {
+                log(getClass(), "stats failed: HTTP " + code);
+            }
+        } catch (Exception e) {
+            log(getClass(), "stats error: " + e.getClass().getSimpleName());
         }
     }
 }

@@ -94,6 +94,11 @@ Any additional fields beyond the required ones are stored as metadata and aggreg
 | `magicXp` | int | Magic XP gained this interval |
 | `smithingXp` | int | Smithing XP gained this interval |
 
+### TidalsChompyHunter
+| Field | Type | Description |
+|-------|------|-------------|
+| `chompyKills` | int | Chompy birds killed this interval |
+
 ## Complete Implementation Example
 
 ### 1. Create Secrets.java
