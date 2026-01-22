@@ -82,9 +82,9 @@ public class TidalsGemCutter extends Script {
     public static int currentLevel = 1;
     public static int startLevel = 0;  // Initialize to 0 so it gets set correctly in onPaint()
 
-    // Clean, modern fonts
-    private static final Font FONT_LABEL       = new Font("Arial", Font.PLAIN, 12);
-    private static final Font FONT_VALUE_BOLD  = new Font("Arial", Font.BOLD, 12);
+    // fonts
+    private static final Font FONT_LABEL = new Font("Arial", Font.BOLD, 12);
+    private static final Font FONT_VALUE = new Font("Arial", Font.BOLD, 12);
 
     private final XPTracking xpTracking;
     private int xpGained = 0;
@@ -364,26 +364,23 @@ public class TidalsGemCutter extends Script {
         sym.setGroupingSeparator('.');
         intFmt.setDecimalFormatSymbols(sym);
 
-        // colors
-        final Color oceanDeep = new Color(15, 52, 96);
-        final Color turquoise = new Color(64, 224, 208);
-        final Color seafoamGreen = new Color(152, 251, 152);
-        final Color oceanAccent = new Color(100, 149, 237);
+        // colors - dark teal theme with gold accents
+        final Color bgColor = new Color(22, 49, 52);             // #163134 - dark teal background
+        final Color borderColor = new Color(40, 75, 80);         // lighter teal border
+        final Color accentGold = new Color(255, 215, 0);         // gold accent
+        final Color textLight = new Color(238, 237, 233);        // #eeede9 - off-white text
+        final Color textMuted = new Color(170, 185, 185);        // muted teal-gray for labels
+        final Color valueGreen = new Color(180, 230, 150);       // soft green for positive values
 
         // layout
         final int x = 5;
         final int baseY = 40;
-        final int width = 260;
+        final int width = 220;
         final int borderThickness = 2;
         final int paddingX = 10;
         final int topGap = 6;
         final int lineGap = 16;
         final int logoBottomGap = 8;
-
-        final int labelColor = turquoise.getRGB();
-        final int valueWhite = Color.WHITE.getRGB();
-        final int valueGreen = seafoamGreen.getRGB();
-        final int valueBlue = oceanAccent.getRGB();
 
         int innerX = x;
         int innerY = baseY;
@@ -393,59 +390,59 @@ public class TidalsGemCutter extends Script {
         int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
         int totalLines = 11;
-        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + 10;
-        int innerHeight = Math.max(230, contentHeight);
+        int separatorCount = 3;
+        int separatorOverhead = separatorCount * 12;
+        int bottomPadding = 1;
+        int contentHeight = topGap + logoHeight + (totalLines * lineGap) + separatorOverhead + bottomPadding;
+        int innerHeight = Math.max(200, contentHeight);
 
+        // outer border
         c.fillRect(innerX - borderThickness, innerY - borderThickness,
                 innerWidth + (borderThickness * 2),
                 innerHeight + (borderThickness * 2),
-                Color.WHITE.getRGB(), 1);
-        c.fillRect(innerX, innerY, innerWidth, innerHeight, oceanDeep.getRGB(), 1);
-        c.drawRect(innerX, innerY, innerWidth, innerHeight, Color.WHITE.getRGB());
+                borderColor.getRGB(), 1);
+
+        // main background
+        c.fillRect(innerX, innerY, innerWidth, innerHeight, bgColor.getRGB(), 1);
+        c.drawRect(innerX, innerY, innerWidth, innerHeight, borderColor.getRGB());
 
         int curY = innerY + topGap;
 
+        // draw logo centered
         if (logoImage != null) {
             int logoX = innerX + (innerWidth - logoImage.width) / 2;
             c.drawAtOn(logoImage, logoX, curY);
             curY += logoImage.height + logoBottomGap;
         }
 
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Runtime", runtime, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        // gold separator after logo
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, accentGold.getRGB(), 1);
+        curY += 16;
+
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Runtime", runtime, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "XP gained", intFmt.format(xpGainedInt), labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "XP gained", intFmt.format(xpGainedInt), textMuted.getRGB(), valueGreen.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "XP/hr", intFmt.format(xpPerHour), labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "XP/hr", intFmt.format(xpPerHour), textMuted.getRGB(), accentGold.getRGB());
 
         curY += lineGap;
         String etlText = (currentLevel >= 99) ? "MAXED" : intFmt.format(Math.round(etl));
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "ETL", etlText, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "ETL", etlText, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "TTL", ttlText, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "TTL", ttlText, textMuted.getRGB(), textLight.getRGB());
+
+        // separator before level section
+        curY += lineGap - 4;
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
+        curY += 16;
+
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Level", currentLevelText, textMuted.getRGB(), textLight.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Level progress", levelProgressText, labelColor, valueGreen,
-                FONT_VALUE_BOLD, FONT_LABEL);
-
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Current level", currentLevelText, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Progress", levelProgressText, textMuted.getRGB(), valueGreen.getRGB());
 
         curY += lineGap;
         String itemName;
@@ -457,38 +454,33 @@ public class TidalsGemCutter extends Script {
             itemName = getItemManager().getItemName(selectedUncutGemID).replace("Uncut ", "");
             itemLabel = "Gem type";
         }
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                itemLabel, itemName, labelColor, valueBlue,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, itemLabel, itemName, textMuted.getRGB(), accentGold.getRGB());
 
         curY += lineGap;
         int itemsPerHour = (int) Math.round(craftCount / hours);
         String itemsCraftedText = intFmt.format(craftCount) + " (" + intFmt.format(itemsPerHour) + "/hr)";
         String craftLabel = makeBoltTips ? "Tips made" : "Gems cut";
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                craftLabel, itemsCraftedText, labelColor, valueGreen,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, craftLabel, itemsCraftedText, textMuted.getRGB(), valueGreen.getRGB());
 
         curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Task", String.valueOf(task), labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Task", String.valueOf(task), textMuted.getRGB(), textLight.getRGB());
 
-        curY += lineGap;
-        drawStatLine(c, innerX, innerWidth, paddingX, curY,
-                "Version", scriptVersion, labelColor, valueWhite,
-                FONT_VALUE_BOLD, FONT_LABEL);
+        // separator before version
+        curY += lineGap - 4;
+        c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
+        curY += 16;
+
+        drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, textMuted.getRGB(), textMuted.getRGB());
 
         try { lastCanvasFrame.set(c.toImageCopy()); } catch (Exception ignored) {}
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
-                              String label, String value, int labelColor, int valueColor,
-                              Font labelFont, Font valueFont) {
-        c.drawText(label, innerX + paddingX, y, labelColor, labelFont);
-        int valW = c.getFontMetrics(valueFont).stringWidth(value);
+                              String label, String value, int labelColor, int valueColor) {
+        c.drawText(label, innerX + paddingX, y, labelColor, FONT_LABEL);
+        int valW = c.getFontMetrics(FONT_VALUE).stringWidth(value);
         int valX = innerX + innerWidth - paddingX - valW;
-        c.drawText(value, valX, y, valueColor, valueFont);
+        c.drawText(value, valX, y, valueColor, FONT_VALUE);
     }
 
     private void ensureLogoLoaded() {
