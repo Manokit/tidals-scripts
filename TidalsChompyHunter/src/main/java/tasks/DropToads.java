@@ -47,6 +47,11 @@ public class DropToads extends Task {
 
     @Override
     public boolean activate() {
+        // CRITICAL: don't activate if crash detected - let HopWorld handle it
+        if (DetectPlayers.crashDetected) {
+            return false;
+        }
+
         // only activate after setup is complete
         if (!TidalsChompyHunter.setupComplete) {
             return false;
@@ -78,6 +83,12 @@ public class DropToads extends Task {
 
     @Override
     public boolean execute() {
+        // CRITICAL: abort immediately if crash detected
+        if (DetectPlayers.crashDetected) {
+            script.log(getClass(), "ABORTING - crash detected, yielding to HopWorld");
+            return false;
+        }
+
         TidalsChompyHunter.task = "dropping toads";
 
         // walk to drop area first
@@ -102,10 +113,24 @@ public class DropToads extends Task {
         int retries = 0;
 
         while (dropped < toDrop && countBloatedToads() > 0 && retries < maxRetries) {
+            // CRITICAL: abort if crash detected
+            if (DetectPlayers.crashDetected) {
+                script.log(getClass(), "crash detected - stopping drops, yielding to HopWorld");
+                return false;
+            }
+
             // INTERRUPT: check for live chompy spawn before each drop (filters out corpses)
             if (AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - stopping drops to attack");
                 break;  // exit loop, return true below
+            }
+
+            // check if next drop position has a corpse - move away first
+            if (isNextDropPositionBlocked()) {
+                script.log(getClass(), "corpse at next drop position - moving to new location");
+                walkToNewPosition();
+                retries++;
+                continue;
             }
 
             // reset collision flag before drop attempt
@@ -136,7 +161,7 @@ public class DropToads extends Task {
                 // wait for game to auto-move player after drop (creates straight line of toads)
                 if (dropped < toDrop) {
                     script.log(getClass(), "waiting for auto-move...");
-                    script.submitTask(() -> false, script.random(1800, 2200));
+                    script.submitTask(() -> false, script.random(900, 1100));
                 }
             } else {
                 script.log(getClass(), "failed to drop toad");
@@ -188,6 +213,36 @@ public class DropToads extends Task {
                 " (target was " + target.getX() + "," + target.getY() + ")");
 
         return arrived;
+    }
+
+    /**
+     * check if the next toad drop position has a known dead chompy
+     * player drops toad 1 tile east, so check (player.x + 1, player.y)
+     * @return true if corpse blocking, false if clear to drop
+     */
+    private boolean isNextDropPositionBlocked() {
+        WorldPosition playerPos = script.getWorldPosition();
+        if (playerPos == null) return false;
+
+        // toad lands 1 tile east of player
+        WorldPosition nextToadPos = new WorldPosition(playerPos.getX() + 1, playerPos.getY(), 0);
+
+        // check if this position is in ignoredPositionTimestamps (known corpse)
+        int posKey = AttackChompy.posKey(nextToadPos);
+        if (!AttackChompy.isPositionIgnored(posKey)) {
+            return false; // not a known corpse position
+        }
+
+        // verify corpse is actually still there via pixel detection
+        if (AttackChompy.isCorpseVisibleAt(script, nextToadPos)) {
+            script.log(getClass(), "corpse blocking next drop at " + nextToadPos.getX() + "," + nextToadPos.getY());
+            return true;
+        }
+
+        // position was ignored but corpse despawned - clean up the stale ignore
+        AttackChompy.removeIgnoredPosition(posKey);
+        script.log(getClass(), "cleared stale ignore at " + nextToadPos.getX() + "," + nextToadPos.getY());
+        return false;
     }
 
     /**

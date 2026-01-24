@@ -5,6 +5,8 @@ import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 
+import java.util.function.Supplier;
+
 /**
  * Retry utilities for menu interactions.
  *
@@ -16,6 +18,9 @@ import com.osmb.api.shape.Polygon;
  *   RetryUtils.objectInteract(script, bankChest, "Use", "bank chest");
  *   RetryUtils.tap(script, polygon, "Pick", "fungus");
  *   RetryUtils.inventoryInteract(script, item, "Eat", "food");
+ *
+ * With break condition (for crash detection):
+ *   RetryUtils.tap(script, polygon, "Suck", "swamp bubble", () -> DetectPlayers.crashDetected);
  */
 public class RetryUtils {
 
@@ -97,12 +102,37 @@ public class RetryUtils {
     }
 
     public static boolean tap(Script script, Polygon poly, String action, String description, int maxAttempts) {
+        return tap(script, poly, action, description, maxAttempts, null);
+    }
+
+    /**
+     * Retry polygon tap with break condition.
+     * If breakCondition returns true, exits immediately and returns false.
+     * Use for crash detection: tap(script, poly, "Suck", "bubble", () -> DetectPlayers.crashDetected)
+     */
+    public static boolean tap(Script script, Polygon poly, String action, String description, Supplier<Boolean> breakCondition) {
+        return tap(script, poly, action, description, DEFAULT_MAX_ATTEMPTS, breakCondition);
+    }
+
+    public static boolean tap(Script script, Polygon poly, String action, String description, int maxAttempts, Supplier<Boolean> breakCondition) {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            // check break condition BEFORE each attempt
+            if (breakCondition != null && breakCondition.get()) {
+                script.log(RetryUtils.class, description + " aborted - break condition triggered");
+                return false;
+            }
+
             script.log(RetryUtils.class, description + " attempt " + attempt + "/" + maxAttempts);
 
             boolean success = script.getFinger().tap(poly, action);
             if (success) {
                 return true;
+            }
+
+            // check break condition AFTER failed attempt (before delay)
+            if (breakCondition != null && breakCondition.get()) {
+                script.log(RetryUtils.class, description + " aborted - break condition triggered");
+                return false;
             }
 
             script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);

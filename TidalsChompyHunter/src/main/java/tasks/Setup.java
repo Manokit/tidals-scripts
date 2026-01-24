@@ -69,6 +69,13 @@ public class Setup extends Task {
     public boolean execute() {
         script.log(getClass(), "verifying setup requirements...");
 
+        // set login timestamp on first setup run - gives OSMB time to identify our position
+        // prevents false positive crash detection from our own white dot
+        if (DetectPlayers.lastLoginTimestamp == 0) {
+            DetectPlayers.lastLoginTimestamp = System.currentTimeMillis();
+            script.log(getClass(), "login grace period started (10s)");
+        }
+
         List<String> errors = new ArrayList<>();
 
         // open inventory tab first
@@ -170,10 +177,24 @@ public class Setup extends Task {
         // clear any tracked toad/corpse positions from previous session
         TidalsChompyHunter.droppedToadPositions.clear();
         TidalsChompyHunter.corpsePositions.clear();
-        script.log(getClass(), "cleared tracked positions");
+        AttackChompy.resetAllState();  // clear tracked chompies, ignored positions, combat state
+        script.log(getClass(), "cleared tracked positions and attack state");
+
+        // wait for login grace period before checking for players
+        // this gives OSMB time to identify our position (prevents false positive from own dot)
+        long timeSinceLogin = System.currentTimeMillis() - DetectPlayers.lastLoginTimestamp;
+        long loginGraceMs = 10000;
+        if (DetectPlayers.lastLoginTimestamp > 0 && timeSinceLogin < loginGraceMs) {
+            long waitTime = loginGraceMs - timeSinceLogin;
+            script.log(getClass(), "waiting " + (waitTime / 1000) + "s for position stabilization...");
+            task = "stabilizing position...";
+            script.submitTask(() -> false, (int) waitTime);
+            script.log(getClass(), "stabilization complete - checking for players");
+        }
 
         // check for ANY players on minimap BEFORE starting (immediate hop if occupied)
         // use large radius (50 tiles) to scan entire visible minimap, not just crash radius
+        task = "checking for players...";
         if (DetectPlayers.hasPlayersOnMinimap(script, 50)) {
             script.log(getClass(), "=== WORLD OCCUPIED ===");
             script.log(getClass(), "player detected on minimap - triggering hop");
@@ -183,6 +204,19 @@ public class Setup extends Task {
             return true;
         }
         script.log(getClass(), "no players on minimap - world is clear");
+
+        // check for existing chompies (live or dead) - if we haven't dropped toads yet,
+        // any chompies must be from another player who was just here
+        task = "checking for chompies...";
+        if (TidalsChompyHunter.droppedToadPositions.isEmpty() && AttackChompy.hasVisibleChompySprite(script)) {
+            script.log(getClass(), "=== WORLD OCCUPIED ===");
+            script.log(getClass(), "chompy sprite detected but we haven't dropped toads - another player was hunting here");
+            DetectPlayers.crashDetected = true;
+            TidalsChompyHunter.task = "chompies present - hopping";
+            // don't mark setupComplete - HopWorld will handle it and Setup will re-run
+            return true;
+        }
+        script.log(getClass(), "no stray chompies - world is clean");
 
         // all validations passed
         script.log(getClass(), "Setup complete - all requirements verified");

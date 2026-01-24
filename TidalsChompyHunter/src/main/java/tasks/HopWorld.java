@@ -19,7 +19,8 @@ public class HopWorld extends Task {
 
     // stabilization delay after hop - gives OSMB time to identify our position
     // before Setup checks for other players (prevents false "occupied" detection)
-    private static final int POST_HOP_STABILIZATION_MS = 3000;
+    // increased to 10s to match login grace period and ensure ScriptCore is fully ready
+    private static final int POST_HOP_STABILIZATION_MS = 10000;
 
     // guard flag to prevent re-entry during hop
     private static volatile boolean isHopping = false;
@@ -57,6 +58,18 @@ public class HopWorld extends Task {
         // set guard flag immediately to prevent re-entry
         isHopping = true;
 
+        // CRITICAL: clear crash flag IMMEDIATELY before anything can interrupt us
+        // if OSMB's internal handler interrupts, we won't loop back here
+        DetectPlayers.crashDetected = false;
+
+        // set hop timestamp NOW so grace period works even if we're interrupted
+        // this prevents Setup from detecting our own dot as another player
+        DetectPlayers.lastHopTimestamp = System.currentTimeMillis();
+        lastHopTime = System.currentTimeMillis();
+
+        // mark setup incomplete so it re-runs after hop
+        TidalsChompyHunter.setupComplete = false;
+
         try {
             TidalsChompyHunter.task = "hopping worlds...";
             script.log(getClass(), "hopping due to crash/occupied world");
@@ -71,10 +84,9 @@ public class HopWorld extends Task {
             // initiate hop - forceHop() blocks until world load complete
             script.getProfileManager().forceHop();
 
-            lastHopTime = System.currentTimeMillis();
-
-            // set hop timestamp for grace period (skips occupied check while position stabilizes)
+            // refresh timestamps after actual hop completes (more accurate timing)
             DetectPlayers.lastHopTimestamp = System.currentTimeMillis();
+            lastHopTime = System.currentTimeMillis();
 
             script.log(getClass(), "hop complete, waiting for position stabilization...");
 

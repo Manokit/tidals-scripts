@@ -43,11 +43,11 @@ import java.util.UUID;
         name = "TidalsChompyHunter",
         description = "Hunts chompy birds for Western Provinces Diary",
         skillCategory = SkillCategory.COMBAT,
-        version = 1.3,
+        version = 1.4,
         author = "Tidaleus"
 )
 public class TidalsChompyHunter extends Script {
-    public static final String SCRIPT_VERSION = "1.3";
+    public static final String SCRIPT_VERSION = "1.4";
     private static final String SCRIPT_NAME = "ChompyHunter";
     private static final String SESSION_ID = UUID.randomUUID().toString();
 
@@ -654,12 +654,21 @@ public class TidalsChompyHunter extends Script {
             }
         }
 
-        // draw tileCubes around tracked corpse positions (orange)
+        // draw tileCubes around tracked corpse positions (orange) - pending pluck
         for (WorldPosition corpsePos : corpsePositions) {
             Polygon tileCube = getSceneProjector().getTileCube(corpsePos, 70);
             if (tileCube != null) {
                 c.fillPolygon(tileCube, new Color(255, 140, 0, 50).getRGB(), 0.3);
                 c.drawPolygon(tileCube, new Color(255, 140, 0).getRGB(), 1.0);
+            }
+        }
+
+        // draw tileCubes around IGNORED chompy positions (red) - dead chompies we skip
+        for (WorldPosition ignoredPos : AttackChompy.getIgnoredPositions()) {
+            Polygon tileCube = getSceneProjector().getTileCube(ignoredPos, 70);
+            if (tileCube != null) {
+                c.fillPolygon(tileCube, new Color(255, 0, 0, 50).getRGB(), 0.3);
+                c.drawPolygon(tileCube, Color.RED.getRGB(), 1.0);
             }
         }
 

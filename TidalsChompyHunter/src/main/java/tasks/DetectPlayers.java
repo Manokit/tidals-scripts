@@ -33,13 +33,27 @@ public class DetectPlayers extends Task {
     private static final int SELF_FILTER_DISTANCE = 3;
 
     // post-hop grace period - skip occupied check while OSMB stabilizes position
-    private static final long POST_HOP_GRACE_MS = 5000;
+    private static final long POST_HOP_GRACE_MS = 10000;
     public static long lastHopTimestamp = 0;
+
+    // post-login grace period - skip occupied check while OSMB identifies our position
+    // prevents false positive from seeing our own white dot as another player
+    private static final long POST_LOGIN_GRACE_MS = 10000;
+    public static long lastLoginTimestamp = 0;
 
     // state
     public static volatile boolean crashDetected = false;
     private static Map<Integer, DetectedPlayer> trackedPlayers = new HashMap<>();
     private static long lastLogTime = 0;
+
+    // anti-jitter: require multiple consecutive "it's us" readings before clearing
+    private static int consecutiveSelfReadings = 0;
+    private static final int SELF_READINGS_TO_CLEAR = 5;  // need 5 frames of "it's us" to clear
+
+    // persistent area occupied tracking - doesn't reset when dot position jitters
+    private static long areaOccupiedSince = 0;  // timestamp when we first detected a player
+    private static int consecutiveClearReadings = 0;
+    private static final int CLEAR_READINGS_TO_RESET = 10;  // need 10 frames of "clear" to reset
 
     public DetectPlayers(Script script) {
         super(script);
@@ -108,48 +122,142 @@ public class DetectPlayers extends Task {
 
         List<WorldPosition> playerPositions = result.asList();
         if (playerPositions.isEmpty()) {
-            // empty list - clear tracking
-            if (!trackedPlayers.isEmpty()) {
-                script.log(getClass(), "all players left hunting area");
+            // empty list - increment clear counter
+            consecutiveClearReadings++;
+            if (consecutiveClearReadings >= CLEAR_READINGS_TO_RESET && areaOccupiedSince > 0) {
+                script.log(getClass(), "area clear for " + consecutiveClearReadings + " readings - resetting occupied timer");
+                areaOccupiedSince = 0;
                 trackedPlayers.clear();
             }
             return false;
         }
 
-        // track players in the chompy hunting area
+        // log all detected dots (only every 3 seconds to reduce spam)
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastLogTime >= 3000) {
+            script.log(getClass(), "detected " + playerPositions.size() + " player dot(s), our pos: " + formatPos(playerPos));
+            for (int i = 0; i < playerPositions.size(); i++) {
+                WorldPosition dot = playerPositions.get(i);
+                double dist = dot.distanceTo(playerPos);
+                boolean inArea = CHOMPY_HUNTING_AREA.contains(dot);
+                script.log(getClass(), "  dot[" + i + "]: " + formatPos(dot) +
+                           " dist=" + (int)dist + (inArea ? " [IN AREA]" : " [outside]"));
+            }
+        }
+
+        // handle single dot case - check if it's us or someone else
+        if (playerPositions.size() == 1) {
+            WorldPosition singleDot = playerPositions.get(0);
+            if (singleDot.getPlane() != playerPos.getPlane()) {
+                if (!trackedPlayers.isEmpty()) {
+                    trackedPlayers.clear();
+                }
+                return false;
+            }
+
+            double distFromUs = singleDot.distanceTo(playerPos);
+
+            // if dot is close to us, it's our dot - but require multiple consecutive readings
+            // to prevent jitter from clearing valid player detection
+            if (distFromUs <= SELF_FILTER_DISTANCE) {
+                consecutiveSelfReadings++;
+                consecutiveClearReadings++;  // also counts as "area clear"
+
+                if (consecutiveSelfReadings >= SELF_READINGS_TO_CLEAR) {
+                    if (!trackedPlayers.isEmpty()) {
+                        script.log(getClass(), "single dot is us (dist " + (int)distFromUs + ", " + consecutiveSelfReadings + " consecutive) - clearing tracked");
+                        trackedPlayers.clear();
+                    }
+                    if (areaOccupiedSince > 0) {
+                        script.log(getClass(), "area confirmed clear - resetting occupied timer");
+                        areaOccupiedSince = 0;
+                    }
+                    consecutiveSelfReadings = 0;
+                }
+                return false;
+            }
+
+            // dot is far from us - reset the consecutive self counter
+            consecutiveSelfReadings = 0;
+
+            // dot is far from us - this is another player, check if in hunting area
+            if (CHOMPY_HUNTING_AREA.contains(singleDot)) {
+                consecutiveClearReadings = 0;  // reset clear counter
+
+                // start persistent area tracking if not already
+                if (areaOccupiedSince == 0) {
+                    areaOccupiedSince = System.currentTimeMillis();
+                    crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
+                    script.log(getClass(), "AREA OCCUPIED - player at " + formatPos(singleDot) +
+                               " dist=" + (int)distFromUs + " (threshold: " + crashThresholdMs + "ms)");
+                }
+
+                // check if threshold exceeded using persistent timer
+                long occupiedDuration = System.currentTimeMillis() - areaOccupiedSince;
+                if (occupiedDuration >= crashThresholdMs) {
+                    script.log(getClass(), "=== CRASH DETECTED === area occupied for " + occupiedDuration + "ms");
+                    crashDetected = true;
+                    TidalsChompyHunter.task = "crash detected!";
+                    return true;
+                }
+
+                // also track in map for logging
+                int key = posKey(singleDot);
+                if (!trackedPlayers.containsKey(key)) {
+                    trackedPlayers.put(key, new DetectedPlayer(singleDot));
+                }
+            }
+            return false;
+        }
+
+        // find our dot (closest to our reported position)
+        WorldPosition ourDot = null;
+        double ourDotDistance = Double.MAX_VALUE;
+        for (WorldPosition dot : playerPositions) {
+            if (dot.getPlane() != playerPos.getPlane()) continue;
+            double dist = dot.distanceTo(playerPos);
+            if (dist < ourDotDistance) {
+                ourDotDistance = dist;
+                ourDot = dot;
+            }
+        }
+
+        // track OTHER players in the chompy hunting area
         for (WorldPosition otherPlayer : playerPositions) {
             // filter same plane only
             if (otherPlayer.getPlane() != playerPos.getPlane()) {
                 continue;
             }
 
-            // skip self - our own dot can appear offset from reported position
-            double distance = otherPlayer.distanceTo(playerPos);
-            if (distance <= SELF_FILTER_DISTANCE) {
+            // skip our own dot
+            if (otherPlayer.equals(ourDot)) {
                 continue;
             }
 
-            // check if player is in the chompy hunting area
+            // check if this other player is in the chompy hunting area
             if (CHOMPY_HUNTING_AREA.contains(otherPlayer)) {
-                int key = posKey(otherPlayer);
+                consecutiveClearReadings = 0;  // reset clear counter
 
-                // track if new player - set random threshold
-                if (!trackedPlayers.containsKey(key)) {
-                    // randomize threshold between 7-12 seconds for this player
+                // start persistent area tracking if not already
+                if (areaOccupiedSince == 0) {
+                    areaOccupiedSince = System.currentTimeMillis();
                     crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
-                    trackedPlayers.put(key, new DetectedPlayer(otherPlayer));
-                    script.log(getClass(), "player entered hunting area: " + formatPos(otherPlayer) + " (threshold: " + crashThresholdMs + "ms)");
+                    script.log(getClass(), "AREA OCCUPIED - player at " + formatPos(otherPlayer) + " (threshold: " + crashThresholdMs + "ms)");
                 }
 
-                // check if player is crashing (lingering in our area)
-                DetectedPlayer tracked = trackedPlayers.get(key);
-                if (tracked.isCrashing(crashThresholdMs)) {
-                    script.log(getClass(), "=== CRASH DETECTED ===");
-                    script.log(getClass(), "player at " + formatPos(otherPlayer) + " in hunting area for " + tracked.getDuration() + "ms");
-                    script.log(getClass(), "threshold: " + crashThresholdMs + "ms, exceeded by: " + (tracked.getDuration() - crashThresholdMs) + "ms");
+                // check if threshold exceeded using persistent timer
+                long occupiedDuration = System.currentTimeMillis() - areaOccupiedSince;
+                if (occupiedDuration >= crashThresholdMs) {
+                    script.log(getClass(), "=== CRASH DETECTED === area occupied for " + occupiedDuration + "ms");
                     crashDetected = true;
                     TidalsChompyHunter.task = "crash detected!";
                     return true;
+                }
+
+                // also track in map for logging
+                int key = posKey(otherPlayer);
+                if (!trackedPlayers.containsKey(key)) {
+                    trackedPlayers.put(key, new DetectedPlayer(otherPlayer));
                 }
             }
         }
@@ -195,6 +303,11 @@ public class DetectPlayers extends Task {
     public static void resetTrackingState() {
         trackedPlayers.clear();
         crashDetected = false;
+        areaOccupiedSince = 0;
+        consecutiveSelfReadings = 0;
+        consecutiveClearReadings = 0;
+        // don't reset lastLoginTimestamp here - it's set once at script start
+        // don't reset lastHopTimestamp here - it's managed by HopWorld
     }
 
     /**
@@ -214,7 +327,15 @@ public class DetectPlayers extends Task {
         // skip check during post-hop grace period - position may not be stable yet
         long timeSinceHop = System.currentTimeMillis() - lastHopTimestamp;
         if (lastHopTimestamp > 0 && timeSinceHop < POST_HOP_GRACE_MS) {
-            script.log(DetectPlayers.class, "skipping occupied check - within grace period (" + timeSinceHop + "ms since hop)");
+            script.log(DetectPlayers.class, "skipping occupied check - within hop grace period (" + timeSinceHop + "ms since hop)");
+            return false;
+        }
+
+        // skip check during post-login grace period - OSMB needs time to identify our position
+        // prevents false positive from seeing our own white dot as another player
+        long timeSinceLogin = System.currentTimeMillis() - lastLoginTimestamp;
+        if (lastLoginTimestamp > 0 && timeSinceLogin < POST_LOGIN_GRACE_MS) {
+            script.log(DetectPlayers.class, "skipping occupied check - within login grace period (" + timeSinceLogin + "ms since login)");
             return false;
         }
 
@@ -234,29 +355,80 @@ public class DetectPlayers extends Task {
             return false;
         }
 
-        script.log(DetectPlayers.class, "checking " + playerPositions.size() + " minimap dots for hunting area occupancy");
+        script.log(DetectPlayers.class, "checking " + playerPositions.size() + " minimap dots, our pos: " + formatPos(playerPos));
 
-        // check if any player dot is in the hunting area (excluding self)
+        // log all detected dots for debugging
+        for (int i = 0; i < playerPositions.size(); i++) {
+            WorldPosition dot = playerPositions.get(i);
+            double dist = dot.distanceTo(playerPos);
+            boolean inArea = CHOMPY_HUNTING_AREA.contains(dot);
+            script.log(DetectPlayers.class, "  dot[" + i + "]: " + formatPos(dot) +
+                       " dist=" + (int)dist + (inArea ? " [IN AREA]" : " [outside]"));
+        }
+
+        // handle single dot case - check if it's us or someone else
+        if (playerPositions.size() == 1) {
+            WorldPosition singleDot = playerPositions.get(0);
+            if (singleDot.getPlane() != playerPos.getPlane()) {
+                script.log(DetectPlayers.class, "  single dot on different plane - assuming clear");
+                return false;
+            }
+
+            double distFromUs = singleDot.distanceTo(playerPos);
+            script.log(DetectPlayers.class, "  single dot at " + formatPos(singleDot) + ", dist from us: " + (int)distFromUs);
+
+            // if dot is close to our position, it's us - world is clear
+            // if dot is far from us, it's another player (OSMB missed our dot) - occupied!
+            if (distFromUs <= SELF_FILTER_DISTANCE) {
+                script.log(DetectPlayers.class, "  dot is close to us (within " + SELF_FILTER_DISTANCE + " tiles) - that's us, world clear");
+                return false;
+            } else {
+                // dot is far from us - this is another player, OSMB didn't detect our dot
+                if (CHOMPY_HUNTING_AREA.contains(singleDot)) {
+                    script.log(DetectPlayers.class, "  dot is FAR from us (" + (int)distFromUs + " tiles) and IN HUNTING AREA - OTHER PLAYER!");
+                    return true;
+                } else {
+                    script.log(DetectPlayers.class, "  dot is far from us but outside hunting area - ignoring");
+                    return false;
+                }
+            }
+        }
+
+        // 2+ dots detected - find our dot (closest to our reported position)
+        WorldPosition ourDot = null;
+        double ourDotDistance = Double.MAX_VALUE;
+        for (WorldPosition dot : playerPositions) {
+            if (dot.getPlane() != playerPos.getPlane()) continue;
+            double dist = dot.distanceTo(playerPos);
+            if (dist < ourDotDistance) {
+                ourDotDistance = dist;
+                ourDot = dot;
+            }
+        }
+        script.log(DetectPlayers.class, "  our dot: " + (ourDot != null ? formatPos(ourDot) : "none") + " (dist: " + (int)ourDotDistance + ")");
+
+        // check remaining dots (excluding ours) for hunting area occupancy
         for (WorldPosition otherPlayer : playerPositions) {
             if (otherPlayer.getPlane() != playerPos.getPlane()) {
                 continue;
             }
 
-            double distance = otherPlayer.distanceTo(playerPos);
-
-            // skip self - our own dot can appear offset from reported position
-            if (distance <= SELF_FILTER_DISTANCE) {
-                script.log(DetectPlayers.class, "  dot at " + formatPos(otherPlayer) + " - likely self, skipping");
+            // skip our own dot
+            if (otherPlayer.equals(ourDot)) {
                 continue;
             }
 
-            // check if player is in the chompy hunting area
+            // this is another player - check if they're in our hunting area
+            double distFromUs = otherPlayer.distanceTo(playerPos);
             if (CHOMPY_HUNTING_AREA.contains(otherPlayer)) {
-                script.log(DetectPlayers.class, "  dot at " + formatPos(otherPlayer) + " - IN HUNTING AREA");
+                script.log(DetectPlayers.class, "  OTHER PLAYER at " + formatPos(otherPlayer) + " (dist: " + (int)distFromUs + ") - IN HUNTING AREA");
                 return true;
+            } else {
+                script.log(DetectPlayers.class, "  other player at " + formatPos(otherPlayer) + " (dist: " + (int)distFromUs + ") - outside hunting area");
             }
         }
 
+        script.log(DetectPlayers.class, "  no other players in hunting area");
         return false;
     }
 

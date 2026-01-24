@@ -61,6 +61,11 @@ public class InflateToads extends Task {
 
     @Override
     public boolean activate() {
+        // CRITICAL: don't activate if crash detected - let HopWorld handle it
+        if (DetectPlayers.crashDetected) {
+            return false;
+        }
+
         // only activate after setup is complete
         if (!TidalsChompyHunter.setupComplete) {
             return false;
@@ -99,6 +104,12 @@ public class InflateToads extends Task {
 
     @Override
     public boolean execute() {
+        // CRITICAL: abort immediately if crash detected
+        if (DetectPlayers.crashDetected) {
+            script.log(getClass(), "ABORTING - crash detected, yielding to HopWorld");
+            return false;
+        }
+
         int currentInventory = countBloatedToads();
         int currentGround = countActiveGroundToads();
 
@@ -130,6 +141,12 @@ public class InflateToads extends Task {
 
         // loop: find and inflate toads
         for (int i = 0; i < maxToInflate; i++) {
+            // CRITICAL: abort if crash detected
+            if (DetectPlayers.crashDetected) {
+                script.log(getClass(), "crash detected - stopping inflation, yielding to HopWorld");
+                return false;
+            }
+
             // INTERRUPT: check for live chompy spawn (filters out corpses)
             if (AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - stopping inflation early");

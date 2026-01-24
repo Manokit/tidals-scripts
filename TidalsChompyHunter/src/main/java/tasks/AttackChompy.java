@@ -2,6 +2,7 @@ package tasks;
 
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.location.area.impl.PolyArea;
+import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.walker.WalkConfig;
 import com.osmb.api.script.Script;
@@ -56,6 +57,20 @@ public class AttackChompy extends Task {
     );
     private static final int BLOATED_BOUNDED_MAX_DISTANCE = 20;
     private static final int BLOATED_BOUNDED_MIN_SIZE = 3;
+
+    // dead chompy verification within tileCube bounds - for verifying corpses at ignored positions
+    private static final SearchablePixel DEAD_CHOMPY_BOUNDED = new SearchablePixel(
+            -2500192,  // RGB int from user testing
+            new SingleThresholdComparator(10),  // tolerance 10
+            ColorModel.RGB
+    );
+    private static final int DEAD_CHOMPY_BOUNDED_MAX_DISTANCE = 10;
+    private static final int DEAD_CHOMPY_BOUNDED_MIN_SIZE = 3;
+
+    // area where we can reliably verify tracked positions (toads/corpses visible on screen)
+    // when outside this area (e.g., at swamp bubbles), UI/camera blocks the drop area
+    // verification would incorrectly remove positions we can't see
+    private static final RectangleArea VERIFICATION_AREA = new RectangleArea(2383, 3043, 14, 9, 0);
 
     // drop area where bloated toads are placed - chompies spawn here
     private static final PolyArea TOAD_DROP_AREA = new PolyArea(List.of(
@@ -125,8 +140,38 @@ public class AttackChompy extends Task {
      * convert WorldPosition to integer key for HashMap lookup
      * uses bit packing for performance - avoids string concatenation
      */
-    private static int posKey(WorldPosition pos) {
+    public static int posKey(WorldPosition pos) {
         return (pos.getPlane() << 30) | ((pos.getY() & 0x7FFF) << 15) | (pos.getX() & 0x7FFF);
+    }
+
+    /**
+     * check if a position is in the ignored list (known corpse)
+     */
+    public static boolean isPositionIgnored(int posKey) {
+        return ignoredPositionTimestamps.containsKey(posKey);
+    }
+
+    /**
+     * remove a position from the ignored list (corpse despawned)
+     */
+    public static void removeIgnoredPosition(int posKey) {
+        ignoredPositionTimestamps.remove(posKey);
+    }
+
+    /**
+     * get all currently ignored positions for paint overlay
+     * converts integer keys back to WorldPositions
+     */
+    public static List<WorldPosition> getIgnoredPositions() {
+        List<WorldPosition> positions = new ArrayList<>();
+        for (Integer key : ignoredPositionTimestamps.keySet()) {
+            // unpack: x = bits 0-14, y = bits 15-29, plane = bits 30-31
+            int x = key & 0x7FFF;
+            int y = (key >> 15) & 0x7FFF;
+            int plane = (key >> 30) & 0x3;
+            positions.add(new WorldPosition(x, y, plane));
+        }
+        return positions;
     }
 
     /**
@@ -138,6 +183,11 @@ public class AttackChompy extends Task {
 
     @Override
     public boolean activate() {
+        // CRITICAL: don't activate if crash detected - let HopWorld handle it
+        if (DetectPlayers.crashDetected) {
+            return false;
+        }
+
         // only activate after setup is complete
         if (!TidalsChompyHunter.setupComplete) {
             return false;
@@ -242,6 +292,12 @@ public class AttackChompy extends Task {
 
     @Override
     public boolean execute() {
+        // CRITICAL: abort immediately if crash detected
+        if (DetectPlayers.crashDetected) {
+            script.log(getClass(), "[execute] ABORTING - crash detected, yielding to HopWorld");
+            return false;
+        }
+
         TidalsChompyHunter.task = "hunting chompy";
         script.log(getClass(), "[execute] === CHOMPY HUNT CYCLE START ===");
 
@@ -389,10 +445,19 @@ public class AttackChompy extends Task {
     /**
      * verify all tracked toad positions and remove any where toad is no longer visible
      * called before checking ground count to ensure accuracy
+     * IMPORTANT: only verifies when player is in VERIFICATION_AREA - when at swamp bubbles,
+     * UI/camera blocks the drop area and we'd incorrectly remove positions we can't see
      */
     public static void verifyAllTrackedToads(Script script) {
         if (TidalsChompyHunter.droppedToadPositions.isEmpty()) {
             return;
+        }
+
+        // skip verification if player is outside the viewable area
+        // (e.g., at swamp bubbles on the east side - UI covers the drop area)
+        WorldPosition playerPos = script.getWorldPosition();
+        if (playerPos == null || !VERIFICATION_AREA.contains(playerPos)) {
+            return; // can't reliably verify from here
         }
 
         int beforeCount = TidalsChompyHunter.droppedToadPositions.size();
@@ -438,6 +503,41 @@ public class AttackChompy extends Task {
                 BLOATED_BOUNDED_MAX_DISTANCE,
                 BLOATED_BOUNDED_MIN_SIZE,
                 new SearchablePixel[]{BLOATED_TOAD_BOUNDED}
+        );
+
+        PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(bounds, query);
+        if (result == null) {
+            return false;
+        }
+
+        List<PixelCluster> clusters = result.getClusters();
+        return clusters != null && !clusters.isEmpty();
+    }
+
+    /**
+     * check if dead chompy sprite is visible at a known ignored position
+     * uses bounded pixel cluster search within the tileCube (like toad verification)
+     * @param script the script instance
+     * @param position the ignored position to verify
+     * @return true if corpse still present, false if despawned
+     */
+    public static boolean isCorpseVisibleAt(Script script, WorldPosition position) {
+        Polygon tileCube = script.getSceneProjector().getTileCube(position, TILE_CUBE_HEIGHT);
+        if (tileCube == null) {
+            return false;
+        }
+
+        Rectangle bounds = tileCube.getBounds();
+        if (bounds == null) {
+            return false;
+        }
+
+        // search for dead chompy sprite within tileCube bounds only
+        // high tolerance since we're searching a small constrained area
+        PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
+                DEAD_CHOMPY_BOUNDED_MAX_DISTANCE,
+                DEAD_CHOMPY_BOUNDED_MIN_SIZE,
+                new SearchablePixel[]{DEAD_CHOMPY_BOUNDED}
         );
 
         PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(bounds, query);
@@ -564,9 +664,18 @@ public class AttackChompy extends Task {
                 // pass killPosition to find cluster nearest to where we were attacking
                 WorldPosition corpsePos = findCorpseAtDeath(killPosition);
                 if (corpsePos != null) {
-                    TidalsChompyHunter.corpsePositions.add(corpsePos);
-                    script.log(getClass(), "tracking corpse at death position " + corpsePos.getX() + "," + corpsePos.getY() +
-                            " (" + TidalsChompyHunter.corpsePositions.size() + " total)");
+                    // safety check: don't re-add already ignored positions
+                    if (ignoredPositionTimestamps.containsKey(posKey(corpsePos))) {
+                        script.log(getClass(), "corpse at " + corpsePos.getX() + "," + corpsePos.getY() +
+                                " already ignored - skipping");
+                    } else if (TidalsChompyHunter.corpsePositions.contains(corpsePos)) {
+                        script.log(getClass(), "corpse at " + corpsePos.getX() + "," + corpsePos.getY() +
+                                " already tracked - skipping duplicate");
+                    } else {
+                        TidalsChompyHunter.corpsePositions.add(corpsePos);
+                        script.log(getClass(), "tracking corpse at death position " + corpsePos.getX() + "," + corpsePos.getY() +
+                                " (" + TidalsChompyHunter.corpsePositions.size() + " total)");
+                    }
                     // defer plucking - will pluck all corpses when no live chompies remain
                 } else {
                     script.log(getClass(), "could not detect corpse position at death - sprite may have disappeared");
@@ -636,32 +745,7 @@ public class AttackChompy extends Task {
         int attackScreenY = attackBounds.y + attackBounds.height / 2;
         script.log(getClass(), "[corpseDetect] attack position screen(" + attackScreenX + "," + attackScreenY + ")");
 
-        // find the cluster closest to where we were attacking (not largest)
-        PixelCluster closestCluster = null;
-        double closestClusterDist = Double.MAX_VALUE;
-
-        for (PixelCluster cluster : clusters) {
-            Rectangle bounds = cluster.getBounds();
-            int clusterX = bounds.x + bounds.width / 2;
-            int clusterY = bounds.y + bounds.height / 2;
-            double dist = Math.sqrt(Math.pow(clusterX - attackScreenX, 2) + Math.pow(clusterY - attackScreenY, 2));
-
-            if (dist < closestClusterDist) {
-                closestClusterDist = dist;
-                closestCluster = cluster;
-            }
-        }
-
-        if (closestCluster == null) {
-            return null;
-        }
-
-        Rectangle bounds = closestCluster.getBounds();
-        Point screenCenter = new Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-        script.log(getClass(), "[corpseDetect] closest cluster at screen(" + screenCenter.x + "," + screenCenter.y +
-                ") dist=" + (int)closestClusterDist + " size=" + closestCluster.getPoints().size());
-
-        // get NPC positions from minimap
+        // get NPC positions from minimap first (need this to filter clusters)
         UIResultList<WorldPosition> npcPositions = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcPositions == null || npcPositions.isNotFound()) {
             script.log(getClass(), "[corpseDetect] no NPC positions from minimap");
@@ -674,39 +758,61 @@ public class AttackChompy extends Task {
             return null;
         }
 
-        // match to nearest NPC position
-        WorldPosition closestNpc = null;
-        double closestDistance = 50; // max screen distance
+        // find the cluster closest to attack position that matches a NON-IGNORED NPC
+        // this prevents re-detecting already-plucked corpses
+        WorldPosition bestMatch = null;
+        double bestClusterDist = Double.MAX_VALUE;
 
-        for (WorldPosition npcPos : npcPositions.asList()) {
-            if (npcPos.distanceTo(playerPos) > SCAN_RANGE) continue;
+        for (PixelCluster cluster : clusters) {
+            Rectangle bounds = cluster.getBounds();
+            int clusterX = bounds.x + bounds.width / 2;
+            int clusterY = bounds.y + bounds.height / 2;
+            double clusterDistToAttack = Math.sqrt(Math.pow(clusterX - attackScreenX, 2) + Math.pow(clusterY - attackScreenY, 2));
 
-            Polygon tileCube = script.getSceneProjector().getTileCube(npcPos, TILE_CUBE_HEIGHT);
-            if (tileCube == null) continue;
+            // find NPC that matches this cluster
+            WorldPosition matchedNpc = null;
+            double matchedNpcDist = 50; // max screen distance for cluster-to-NPC match
 
-            Rectangle npcBounds = tileCube.getBounds();
-            int npcCenterX = npcBounds.x + npcBounds.width / 2;
-            int npcCenterY = npcBounds.y + npcBounds.height / 2;
+            for (WorldPosition npcPos : npcPositions.asList()) {
+                if (npcPos.distanceTo(playerPos) > SCAN_RANGE) continue;
 
-            double dist = Math.sqrt(
-                    Math.pow(screenCenter.x - npcCenterX, 2) +
-                    Math.pow(screenCenter.y - npcCenterY, 2)
-            );
+                // CRITICAL: skip already-ignored positions (already plucked/checked)
+                if (ignoredPositionTimestamps.containsKey(posKey(npcPos))) {
+                    continue;
+                }
 
-            if (dist < closestDistance) {
-                closestDistance = dist;
-                closestNpc = npcPos;
+                Polygon tileCube = script.getSceneProjector().getTileCube(npcPos, TILE_CUBE_HEIGHT);
+                if (tileCube == null) continue;
+
+                Rectangle npcBounds = tileCube.getBounds();
+                int npcCenterX = npcBounds.x + npcBounds.width / 2;
+                int npcCenterY = npcBounds.y + npcBounds.height / 2;
+
+                double dist = Math.sqrt(Math.pow(clusterX - npcCenterX, 2) + Math.pow(clusterY - npcCenterY, 2));
+                if (dist < matchedNpcDist) {
+                    matchedNpcDist = dist;
+                    matchedNpc = npcPos;
+                }
+            }
+
+            // if this cluster matched a valid (non-ignored) NPC and is closer to attack position
+            if (matchedNpc != null && clusterDistToAttack < bestClusterDist) {
+                bestClusterDist = clusterDistToAttack;
+                bestMatch = matchedNpc;
+                script.log(getClass(), "[corpseDetect] candidate: cluster at screen(" + clusterX + "," + clusterY +
+                        ") -> NPC at " + matchedNpc.getX() + "," + matchedNpc.getY() +
+                        " (clusterDist=" + (int)clusterDistToAttack + ")");
             }
         }
 
-        if (closestNpc != null) {
-            script.log(getClass(), "[corpseDetect] matched corpse to NPC at " + closestNpc.getX() + "," + closestNpc.getY() +
-                    " (screenDist=" + (int)closestDistance + ")");
+        if (bestMatch != null) {
+            script.log(getClass(), "[corpseDetect] matched corpse to NPC at " + bestMatch.getX() + "," + bestMatch.getY() +
+                    " (clusterDist=" + (int)bestClusterDist + ")");
         } else {
-            script.log(getClass(), "[corpseDetect] no NPC matched to sprite cluster");
+            script.log(getClass(), "[corpseDetect] no valid NPC matched (all may be ignored)");
         }
 
-        return closestNpc;
+        return bestMatch;
     }
 
     /**
@@ -800,10 +906,18 @@ public class AttackChompy extends Task {
     /**
      * validate tracked corpse positions against minimap NPC dots
      * removes positions where no NPC exists (corpse despawned)
+     * IMPORTANT: only validates when player is in VERIFICATION_AREA - when at swamp bubbles,
+     * we can't reliably see the drop area and would incorrectly remove positions
      */
     public void validateTrackedCorpses() {
         if (TidalsChompyHunter.corpsePositions.isEmpty()) {
             return;
+        }
+
+        // skip validation if player is outside the viewable area
+        WorldPosition playerPos = script.getWorldPosition();
+        if (playerPos == null || !VERIFICATION_AREA.contains(playerPos)) {
+            return; // can't reliably validate from here
         }
 
         UIResultList<WorldPosition> npcResult = script.getWidgetManager().getMinimap().getNPCPositions();
@@ -1136,15 +1250,21 @@ public class AttackChompy extends Task {
     // track if we plucked instead of attacked (set by attackChompy)
     private boolean lastActionWasPluck = false;
 
+    // track if we found a corpse but couldn't pluck (plucking disabled)
+    // used for fail-fast detection - don't retry 10 times on a corpse
+    private boolean foundCorpseNoPluck = false;
+
     /**
      * attack chompy - retries up to MAX_ATTACK_ATTEMPTS times
      * uses tapGameScreen to handle Attack or Pluck in a single menu interaction
      * retries help when chompy is moving and clicks miss
+     * FAIL-FAST: if we detect a corpse (Pluck option) but plucking is disabled, immediately ignore
      */
     private boolean attackChompy(WorldPosition chompyPos) {
         script.log(getClass(), "[attack] attempting attack at " + chompyPos.getX() + "," + chompyPos.getY() +
                 " (max " + MAX_ATTACK_ATTEMPTS + " attempts)");
         lastActionWasPluck = false;
+        foundCorpseNoPluck = false;
 
         for (int attempt = 1; attempt <= MAX_ATTACK_ATTEMPTS; attempt++) {
             script.log(getClass(), "[attack] attempt " + attempt + "/" + MAX_ATTACK_ATTEMPTS);
@@ -1182,19 +1302,24 @@ public class AttackChompy extends Task {
                 }
 
                 // no Attack - look for Pluck (corpse)
-                if (TidalsChompyHunter.pluckingEnabled) {
-                    var pluck = menuEntries.stream()
-                            .filter(e -> {
-                                String raw = e.getRawText();
-                                return raw != null && raw.toLowerCase().contains("pluck");
-                            })
-                            .findFirst()
-                            .orElse(null);
+                var pluck = menuEntries.stream()
+                        .filter(e -> {
+                            String raw = e.getRawText();
+                            return raw != null && raw.toLowerCase().contains("pluck");
+                        })
+                        .findFirst()
+                        .orElse(null);
 
-                    if (pluck != null) {
+                if (pluck != null) {
+                    if (TidalsChompyHunter.pluckingEnabled) {
                         script.log(getClass(), "[attack] found Pluck option: " + pluck.getRawText());
                         lastActionWasPluck = true;
                         return pluck;
+                    } else {
+                        // FAIL-FAST: corpse found but plucking disabled - set flag to break retry loop
+                        script.log(getClass(), "[attack] found Pluck (corpse) but plucking disabled - ignoring");
+                        foundCorpseNoPluck = true;
+                        return null;
                     }
                 }
 
@@ -1214,6 +1339,15 @@ public class AttackChompy extends Task {
                     script.log(getClass(), "[attack] SUCCESS - attack sent on attempt " + attempt);
                     return true;
                 }
+            }
+
+            // FAIL-FAST: if we detected a corpse but plucking is disabled, immediately ignore
+            // don't waste 10 retries on a dead chompy we can't interact with
+            if (foundCorpseNoPluck) {
+                script.log(getClass(), "[attack] FAIL-FAST: corpse detected, plucking disabled - adding to ignore");
+                ignoredPositionTimestamps.put(posKey(currentPos), System.currentTimeMillis());
+                removeTrackedChompy(currentPos);
+                return false;
             }
 
             // tap failed - retry with delay

@@ -65,6 +65,11 @@ public class FillBellows extends Task {
 
     @Override
     public boolean activate() {
+        // CRITICAL: don't activate if crash detected - let HopWorld handle it
+        if (DetectPlayers.crashDetected) {
+            return false;
+        }
+
         if (!TidalsChompyHunter.setupComplete) {
             return false;
         }
@@ -84,6 +89,12 @@ public class FillBellows extends Task {
 
     @Override
     public boolean execute() {
+        // CRITICAL: abort immediately if crash detected
+        if (DetectPlayers.crashDetected) {
+            script.log(getClass(), "ABORTING - crash detected, yielding to HopWorld");
+            return false;
+        }
+
         TidalsChompyHunter.task = "filling bellows";
         script.log(getClass(), "bellows empty, finding swamp bubble...");
 
@@ -92,6 +103,11 @@ public class FillBellows extends Task {
 
         // try each bubble location until one works
         for (int i = 0; i < sortedBubbles.size(); i++) {
+            // CRITICAL: abort if crash detected
+            if (DetectPlayers.crashDetected) {
+                script.log(getClass(), "crash detected - stopping bellows fill, yielding to HopWorld");
+                return false;
+            }
             BubbleLocation bubble = sortedBubbles.get(i);
 
             script.log(getClass(), "trying bubble " + (i + 1) + "/" + sortedBubbles.size() +
@@ -103,14 +119,29 @@ public class FillBellows extends Task {
                 continue;
             }
 
-            // try to suck bubble with RetryUtils (10 attempts)
+            // check crash AFTER walk (walk can take time)
+            if (DetectPlayers.crashDetected) {
+                script.log(getClass(), "crash detected after walk - yielding to HopWorld");
+                return false;
+            }
+
+            // try to suck bubble with RetryUtils (10 attempts, with crash break condition)
             Polygon tilePoly = script.getSceneProjector().getTileCube(bubble.bubblePos, TILE_CUBE_HEIGHT);
             if (tilePoly == null) {
                 script.log(getClass(), "bubble tile not visible, trying next bubble");
                 continue;
             }
 
-            boolean sucked = RetryUtils.tap(script, tilePoly, "Suck", "suck swamp bubble");
+            // use break condition to abort retry loop immediately if crash detected
+            boolean sucked = RetryUtils.tap(script, tilePoly, "Suck", "suck swamp bubble",
+                    () -> DetectPlayers.crashDetected);
+
+            // check crash after RetryUtils returns (in case it triggered the break)
+            if (DetectPlayers.crashDetected) {
+                script.log(getClass(), "crash detected - yielding to HopWorld");
+                return false;
+            }
+
             if (!sucked) {
                 script.log(getClass(), "failed to suck bubble, trying next location");
                 continue;
