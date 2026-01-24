@@ -39,6 +39,7 @@
 | `protected int` | `getIconXOffset()` |
 | `protected int` | `getIconYOffset()` |
 | `abstract int[]` | `getIcons()` |
+| `ComponentSearchResult` | `getResult()` |
 | `abstract boolean` | `hiddenWhenTabContainerCollapsed()` |
 | `boolean` | `isOpen()` |
 | `boolean` | `isTabActive()` |
@@ -104,6 +105,15 @@ public Container getContainer()
 ```
 
 **Specified by:** getContainer in interface Tab
+
+### getResult
+```java
+public ComponentSearchResult getResult()
+```
+
+**Overrides:** getResult in class ComponentChild<ComponentButtonStatus>
+
+Returns the ComponentSearchResult for this tab component.
 
 ### buildIcons
 ```java
