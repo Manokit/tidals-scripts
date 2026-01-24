@@ -20,6 +20,8 @@ import tasks.Setup;
 import utils.Task;
 
 import javax.imageio.ImageIO;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Font;
@@ -41,11 +43,11 @@ import java.util.UUID;
         name = "TidalsChompyHunter",
         description = "Hunts chompy birds for Western Provinces Diary",
         skillCategory = SkillCategory.COMBAT,
-        version = 1.2,
+        version = 1.3,
         author = "Tidaleus"
 )
 public class TidalsChompyHunter extends Script {
-    public static final String SCRIPT_VERSION = "1.2";
+    public static final String SCRIPT_VERSION = "1.3";
     private static final String SCRIPT_NAME = "ChompyHunter";
     private static final String SESSION_ID = UUID.randomUUID().toString();
 
@@ -261,6 +263,11 @@ public class TidalsChompyHunter extends Script {
     @Override
     public void onStart() {
         log(getClass(), "Starting " + SCRIPT_NAME + " v" + SCRIPT_VERSION);
+
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         // show setup ui
         scriptUI = new ScriptUI(this);
@@ -903,5 +910,70 @@ public class TidalsChompyHunter extends Script {
         } catch (Exception e) {
             log(getClass(), "stats error: " + e.getClass().getSimpleName());
         }
+    }
+
+    // version checking
+    public String getLatestVersion(String urlString) {
+        try {
+            java.net.URL url = new java.net.URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != 200) {
+                return null;
+            }
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.startsWith("version")) {
+                        String[] parts = line.split("=");
+                        if (parts.length == 2) {
+                            return parts[1].replace(",", "").trim();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log(getClass(), "Exception occurred while fetching version from GitHub.");
+        }
+        return null;
+    }
+
+    public static int compareVersions(String v1, String v2) {
+        String[] parts1 = v1.split("\\.");
+        String[] parts2 = v2.split("\\.");
+
+        int length = Math.max(parts1.length, parts2.length);
+        for (int i = 0; i < length; i++) {
+            int num1 = i < parts1.length ? Integer.parseInt(parts1[i]) : 0;
+            int num2 = i < parts2.length ? Integer.parseInt(parts2[i]) : 0;
+            if (num1 < num2) return -1;
+            if (num1 > num2) return 1;
+        }
+        return 0;
+    }
+
+    private boolean checkForUpdates() {
+        String latest = getLatestVersion("https://raw.githubusercontent.com/Manokit/tidals-scripts/main/TidalsChompyHunter/src/main/java/main/TidalsChompyHunter.java");
+
+        if (latest == null) {
+            log(getClass(), "Could not fetch latest version info.");
+            return false;
+        }
+
+        if (compareVersions(SCRIPT_VERSION, latest) < 0) {
+            for (int i = 0; i < 10; i++) {
+                log(getClass(), "New version v" + latest + " found! Please update the script before running it again.");
+            }
+            return true;
+        }
+
+        log(getClass(), "You are running the latest version (v" + SCRIPT_VERSION + ").");
+        return false;
     }
 }

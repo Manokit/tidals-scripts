@@ -17,6 +17,8 @@ import utils.Task;
 import utils.XPTracking;
 
 import javax.imageio.ImageIO;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
@@ -33,10 +35,10 @@ import java.util.UUID;
         author = "Tidal",
         description = "Mines gems at Shilo Village with optional cutting",
         skillCategory = SkillCategory.MINING,
-        version = 1.0
+        version = 1.1
 )
 public class TidalsGemMiner extends Script {
-    public static final String scriptVersion = "1.0";
+    public static final String scriptVersion = "1.1";
 
     // state fields
     public static boolean setupDone = false;
@@ -93,6 +95,11 @@ public class TidalsGemMiner extends Script {
     @Override
     public void onStart() {
         log("INFO", "Starting Tidals Gem Miner v" + scriptVersion);
+
+        if (checkForUpdates()) {
+            stop();
+            return;
+        }
 
         // initialize start time immediately so paint shows valid runtime
         startTime = System.currentTimeMillis();
@@ -492,5 +499,70 @@ public class TidalsGemMiner extends Script {
         } catch (Exception e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
+    }
+
+    // version checking
+    public String getLatestVersion(String urlString) {
+        try {
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != 200) {
+                return null;
+            }
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.startsWith("version")) {
+                        String[] parts = line.split("=");
+                        if (parts.length == 2) {
+                            return parts[1].replace(",", "").trim();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log("VERSIONCHECK", "Exception occurred while fetching version from GitHub.");
+        }
+        return null;
+    }
+
+    public static int compareVersions(String v1, String v2) {
+        String[] parts1 = v1.split("\\.");
+        String[] parts2 = v2.split("\\.");
+
+        int length = Math.max(parts1.length, parts2.length);
+        for (int i = 0; i < length; i++) {
+            int num1 = i < parts1.length ? Integer.parseInt(parts1[i]) : 0;
+            int num2 = i < parts2.length ? Integer.parseInt(parts2[i]) : 0;
+            if (num1 < num2) return -1;
+            if (num1 > num2) return 1;
+        }
+        return 0;
+    }
+
+    private boolean checkForUpdates() {
+        String latest = getLatestVersion("https://raw.githubusercontent.com/Manokit/tidals-scripts/main/TidalsGemMiner/src/main/java/main/TidalsGemMiner.java");
+
+        if (latest == null) {
+            log("VERSION", "Could not fetch latest version info.");
+            return false;
+        }
+
+        if (compareVersions(scriptVersion, latest) < 0) {
+            for (int i = 0; i < 10; i++) {
+                log("VERSION", "New version v" + latest + " found! Please update the script before running it again.");
+            }
+            return true;
+        }
+
+        log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
+        return false;
     }
 }
