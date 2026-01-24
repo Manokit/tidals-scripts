@@ -56,6 +56,7 @@ public class TidalsChompyHunter extends Script {
     private static final long STATS_INTERVAL_MS = 600_000L; // 10 minutes
     private static int lastSentKillCount = 0;
     private static long lastSentRuntime = 0;
+    private static int lastSentArrowsUsed = 0;
 
     // state
     public static boolean setupComplete = false;
@@ -342,11 +343,18 @@ public class TidalsChompyHunter extends Script {
                 int killIncrement = killCount - lastSentKillCount;
                 long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
 
-                sendStats(killIncrement, runtimeIncrement);
+                // calculate arrows used (initialArrowCount - currentArrowCount)
+                int currentArrowsUsed = (currentArrowCount >= 0)
+                    ? initialArrowCount - currentArrowCount
+                    : killCount;  // fallback estimate: ~1 arrow per kill
+                int arrowsUsedIncrement = currentArrowsUsed - lastSentArrowsUsed;
+
+                sendStats(killIncrement, runtimeIncrement, arrowsUsedIncrement);
 
                 // update last sent values
                 lastSentKillCount = killCount;
                 lastSentRuntime = elapsed / 1000;
+                lastSentArrowsUsed = currentArrowsUsed;
                 lastStatsSent = nowMs;
             }
         }
@@ -877,24 +885,24 @@ public class TidalsChompyHunter extends Script {
     /**
      * send stats to dashboard API (incremental values)
      */
-    private void sendStats(int killIncrement, long runtimeSecs) {
+    private void sendStats(int killIncrement, long runtimeSecs, int arrowsUsedIncrement) {
         try {
-            // only send if Secrets are configured
             if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
                 return;
             }
 
             // skip if nothing to report
-            if (killIncrement == 0 && runtimeSecs == 0) {
+            if (killIncrement == 0 && runtimeSecs == 0 && arrowsUsedIncrement == 0) {
                 return;
             }
 
             String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":0,\"runtime\":%d,\"chompyKills\":%d}",
+                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":0,\"runtime\":%d,\"kills\":%d,\"arrowsUsed\":%d}",
                     SCRIPT_NAME,
                     SESSION_ID,
                     runtimeSecs,
-                    killIncrement
+                    killIncrement,
+                    arrowsUsedIncrement
             );
 
             URL url = new URL(obf.Secrets.STATS_URL);
@@ -912,9 +920,7 @@ public class TidalsChompyHunter extends Script {
 
             int code = conn.getResponseCode();
             if (code == 200) {
-                log(getClass(), "stats reported: kills=" + killIncrement + ", runtime=" + runtimeSecs + "s");
-            } else {
-                log(getClass(), "stats failed: HTTP " + code);
+                log(getClass(), "stats reported: kills=" + killIncrement + ", arrows=" + arrowsUsedIncrement + ", runtime=" + runtimeSecs + "s");
             }
         } catch (Exception e) {
             log(getClass(), "stats error: " + e.getClass().getSimpleName());
