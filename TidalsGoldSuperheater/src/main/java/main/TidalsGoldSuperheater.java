@@ -7,7 +7,7 @@ import com.osmb.api.script.SkillCategory;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.visual.image.Image;
-import com.osmb.api.item.ItemID;
+import javafx.scene.Scene;
 import tasks.Bank;
 import tasks.Process;
 import tasks.Setup;
@@ -35,11 +35,11 @@ import java.util.function.Predicate;
         name = "TidalsGoldSuperheater",
         description = "Superheats gold ore into gold bars using magic",
         skillCategory = SkillCategory.MAGIC,
-        version = 1.5,
+        version = 1.6,
         author = "Tidaleus"
 )
 public class TidalsGoldSuperheater extends Script {
-    public static final String scriptVersion = "1.5";
+    public static final String scriptVersion = "1.6";
     private final String scriptName = "GoldSuperheater";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -181,6 +181,23 @@ public class TidalsGoldSuperheater extends Script {
         if (checkForUpdates()) {
             stop();
             return;
+        }
+
+        // show setup UI
+        ScriptUI ui = new ScriptUI(this);
+        Scene scene = ui.buildScene(this);
+        getStageController().show(scene, "Gold Superheater Options", false);
+
+        // read webhook settings from UI
+        webhookEnabled = ui.isWebhookEnabled();
+        webhookUrl = ui.getWebhookUrl();
+        webhookIntervalMinutes = ui.getWebhookInterval();
+        webhookShowUser = ui.isUsernameIncluded();
+
+        if (webhookEnabled) {
+            user = getWidgetManager().getChatbox().getUsername();
+            log("WEBHOOK", "Webhooks enabled, interval: " + webhookIntervalMinutes + " min");
+            queueSendWebhook();
         }
 
         tasks = Arrays.asList(

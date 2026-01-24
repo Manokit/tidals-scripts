@@ -2,188 +2,230 @@ package main;
 
 import com.osmb.api.ScriptCore;
 import com.osmb.api.script.Script;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
+import java.io.InputStream;
 import java.util.prefs.Preferences;
 
+/**
+ * setup ui for gold superheater - discord webhooks configuration
+ */
 public class ScriptUI {
-    private final Preferences prefs = Preferences.userRoot().node("main");
-    
-    // Mode preferences
-    private static final String PREF_AFK_MODE = "tgoldsuperheater_afk_mode";
-    
-    // Webhook preferences
-    private static final String PREF_WEBHOOK_ENABLED = "tgoldsuperheater_webhook_enabled";
-    private static final String PREF_WEBHOOK_URL = "tgoldsuperheater_webhook_url";
-    private static final String PREF_WEBHOOK_INTERVAL = "tgoldsuperheater_webhook_interval";
-    private static final String PREF_WEBHOOK_INCLUDE_USER = "tgoldsuperheater_webhook_include_user";
+    private final Preferences prefs = Preferences.userRoot().node("tidals_gold_superheater");
+
+    // preference keys
+    private static final String PREF_WEBHOOK_ENABLED = "webhook_enabled";
+    private static final String PREF_WEBHOOK_URL = "webhook_url";
+    private static final String PREF_WEBHOOK_INCLUDE_USER = "webhook_include_user";
+    private static final String PREF_WEBHOOK_INTERVAL = "webhook_interval";
+
+    // tidals standard colors
+    private static final String BG_COLOR = "#163134";
+    private static final String BORDER_COLOR = "#284b50";
+    private static final String GOLD = "#ffd700";
+    private static final String TEXT_LIGHT = "#eeede9";
+    private static final String TEXT_MUTED = "#aab9b9";
 
     private final Script script;
-    
-    // Mode selection
-    private RadioButton afkModeRadio;
-    private RadioButton activeModeRadio;
-    private ToggleGroup modeToggleGroup;
-    
-    // Webhook controls
-    private CheckBox webhookEnabledCheckBox;
+
+    // webhook controls
+    private CheckBox webhookEnabledCheckbox;
     private TextField webhookUrlField;
-    private ComboBox<Integer> webhookIntervalComboBox;
-    private CheckBox includeUsernameCheckBox;
+    private CheckBox includeUsernameCheckbox;
+    private ComboBox<String> intervalComboBox;
+
+    // reference for closing
+    private Button startButton;
 
     public ScriptUI(Script script) {
         this.script = script;
     }
 
     public Scene buildScene(ScriptCore core) {
-        TabPane tabPane = new TabPane();
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(20, 24, 20, 24));
+        root.setAlignment(Pos.TOP_CENTER);
+        root.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
-        // === Main Tab (Ocean Theme) ===
-        VBox mainBox = new VBox(12);
-        mainBox.setStyle("-fx-background: linear-gradient(to bottom, #18547A, #0F3460); -fx-padding: 20; -fx-alignment: center");
-
-        // Mode selection label
-        Label modeLabel = new Label("Superheating Mode");
-        modeLabel.setStyle("-fx-text-fill: #40E0D0; -fx-font-size: 14px; -fx-font-weight: bold;");
-
-        // Mode toggle group
-        modeToggleGroup = new ToggleGroup();
-
-        afkModeRadio = new RadioButton("AFK Mode (Auto-cast, slower)");
-        afkModeRadio.setStyle("-fx-text-fill: #98FB98; -fx-font-size: 12px;");
-        afkModeRadio.setToggleGroup(modeToggleGroup);
-
-        activeModeRadio = new RadioButton("Active Mode (Manual cast, faster)");
-        activeModeRadio.setStyle("-fx-text-fill: #98FB98; -fx-font-size: 12px;");
-        activeModeRadio.setToggleGroup(modeToggleGroup);
-
-        // Load saved preference (default to AFK mode)
-        boolean savedAFKMode = prefs.getBoolean(PREF_AFK_MODE, true);
-        if (savedAFKMode) {
-            afkModeRadio.setSelected(true);
-        } else {
-            activeModeRadio.setSelected(true);
+        // logo
+        ImageView logoView = loadLogo();
+        if (logoView != null) {
+            root.getChildren().add(logoView);
         }
 
-        // Mode description
-        Label modeDescLabel = new Label("");
-        modeDescLabel.setStyle("-fx-text-fill: #6495ED; -fx-font-size: 11px; -fx-wrap-text: true;");
-        modeDescLabel.setWrapText(true);
-        modeDescLabel.setMaxWidth(260);
-        updateModeDescription(modeDescLabel);
+        // version
+        Label versionLabel = new Label("v" + TidalsGoldSuperheater.scriptVersion);
+        versionLabel.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
+        root.getChildren().add(versionLabel);
 
-        // Update description when mode changes
-        modeToggleGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
-            updateModeDescription(modeDescLabel);
-        });
+        // === Webhook Section ===
+        VBox webhookBox = createSection("Discord Webhooks");
 
-        // Tooltip for modes
-        Tooltip afkTip = new Tooltip("Cast once and let the game auto-cast through all ores. Slower but fewer actions.");
-        afkTip.setStyle("-fx-font-size: 11px;");
-        afkModeRadio.setTooltip(afkTip);
+        webhookEnabledCheckbox = createCheckbox("Enable webhooks", prefs.getBoolean(PREF_WEBHOOK_ENABLED, false));
 
-        Tooltip activeTip = new Tooltip("Manually cast on each ore every 5-6 ticks. Faster XP but more clicks.");
-        activeTip.setStyle("-fx-font-size: 11px;");
-        activeModeRadio.setTooltip(activeTip);
-
-        mainBox.getChildren().addAll(modeLabel, afkModeRadio, activeModeRadio, modeDescLabel);
-        Tab mainTab = new Tab("Main", mainBox);
-        mainTab.setClosable(false);
-
-        // === Webhook Tab (Ocean Theme) ===
-        VBox webhookBox = new VBox(12);
-        webhookBox.setStyle("-fx-background: linear-gradient(to bottom, #18547A, #0F3460); -fx-padding: 20; -fx-alignment: center");
-
-        webhookEnabledCheckBox = new CheckBox("Enable Webhooks");
-        webhookEnabledCheckBox.setStyle("-fx-text-fill: #40E0D0; -fx-font-size: 13px;");
-        webhookEnabledCheckBox.setSelected(prefs.getBoolean(PREF_WEBHOOK_ENABLED, false));
+        Label urlLabel = new Label("Webhook URL");
+        urlLabel.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 12px;");
 
         webhookUrlField = new TextField(prefs.get(PREF_WEBHOOK_URL, ""));
-        webhookUrlField.setPromptText("Enter Webhook URL...");
-        webhookUrlField.setStyle("-fx-background-color: #0F3460; -fx-text-fill: white; -fx-prompt-text-fill: #98FB98; -fx-border-color: #40E0D0; -fx-border-width: 1;");
-        webhookUrlField.setDisable(!webhookEnabledCheckBox.isSelected());
+        webhookUrlField.setPromptText("https://discord.com/api/webhooks/...");
+        webhookUrlField.setStyle(
+            "-fx-background-color: derive(" + BG_COLOR + ", -25%); " +
+            "-fx-text-fill: " + TEXT_LIGHT + "; " +
+            "-fx-prompt-text-fill: " + TEXT_MUTED + "; " +
+            "-fx-border-color: " + BORDER_COLOR + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 4; " +
+            "-fx-background-radius: 4;"
+        );
 
-        Label intervalLabel = new Label("Send interval (minutes)");
-        intervalLabel.setStyle("-fx-text-fill: #40E0D0; -fx-font-size: 12px;");
+        includeUsernameCheckbox = createCheckbox("Include username", prefs.getBoolean(PREF_WEBHOOK_INCLUDE_USER, true));
 
-        webhookIntervalComboBox = new ComboBox<>();
-        webhookIntervalComboBox.setStyle("-fx-background-color: #0F3460; -fx-text-fill: white; -fx-border-color: #40E0D0;");
-        for (int i = 1; i <= 60; i++) webhookIntervalComboBox.getItems().add(i);
-        webhookIntervalComboBox.getSelectionModel().select(prefs.getInt(PREF_WEBHOOK_INTERVAL, 5) - 1);
-        webhookIntervalComboBox.setDisable(!webhookEnabledCheckBox.isSelected());
+        Label intervalLabel = new Label("Update interval");
+        intervalLabel.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 12px;");
 
-        includeUsernameCheckBox = new CheckBox("Include Username");
-        includeUsernameCheckBox.setStyle("-fx-text-fill: #40E0D0; -fx-font-size: 13px;");
-        includeUsernameCheckBox.setSelected(prefs.getBoolean(PREF_WEBHOOK_INCLUDE_USER, true));
-        includeUsernameCheckBox.setDisable(!webhookEnabledCheckBox.isSelected());
-
-        webhookEnabledCheckBox.setOnAction(e -> {
-            boolean enabled = webhookEnabledCheckBox.isSelected();
-            webhookUrlField.setDisable(!enabled);
-            webhookIntervalComboBox.setDisable(!enabled);
-            includeUsernameCheckBox.setDisable(!enabled);
+        intervalComboBox = new ComboBox<>();
+        intervalComboBox.getItems().addAll("1 minute", "5 minutes", "10 minutes", "15 minutes", "30 minutes");
+        int savedInterval = prefs.getInt(PREF_WEBHOOK_INTERVAL, 5);
+        intervalComboBox.setValue(savedInterval + (savedInterval == 1 ? " minute" : " minutes"));
+        intervalComboBox.setMaxWidth(Double.MAX_VALUE);
+        intervalComboBox.setStyle(
+            "-fx-background-color: derive(" + BG_COLOR + ", -25%); " +
+            "-fx-border-color: " + BORDER_COLOR + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 4; " +
+            "-fx-background-radius: 4;"
+        );
+        // style the button cell (visible when closed) with white text
+        intervalComboBox.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                setStyle("-fx-text-fill: white; -fx-font-size: 12px;");
+            }
+        });
+        // style dropdown items with white text
+        intervalComboBox.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                setStyle("-fx-text-fill: white; -fx-background-color: " + BG_COLOR + "; -fx-font-size: 12px;");
+            }
         });
 
         webhookBox.getChildren().addAll(
-                webhookEnabledCheckBox,
-                webhookUrlField,
-                intervalLabel,
-                webhookIntervalComboBox,
-                includeUsernameCheckBox
+            webhookEnabledCheckbox, urlLabel, webhookUrlField,
+            includeUsernameCheckbox, intervalLabel, intervalComboBox
         );
+        root.getChildren().add(webhookBox);
 
-        Tab webhookTab = new Tab("Webhooks", webhookBox);
-        webhookTab.setClosable(false);
+        // start button
+        startButton = new Button("Start Superheating");
+        startButton.setMaxWidth(Double.MAX_VALUE);
+        startButton.setPrefHeight(36);
+        startButton.setStyle(
+            "-fx-background-color: " + GOLD + "; " +
+            "-fx-text-fill: " + BG_COLOR + "; " +
+            "-fx-font-weight: bold; " +
+            "-fx-font-size: 13px; " +
+            "-fx-background-radius: 4; " +
+            "-fx-cursor: hand;"
+        );
+        startButton.setOnMouseEntered(e -> startButton.setStyle(
+            "-fx-background-color: derive(" + GOLD + ", 15%); " +
+            "-fx-text-fill: " + BG_COLOR + "; " +
+            "-fx-font-weight: bold; " +
+            "-fx-font-size: 13px; " +
+            "-fx-background-radius: 4; " +
+            "-fx-cursor: hand;"
+        ));
+        startButton.setOnMouseExited(e -> startButton.setStyle(
+            "-fx-background-color: " + GOLD + "; " +
+            "-fx-text-fill: " + BG_COLOR + "; " +
+            "-fx-font-weight: bold; " +
+            "-fx-font-size: 13px; " +
+            "-fx-background-radius: 4; " +
+            "-fx-cursor: hand;"
+        ));
+        startButton.setOnAction(e -> saveSettings());
+        root.getChildren().add(startButton);
 
-        tabPane.getTabs().addAll(mainTab, webhookTab);
-
-        // Confirm Button (Ocean themed)
-        Button confirmButton = new Button("Start Superheating");
-        confirmButton.setStyle("-fx-background-color: #FF7F50; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 5;");
-        confirmButton.setOnMouseEntered(e -> confirmButton.setStyle("-fx-background-color: #FF6347; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 5;"));
-        confirmButton.setOnMouseExited(e -> confirmButton.setStyle("-fx-background-color: #FF7F50; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 5;"));
-        confirmButton.setOnAction(event -> saveSettings());
-
-        VBox layout = new VBox(tabPane, confirmButton);
-        layout.setSpacing(15);
-        layout.setStyle("-fx-background: linear-gradient(to bottom, #0F3460, #0A1F3D); -fx-padding: 15;");
-
-        Scene scene = new Scene(layout, 300, 280);
+        Scene scene = new Scene(root, 300, 340);
+        scene.setFill(Color.web(BG_COLOR));
         return scene;
     }
 
-    private void updateModeDescription(Label label) {
-        if (afkModeRadio.isSelected()) {
-            label.setText("Cast once and let the game auto-cast. Lower actions, good for mobile.");
-        } else {
-            label.setText("Manually cast every 5-6 ticks. Faster XP rates but more actions.");
+    private VBox createSection(String title) {
+        VBox box = new VBox(6);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(10));
+        box.setStyle(
+            "-fx-background-color: derive(" + BG_COLOR + ", -15%); " +
+            "-fx-border-color: " + BORDER_COLOR + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 4; " +
+            "-fx-background-radius: 4;"
+        );
+
+        Label header = new Label(title);
+        header.setStyle("-fx-text-fill: " + GOLD + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+        box.getChildren().add(header);
+
+        return box;
+    }
+
+    private CheckBox createCheckbox(String text, boolean selected) {
+        CheckBox cb = new CheckBox(text);
+        cb.setSelected(selected);
+        cb.setStyle("-fx-text-fill: " + TEXT_LIGHT + "; -fx-font-size: 13px; -fx-cursor: hand;");
+        return cb;
+    }
+
+    private ImageView loadLogo() {
+        try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
+            if (in == null) return null;
+            Image img = new Image(in);
+            ImageView view = new ImageView(img);
+            view.setPreserveRatio(true);
+            view.setFitWidth(160);
+            return view;
+        } catch (Exception e) {
+            return null;
         }
     }
 
     private void saveSettings() {
-        // Save mode preference
-        prefs.putBoolean(PREF_AFK_MODE, isAFKMode());
-        script.log("SAVESETTINGS", "Saved mode preference: " + (isAFKMode() ? "AFK" : "Active"));
+        // parse interval from combo box
+        String intervalStr = intervalComboBox.getValue();
+        int intervalMinutes = 5;
+        if (intervalStr != null) {
+            intervalMinutes = Integer.parseInt(intervalStr.split(" ")[0]);
+        }
 
-        // Save webhook preferences
-        prefs.putBoolean(PREF_WEBHOOK_ENABLED, isWebhookEnabled());
-        prefs.put(PREF_WEBHOOK_URL, getWebhookUrl());
-        prefs.putInt(PREF_WEBHOOK_INTERVAL, getWebhookInterval());
-        prefs.putBoolean(PREF_WEBHOOK_INCLUDE_USER, isUsernameIncluded());
+        // save preferences
+        prefs.putBoolean(PREF_WEBHOOK_ENABLED, webhookEnabledCheckbox.isSelected());
+        prefs.put(PREF_WEBHOOK_URL, webhookUrlField.getText().trim());
+        prefs.putBoolean(PREF_WEBHOOK_INCLUDE_USER, includeUsernameCheckbox.isSelected());
+        prefs.putInt(PREF_WEBHOOK_INTERVAL, intervalMinutes);
 
-        ((Stage) afkModeRadio.getScene().getWindow()).close();
+        script.log(getClass(), "settings saved");
+
+        // close the window
+        ((Stage) startButton.getScene().getWindow()).close();
     }
 
-    // Getters
-    public boolean isAFKMode() {
-        return afkModeRadio != null && afkModeRadio.isSelected();
-    }
-
+    // getters
     public boolean isWebhookEnabled() {
-        return webhookEnabledCheckBox != null && webhookEnabledCheckBox.isSelected();
+        return webhookEnabledCheckbox != null && webhookEnabledCheckbox.isSelected();
     }
 
     public String getWebhookUrl() {
@@ -191,12 +233,12 @@ public class ScriptUI {
     }
 
     public int getWebhookInterval() {
-        return webhookIntervalComboBox != null && webhookIntervalComboBox.getValue() != null
-                ? webhookIntervalComboBox.getValue()
-                : 5;
+        if (intervalComboBox == null || intervalComboBox.getValue() == null) return 5;
+        String intervalStr = intervalComboBox.getValue();
+        return Integer.parseInt(intervalStr.split(" ")[0]);
     }
 
     public boolean isUsernameIncluded() {
-        return includeUsernameCheckBox != null && includeUsernameCheckBox.isSelected();
+        return includeUsernameCheckbox != null && includeUsernameCheckbox.isSelected();
     }
 }

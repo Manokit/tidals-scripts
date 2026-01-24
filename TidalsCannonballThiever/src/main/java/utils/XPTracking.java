@@ -11,7 +11,6 @@ import java.util.Map;
 public class XPTracking {
 
     private final ScriptCore core;
-    private double lastKnownXp = -1.0;
     private boolean initialized = false;
     private boolean recalibrated = false;
 

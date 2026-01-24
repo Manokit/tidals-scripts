@@ -404,6 +404,7 @@ public class TidalsCannonballThiever extends Script {
             }
 
         } catch (Exception e) {
+            // inventory check can fail during transitions, safe to ignore
         }
     }
 

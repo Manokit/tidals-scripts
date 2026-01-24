@@ -132,6 +132,24 @@ public class ScriptUI {
             "-fx-border-radius: 4; " +
             "-fx-background-radius: 4;"
         );
+        // style the button cell (visible when closed) with white text
+        intervalComboBox.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                setStyle("-fx-text-fill: white; -fx-font-size: 12px;");
+            }
+        });
+        // style dropdown items with white text
+        intervalComboBox.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                setStyle("-fx-text-fill: white; -fx-background-color: " + BG_COLOR + "; -fx-font-size: 12px;");
+            }
+        });
 
         discordOptionsBox.getChildren().addAll(
             webhookEnabledCheckbox, urlLabel, webhookUrlField,

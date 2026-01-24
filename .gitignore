@@ -31,3 +31,6 @@ context.md
 build.gradle.planning/
 
 .cursor/
+
+/TidalsLocalCoordTest/*
+TidalsLocalCoordTest_PRD.md

@@ -126,69 +126,13 @@ public class TidalsChompyHunter extends Script {
     private List<Task> tasks;
     private DetectPlayers detectPlayers;
 
-    // standard bank regions - covers 99% of bank locations
-    public static final int[] BANK_REGIONS = {
-            13104, // shantay pass
-            13105, // al kharid
-            13363, // duel arena / pvp arena
-            12850, // lumbridge castle
-            12338, // draynor
-            12853, // varrock east
-            12597, // varrock west + cooks guild
-            12598, // grand exchange
-            12342, // edgeville
-            12084, // falador east + mining guild
-            11828, // falador west
-            11571, // crafting guild
-            11319, // warriors guild
-            11061, // catherby
-            10806, // seers
-            11310, // shilo
-            10284, // corsair cove
-            9772,  // myths guild
-            10288, // yanille
-            10545, // port khazard
-            10547, // ardougne east/south
-            10292, // ardougne east/north
-            10293, // fishing guild
-            10039, // barbarian assault
-            9782,  // grand tree
-            9781,  // tree gnome stronghold
-            9776,  // castle wars
-            9265,  // lletya
-            8748,  // soul wars
-            8253,  // lunar isle
-            9275,  // neitiznot
-            9531,  // jatiszo
-            6461,  // wintertodt
-            7227,  // port piscarilius
-            6458,  // arceeus
-            6457,  // kourend castle
-            6968,  // hosidius
-            7223,  // vinery
-            6710,  // sand crabs chest
-            6198,  // woodcutting guild
-            5941,  // land's end
-            5944,  // shayzien
-            5946,  // lovakengj south
-            5691,  // lovekengj north
-            4922,  // farming guild
-            4919,  // chambers of xeric
-            5938,  // quetzacalli
-            6448,  // varlamore west
-            6960,  // varlamore east
-            6191,  // hunter guild
-            5421,  // aldarin
-            5420,  // mistrock
-            14638, // mos'le harmless
-            14642, // tob + ver sinhaza
-            14646, // port phasmatys
-            12344, // ferox enclave
-            12895, // priff north
-            13150, // priff south
-            13907, // museum camp
-            14908, // fossil bank chest island
-            10290, // kandarin monastery (ardy cloak)
+    // feldip hills / chompy hunting regions
+    private static final int[] CHOMPY_REGIONS = {
+            9775,  // feldip hills
+            9776,  // castle wars / feldip
+            10031, // feldip hills east
+            10032, // feldip hills swamp
+            9519, // feldip hills fairy ring area
     };
 
     public TidalsChompyHunter(Object scriptCore) {
@@ -197,7 +141,7 @@ public class TidalsChompyHunter extends Script {
 
     @Override
     public int[] regionsToPrioritise() {
-        return BANK_REGIONS;
+        return CHOMPY_REGIONS;
     }
 
     /**
