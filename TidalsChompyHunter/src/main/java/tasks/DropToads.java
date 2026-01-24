@@ -5,6 +5,7 @@ import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.location.area.impl.PolyArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.walker.WalkConfig;
 import main.TidalsChompyHunter;
 import utils.Task;
@@ -161,7 +162,7 @@ public class DropToads extends Task {
                 // wait for game to auto-move player after drop (creates straight line of toads)
                 if (dropped < toDrop) {
                     script.log(getClass(), "waiting for auto-move...");
-                    script.submitTask(() -> false, script.random(900, 1100));
+                    script.submitTask(() -> true, RandomUtils.weightedRandom(900, 1100));
                 }
             } else {
                 script.log(getClass(), "failed to drop toad");
@@ -305,7 +306,7 @@ public class DropToads extends Task {
         boolean dropped = item.interact("Drop");
         if (dropped) {
             // wait for drop animation to complete
-            script.pollFramesUntil(() -> false, script.random(600, 900));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 900));
 
             // CRITICAL: wait for player to be FULLY stopped AFTER drop animation
             // player may still be moving from walker momentum during animation

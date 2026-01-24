@@ -2,6 +2,7 @@ package tasks;
 
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
+import com.osmb.api.utils.RandomUtils;
 import utils.Task;
 
 import static main.TidalsCannonballThiever.*;
@@ -28,8 +29,8 @@ public class WaitAtSafety extends Task {
             return safe;
         }, 10000);
 
-        if (script.random(1, 100) <= 30) {
-            script.pollFramesHuman(() -> false, script.random(150, 400));
+        if (RandomUtils.uniformRandom(1, 100) <= 30) {
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 800, 0.002));
         }
 
         return true;

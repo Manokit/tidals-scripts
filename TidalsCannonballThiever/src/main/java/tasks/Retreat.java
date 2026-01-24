@@ -3,6 +3,7 @@ package tasks;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 import utils.Task;
 
 import static main.TidalsCannonballThiever.*;
@@ -38,14 +39,9 @@ public class Retreat extends Task {
     }
     
     private boolean tapOnTile(WorldPosition tile) {
-        try {
-            Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
-            if (tilePoly == null) return false;
-            return script.getFinger().tap(tilePoly);
-        } catch (Exception e) {
-            script.log("RETREAT", "Error tapping tile: " + e.getMessage());
-            return false;
-        }
+        Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
+        if (tilePoly == null) return false;
+        return script.getFinger().tap(tilePoly);
     }
 
     private boolean isAtSafetyTile() {

@@ -7,6 +7,7 @@ import com.osmb.api.script.Script;
 import com.osmb.api.trackers.experience.XPTracker;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
@@ -153,7 +154,7 @@ public class Cut extends Task {
 
                 script.log(getClass(), "cutting gems of type: " + targetGemId);
                 waitUntilFinishedCrafting(targetGemId);
-                script.pollFramesHuman(() -> false, script.random(400, 800));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(400, 1600, 0.002));
                 cutAnyGems = true;
             }
         }
@@ -207,7 +208,7 @@ public class Cut extends Task {
         }
 
         // randomize which item to click first (chisel or gem)
-        boolean firstIsGem = script.random(2) == 0;
+        boolean firstIsGem = RandomUtils.uniformRandom(0, 1) == 0;
 
         int firstID = firstIsGem ? gemID : CHISEL_ID;
         int secondID = firstIsGem ? CHISEL_ID : gemID;
@@ -218,7 +219,7 @@ public class Cut extends Task {
             return false;
         }
 
-        script.pollFramesUntil(() -> false, script.random(150, 300), true);
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 600, 0.002));
 
         task = "Use item 2";
         if (!RetryUtils.inventoryInteract(script, inv.getRandomItem(secondID), "Use", "use second item")) {
@@ -232,7 +233,7 @@ public class Cut extends Task {
         };
 
         task = "Wait dialogue";
-        return script.pollFramesHuman(condition, script.random(3000, 5000));
+        return script.pollFramesUntil(condition, RandomUtils.weightedRandom(3000, 10000, 0.002));
     }
 
     private void waitUntilFinishedCrafting(int consumedID) {
@@ -247,12 +248,12 @@ public class Cut extends Task {
             if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
                 script.log(getClass(), "level up");
                 script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.pollFramesHuman(() -> false, script.random(1000, 3000));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(1000, 6000, 0.002));
                 return true;
             }
 
             // timeout
-            if (timer.timeElapsed() > script.random(70000, 78000)) {
+            if (timer.timeElapsed() > RandomUtils.uniformRandom(70000, 78000)) {
                 return true;
             }
 
@@ -275,7 +276,7 @@ public class Cut extends Task {
         };
 
         script.log(getClass(), "waiting for cutting to finish");
-        script.pollFramesHuman(condition, script.random(70000, 78000));
+        script.pollFramesUntil(condition, RandomUtils.weightedRandom(70000, 156000, 0.002));
     }
 
     private int countGemsInInventory(int gemId) {
@@ -306,7 +307,7 @@ public class Cut extends Task {
             if (dropped) {
                 script.log(getClass(), "dropped crushed gem");
                 // brief wait between drops
-                script.pollFramesUntil(() -> false, script.random(100, 200), true);
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(100, 400, 0.002));
             } else {
                 script.log(getClass(), "failed to drop crushed gem");
                 break;

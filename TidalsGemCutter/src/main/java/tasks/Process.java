@@ -2,7 +2,9 @@ package tasks;
 
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
+import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.script.Script;
 import utils.Task;
@@ -92,7 +94,7 @@ public class Process extends Task {
 
             script.log(getClass(), "cutting");
             waitUntilFinishedCrafting(selectedUncutGemID, selectedCutGemID);
-            script.pollFramesHuman(() -> false, script.random(400, 800));
+            // waitUntilFinishedCrafting already has built-in delay, no extra needed
         }
 
         return false;
@@ -121,28 +123,29 @@ public class Process extends Task {
 
             script.log(getClass(), "making bolt tips");
             waitUntilFinishedCrafting(selectedCutGemID, selectedBoltTipID);
-            script.pollFramesHuman(() -> false, script.random(400, 800));
+            // waitUntilFinishedCrafting already has built-in delay, no extra needed
         }
 
         return false;
     }
 
     private boolean interactWithItems(ItemGroupResult inv, int gemID) {
-        boolean firstIsGem = script.random(2) == 0;
+        boolean firstIsGem = RandomUtils.uniformRandom(2) == 0;
 
         int firstID = firstIsGem ? gemID : ItemID.CHISEL;
         int secondID = firstIsGem ? ItemID.CHISEL : gemID;
 
         task = "Use item 1";
-        if (!inv.getRandomItem(firstID).interact()) {
+        ItemSearchResult firstItem = inv.getRandomItem(firstID);
+        if (firstItem == null || !firstItem.interact()) {
             script.log(getClass(), "first item failed");
             return false;
         }
-
-        script.pollFramesUntil(() -> false, script.random(150, 300));
+        // interact() has built-in humanized delay, no extra delay needed
 
         task = "Use item 2";
-        if (!inv.getRandomItem(secondID).interact()) {
+        ItemSearchResult secondItem = inv.getRandomItem(secondID);
+        if (secondItem == null || !secondItem.interact()) {
             script.log(getClass(), "second item failed");
             return false;
         }
@@ -153,12 +156,13 @@ public class Process extends Task {
         };
 
         task = "Wait dialogue";
-        return script.pollFramesHuman(condition, script.random(3000, 5000));
+        return script.pollFramesHuman(condition, RandomUtils.gaussianRandom(3000, 6000, 4000, 800));
     }
 
     private void waitUntilFinishedCrafting(int consumedID, int producedID) {
         task = "Processing";
         Timer timer = new Timer();
+        int timeout = RandomUtils.gaussianRandom(70000, 80000, 74000, 2000);
 
         final int[] lastCount = {getItemCount(producedID)};
 
@@ -168,12 +172,12 @@ public class Process extends Task {
             if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
                 script.log(getClass(), "level up");
                 script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.pollFramesHuman(() -> false, script.random(1000, 3000));
+                script.pollFramesUntil(() -> true, RandomUtils.gaussianRandom(1000, 3500, 1500, 500));
                 return true;
             }
 
             // timeout
-            if (timer.timeElapsed() > script.random(70000, 78000)) {
+            if (timer.timeElapsed() > timeout) {
                 return true;
             }
 
@@ -193,7 +197,7 @@ public class Process extends Task {
         };
 
         script.log(getClass(), "waiting for crafting");
-        script.pollFramesHuman(condition, script.random(70000, 78000));
+        script.pollFramesHuman(condition, timeout);
     }
 
     private int getItemCount(int itemID) {

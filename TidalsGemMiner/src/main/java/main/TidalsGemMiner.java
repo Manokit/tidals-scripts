@@ -18,6 +18,7 @@ import utils.XPTracking;
 
 import javax.imageio.ImageIO;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -428,7 +429,7 @@ public class TidalsGemMiner extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "logo loaded: " + w + "x" + h);
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -496,7 +497,7 @@ public class TidalsGemMiner extends Script {
             } else {
                 log("STATS", "Failed to send stats, HTTP " + code);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }
@@ -527,7 +528,7 @@ public class TidalsGemMiner extends Script {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("VERSIONCHECK", "Exception occurred while fetching version from GitHub.");
         }
         return null;

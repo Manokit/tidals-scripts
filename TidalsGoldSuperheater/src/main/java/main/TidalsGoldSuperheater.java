@@ -671,7 +671,7 @@ public class TidalsGoldSuperheater extends Script {
             } else {
                 log("STATS", "Failed to report stats, HTTP " + code);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
@@ -702,7 +702,7 @@ public class TidalsGoldSuperheater extends Script {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("VERSIONCHECK", "Exception occurred while fetching version from GitHub.");
         }
         return null;

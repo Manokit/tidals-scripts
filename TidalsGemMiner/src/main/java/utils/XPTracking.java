@@ -32,8 +32,8 @@ public class XPTracking {
                     return (int) tracker.getXp();
                 }
             }
-        } catch (Exception e) {
-            // fall through
+        } catch (RuntimeException e) {
+            // tracker may not be available yet, fall through to return -1
         }
         return -1;
     }
@@ -133,7 +133,7 @@ public class XPTracking {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // recalibration failed, continue with estimated values
         }
     }

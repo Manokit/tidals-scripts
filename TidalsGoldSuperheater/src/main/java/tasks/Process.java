@@ -6,6 +6,7 @@ import com.osmb.api.shape.Rectangle;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 import com.osmb.api.ui.spellbook.SpellNotFoundException;
 import com.osmb.api.ui.spellbook.StandardSpellbook;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.script.Script;
 
 import main.TidalsGoldSuperheater;
@@ -104,17 +105,14 @@ public class Process extends Task {
                     2000);
             }
 
-            // normal 2-3 tick delay, 10% chance of extra pause
-            int delay = script.random(1200, 1800);
-            if (script.random(10) == 0) {
-                delay += script.random(600, 1200);
-            }
-            
+            // weighted delay - mostly 1200-1800 but occasionally longer
+            int delay = RandomUtils.weightedRandom(1200, 3500, 0.002);
+
             // ~20% chance to use human delay (logs the ⏳ message)
-            if (script.random(5) == 0) {
-                script.pollFramesHuman(() -> false, delay);
+            if (RandomUtils.uniformRandom(5) == 0) {
+                script.pollFramesHuman(() -> true, delay);
             } else {
-                script.submitTask(() -> false, delay);
+                script.submitTask(() -> true, delay);
             }
         }
 

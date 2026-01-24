@@ -5,6 +5,7 @@ import com.osmb.api.item.ItemID;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.timing.Timer;
 import main.TidalsGemCutter;
 import utils.Task;
@@ -58,7 +59,7 @@ public class Bank extends Task {
             return false;
         }
 
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
 
         task = "Search bank";
 
@@ -102,7 +103,7 @@ public class Bank extends Task {
         // deposit all except chisel
         task = "Deposit";
         script.getWidgetManager().getBank().depositAll(Set.of(ItemID.CHISEL));
-        script.pollFramesHuman(() -> false, script.random(300, 600));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1500, 0.002));
 
         // refresh inv after deposit
         inv = script.getWidgetManager().getInventory().search(Collections.emptySet());

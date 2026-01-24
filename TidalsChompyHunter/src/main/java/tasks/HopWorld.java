@@ -3,6 +3,7 @@ package tasks;
 import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.tabs.Tab;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
 import main.TidalsChompyHunter;
 import utils.Task;
@@ -92,7 +93,7 @@ public class HopWorld extends Task {
 
             // wait for OSMB to stabilize and identify our position
             // prevents Setup from seeing our own dot as "another player"
-            script.submitTask(() -> false, POST_HOP_STABILIZATION_MS);
+            script.submitTask(() -> true, POST_HOP_STABILIZATION_MS);
             script.log(getClass(), "stabilization complete, resetting state");
 
             // reset state for new world
@@ -150,7 +151,7 @@ public class HopWorld extends Task {
     private boolean validateEquipment() {
         // open equipment tab
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.submitTask(() -> false, script.random(200, 400));
+        script.submitTask(() -> true, RandomUtils.weightedRandom(200, 400));
 
         // verify bow equipped
         UIResult<ItemSearchResult> bowCheck = script.getWidgetManager()

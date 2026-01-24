@@ -3,6 +3,7 @@ package tasks;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.Dialogue;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+import com.osmb.api.utils.RandomUtils;
 import utils.Task;
 
 import static main.TidalsCannonballThiever.*;
@@ -23,16 +24,12 @@ public class DismissDialogue extends Task {
         if (lastXpGain.timeElapsed() < STUCK_THRESHOLD_MS) return false;
 
         // check for CHAT_DIALOGUE or TAP_HERE_TO_CONTINUE
-        try {
-            Dialogue dialogue = script.getWidgetManager().getDialogue();
-            if (dialogue == null || !dialogue.isVisible()) return false;
+        Dialogue dialogue = script.getWidgetManager().getDialogue();
+        if (dialogue == null || !dialogue.isVisible()) return false;
 
-            DialogueType type = dialogue.getDialogueType();
-            return type == DialogueType.CHAT_DIALOGUE ||
-                   type == DialogueType.TAP_HERE_TO_CONTINUE;
-        } catch (Exception e) {
-            return false;
-        }
+        DialogueType type = dialogue.getDialogueType();
+        return type == DialogueType.CHAT_DIALOGUE ||
+               type == DialogueType.TAP_HERE_TO_CONTINUE;
     }
 
     @Override
@@ -40,31 +37,25 @@ public class DismissDialogue extends Task {
         task = "Dismissing dialogue...";
         script.log("RECOVERY", "Stuck in dialogue detected! Dismissing...");
 
-        try {
-            Dialogue dialogue = script.getWidgetManager().getDialogue();
+        Dialogue dialogue = script.getWidgetManager().getDialogue();
 
-            // dismiss dialogue repeatedly until closed
-            int maxAttempts = 10;
-            for (int i = 0; i < maxAttempts && dialogue.isVisible(); i++) {
-                dialogue.continueChatDialogue();
-                script.pollFramesHuman(() -> !dialogue.isVisible(), script.random(500, 800));
-            }
+        // dismiss dialogue repeatedly until closed
+        int maxAttempts = 10;
+        for (int i = 0; i < maxAttempts && dialogue.isVisible(); i++) {
+            dialogue.continueChatDialogue();
+            script.pollFramesUntil(() -> !dialogue.isVisible(), RandomUtils.weightedRandom(500, 1600, 0.002));
+        }
 
-            // reset thieving state
-            currentlyThieving = false;
-            script.log("RECOVERY", "Dialogue dismissed - resetting to stall");
+        // reset thieving state
+        currentlyThieving = false;
+        script.log("RECOVERY", "Dialogue dismissed - resetting to stall");
 
-            // enable guard sync for clean restart
-            if (guardTracker != null) {
-                StartThieving.resetForNewCycle();
-                guardTracker.resetCbCycle();
-                guardTracker.resetGuardTracking();
-                guardTracker.enableGuardSync();
-            }
-
-        } catch (Exception e) {
-            script.log("RECOVERY", "Error dismissing dialogue: " + e.getMessage());
-            currentlyThieving = false;
+        // enable guard sync for clean restart
+        if (guardTracker != null) {
+            StartThieving.resetForNewCycle();
+            guardTracker.resetCbCycle();
+            guardTracker.resetGuardTracking();
+            guardTracker.enableGuardSync();
         }
 
         return true;

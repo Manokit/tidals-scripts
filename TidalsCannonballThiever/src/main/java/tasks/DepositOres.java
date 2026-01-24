@@ -6,7 +6,7 @@ import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.ui.chatbox.dialogue.Dialogue;
-
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
@@ -42,14 +42,10 @@ public class DepositOres extends Task {
         }
 
         // check if inventory full
-        try {
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-            if (inv != null && inv.isFull()) {
-                script.log("DEPOSIT", "Inventory full (28/28) - need to deposit!");
-                return true;
-            }
-        } catch (Exception e) {
-            script.log("DEPOSIT", "Error checking inventory: " + e.getMessage());
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+        if (inv != null && inv.isFull()) {
+            script.log("DEPOSIT", "Inventory full (28/28) - need to deposit!");
+            return true;
         }
 
         // fallback: dialogue check
@@ -62,20 +58,16 @@ public class DepositOres extends Task {
     }
     
     private boolean hasInventoryFullDialogue() {
-        try {
-            Dialogue dialogue = script.getWidgetManager().getDialogue();
-            if (dialogue == null || !dialogue.isVisible()) return false;
-            
-            UIResult<String> textResult = dialogue.getText();
-            if (textResult == null || !textResult.isFound()) return false;
-            
-            String text = textResult.get().toLowerCase();
-            return text.contains("inventory is too full") || 
-                   text.contains("inventory is full") ||
-                   text.contains("can't carry any more");
-        } catch (Exception e) {
-            return false;
-        }
+        Dialogue dialogue = script.getWidgetManager().getDialogue();
+        if (dialogue == null || !dialogue.isVisible()) return false;
+
+        UIResult<String> textResult = dialogue.getText();
+        if (textResult == null || !textResult.isFound()) return false;
+
+        String text = textResult.get().toLowerCase();
+        return text.contains("inventory is too full") ||
+               text.contains("inventory is full") ||
+               text.contains("can't carry any more");
     }
     
     @Override
@@ -86,12 +78,8 @@ public class DepositOres extends Task {
 
         if (hasInventoryFullDialogue()) {
             script.log("DEPOSIT", "Dismissing 'inventory full' dialogue...");
-            try {
-                script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.pollFramesHuman(() -> false, script.random(300, 500));
-            } catch (Exception e) {
-                script.log("DEPOSIT", "Failed to dismiss dialogue: " + e.getMessage());
-            }
+            script.getWidgetManager().getDialogue().continueChatDialogue();
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
         }
 
         boolean hasItems = !isInventoryEmpty();
@@ -103,7 +91,7 @@ public class DepositOres extends Task {
                 script.log("DEPOSIT", "Walking to deposit box...");
                 script.getWalker().walkTo(DEPOSIT_BOX_TILE, exactTileConfig);
                 script.pollFramesUntil(() -> isNearDepositBox(), 8000, false);
-                script.pollFramesHuman(() -> false, script.random(300, 600));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
             }
             
             if (!openDepositBoxWithMenu()) {
@@ -112,7 +100,7 @@ public class DepositOres extends Task {
             }
 
             script.pollFramesUntil(() -> isDepositInterfaceOpen(), 5000);
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
 
             if (!isDepositInterfaceOpen()) {
                 script.log("DEPOSIT", "Deposit interface didn't open, retrying...");
@@ -125,7 +113,7 @@ public class DepositOres extends Task {
             }
 
             script.pollFramesUntil(() -> isInventoryEmpty(), 3000);
-            script.pollFramesHuman(() -> false, script.random(300, 500));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
 
             closeDepositInterface();
             
@@ -136,7 +124,7 @@ public class DepositOres extends Task {
             script.log("DEPOSIT", "Returning to cannonball stall...");
             script.getWalker().walkTo(CANNONBALL_STALL_TILE, exactTileConfig);
             script.pollFramesUntil(() -> isAtCannonballStallExact(), 8000, false);
-            script.pollFramesHuman(() -> false, script.random(300, 600));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
         }
 
         atOreStall = false;
@@ -183,12 +171,8 @@ public class DepositOres extends Task {
     }
 
     private boolean isInventoryEmpty() {
-        try {
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-            return inv != null && inv.getFreeSlots() == 28;
-        } catch (Exception e) {
-            return true;
-        }
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+        return inv != null && inv.getFreeSlots() == 28;
     }
 
     private boolean isNearDepositBox() {
@@ -200,36 +184,24 @@ public class DepositOres extends Task {
     }
 
     private boolean isDepositInterfaceOpen() {
-        try {
-            return script.getWidgetManager().getDepositBox().isVisible();
-        } catch (Exception e) {
-            return false;
-        }
+        return script.getWidgetManager().getDepositBox().isVisible();
     }
 
     private boolean depositAll() {
-        try {
-            boolean result = script.getWidgetManager().getDepositBox().depositAll(Set.of());
-            if (result) {
-                script.log("DEPOSIT", "Deposited all items!");
-                if (script instanceof main.TidalsCannonballThiever) {
-                    ((main.TidalsCannonballThiever) script).resetInventorySnapshot();
-                }
+        boolean result = script.getWidgetManager().getDepositBox().depositAll(Set.of());
+        if (result) {
+            script.log("DEPOSIT", "Deposited all items!");
+            if (script instanceof main.TidalsCannonballThiever) {
+                ((main.TidalsCannonballThiever) script).resetInventorySnapshot();
             }
-            return result;
-        } catch (Exception e) {
-            script.log("DEPOSIT", "Error depositing: " + e.getMessage());
-            return false;
         }
+        return result;
     }
 
     private void closeDepositInterface() {
-        try {
-            if (isDepositInterfaceOpen()) {
-                script.getWidgetManager().getDepositBox().close();
-                script.pollFramesHuman(() -> false, script.random(200, 400));
-            }
-        } catch (Exception ignored) {
+        if (isDepositInterfaceOpen()) {
+            script.getWidgetManager().getDepositBox().close();
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
         }
     }
 

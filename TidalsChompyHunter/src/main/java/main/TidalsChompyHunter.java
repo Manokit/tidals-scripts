@@ -27,6 +27,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -354,7 +355,7 @@ public class TidalsChompyHunter extends Script {
                 } else {
                     log(getClass(), "Webhook failed: HTTP " + code);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 log(getClass(), "Webhook error: " + e.getMessage());
             }
         }, "MilestoneWebhook");
@@ -421,7 +422,7 @@ public class TidalsChompyHunter extends Script {
                 } else {
                     log(getClass(), "webhook failed: HTTP " + code);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 log(getClass(), "webhook error: " + e.getMessage());
             }
         }, "PeriodicWebhook");
@@ -866,7 +867,7 @@ public class TidalsChompyHunter extends Script {
             if (code == 200) {
                 log(getClass(), "stats reported: kills=" + killIncrement + ", arrows=" + arrowsUsedIncrement + ", runtime=" + runtimeSecs + "s");
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "stats error: " + e.getClass().getSimpleName());
         }
     }

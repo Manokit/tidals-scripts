@@ -6,6 +6,7 @@ import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
 import com.osmb.api.ui.tabs.Tab;
 import com.osmb.api.utils.UIResult;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResultList;
 import main.TidalsChompyHunter;
 import utils.Task;
@@ -120,7 +121,7 @@ public class Setup extends Task {
 
         // switch to equipment tab
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
 
         // SETUP-02: check ogre bow equipped
         UIResult<ItemSearchResult> bowCheck = script.getWidgetManager().getEquipment().findItem(OGRE_BOWS);
@@ -188,7 +189,7 @@ public class Setup extends Task {
             long waitTime = loginGraceMs - timeSinceLogin;
             script.log(getClass(), "waiting " + (waitTime / 1000) + "s for position stabilization...");
             task = "stabilizing position...";
-            script.submitTask(() -> false, (int) waitTime);
+            script.submitTask(() -> true, (int) waitTime);
             script.log(getClass(), "stabilization complete - checking for players");
         }
 
@@ -234,7 +235,7 @@ public class Setup extends Task {
 
         // open equipment tab if not already
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
 
         // try each bow id until one succeeds (we already validated one is equipped)
         boolean success = false;
@@ -320,7 +321,7 @@ public class Setup extends Task {
                 return;
             }
 
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
             UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
             if (zoomResult != null && zoomResult.isFound()) {
                 int currentZoom = zoomResult.get();
@@ -343,7 +344,7 @@ public class Setup extends Task {
             }
 
             script.getWidgetManager().getSettings().close();
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         } catch (Exception e) {
             script.log(getClass(), "error checking zoom level: " + e.getMessage());

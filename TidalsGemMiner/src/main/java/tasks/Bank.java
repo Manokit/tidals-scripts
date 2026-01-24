@@ -7,6 +7,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.depositbox.DepositBox;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
@@ -140,7 +141,7 @@ public class Bank extends Task {
         }
 
         // wait for deposit box to load
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
 
         task = "Depositing";
         if (cuttingEnabled) {
@@ -154,12 +155,12 @@ public class Bank extends Task {
         }
 
         // wait for deposit to complete
-        script.pollFramesHuman(() -> false, script.random(300, 600));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
 
         // close deposit box
         task = "Closing deposit box";
         depositBox.close();
-        script.pollFramesHuman(() -> !depositBox.isVisible(), 5000);
+        script.pollFramesUntil(() -> !depositBox.isVisible(), RandomUtils.weightedRandom(5000, 10000, 0.002));
 
         // don't walk back - Mine task will handle walking to rocks
         return false; // re-evaluate state
@@ -187,7 +188,7 @@ public class Bank extends Task {
         AtomicReference<Timer> posTimer = new AtomicReference<>(new Timer());
         AtomicReference<WorldPosition> prevPos = new AtomicReference<>(null);
 
-        script.pollFramesHuman(() -> {
+        script.pollFramesUntil(() -> {
             WorldPosition current = script.getWorldPosition();
             if (current == null) return false;
 
@@ -199,7 +200,7 @@ public class Bank extends Task {
             // done when deposit box visible or idle for 2+ seconds
             return script.getWidgetManager().getDepositBox().isVisible() ||
                     posTimer.get().timeElapsed() > 2000;
-        }, 15000);
+        }, RandomUtils.weightedRandom(15000, 30000, 0.002));
     }
 
     private void depositGemsIndividually(DepositBox depositBox, int[] gemIds) {
@@ -219,7 +220,7 @@ public class Bank extends Task {
             script.log(getClass(), "depositing gem: " + gemId);
             boolean deposited = RetryUtils.inventoryInteract(script, gem, "Deposit-All", "deposit gem " + gemId);
             if (deposited) {
-                script.pollFramesHuman(() -> false, script.random(200, 400));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
             } else {
                 script.log(getClass(), "failed to deposit gem: " + gemId);
             }

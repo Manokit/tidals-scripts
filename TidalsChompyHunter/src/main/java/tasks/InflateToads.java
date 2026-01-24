@@ -5,6 +5,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.shape.Rectangle;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.visual.PixelCluster;
 import com.osmb.api.visual.SearchablePixel;
@@ -242,14 +243,14 @@ public class InflateToads extends Task {
                 if (gotToad) {
                     script.log(getClass(), "toad inflated successfully");
                     // humanize: brief pause after picking up toad
-                    script.submitTask(() -> false, script.random(200, 600));
+                    script.submitTask(() -> true, RandomUtils.weightedRandom(200, 600));
                     return true;
                 }
 
                 script.log(getClass(), "toad did not arrive in inventory, will re-detect position");
             }
 
-            script.pollFramesUntil(() -> false, script.random(300, 500));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
         }
 
         script.log(getClass(), "failed to inflate any toad after " + maxTotalAttempts + " attempts");

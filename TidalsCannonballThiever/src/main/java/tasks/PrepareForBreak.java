@@ -3,6 +3,7 @@ package tasks;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 import utils.Task;
 
 import static main.TidalsCannonballThiever.*;
@@ -29,23 +30,15 @@ public class PrepareForBreak extends Task {
     }
     
     private int getNearbyPlayerCount() {
-        try {
-            int playerCount = script.getWidgetManager().getMinimap().getPlayerPositions().size();
-            return Math.max(0, playerCount - 1);
-        } catch (Exception e) {
-            return 0;
-        }
+        int playerCount = script.getWidgetManager().getMinimap().getPlayerPositions().size();
+        return Math.max(0, playerCount - 1);
     }
     
     private boolean shouldHopDueToPlayers() {
-        try {
-            if (!script.getProfileManager().hasHopProfile()) {
-                return false;
-            }
-        } catch (Exception e) {
+        if (!script.getProfileManager().hasHopProfile()) {
             return false;
         }
-        
+
         int nearbyPlayers = getNearbyPlayerCount();
         return nearbyPlayers >= MAX_PLAYERS_BEFORE_HOP;
     }
@@ -70,27 +63,24 @@ public class PrepareForBreak extends Task {
             return true;
         }
         
-        try {
-            if (script.getProfileManager().hasBreakProfile() && script.getProfileManager().isDueToBreak()) {
-                activatedForBreak = true;
-                script.log("BREAK", "ProfileManager: Due for break");
-                return true;
-            }
-            
-            if (script.getProfileManager().hasHopProfile() && script.getProfileManager().isDueToHop()) {
-                activatedForHop = true;
-                script.log("BREAK", "ProfileManager: Due for scheduled hop");
-                return true;
-            }
-            
-            if (script.getProfileManager().isAFKEnabled() && script.getProfileManager().isDueToAFK()) {
-                activatedForAFK = true;
-                script.log("BREAK", "ProfileManager: Due for AFK pause");
-                return true;
-            }
-        } catch (Exception e) {
+        if (script.getProfileManager().hasBreakProfile() && script.getProfileManager().isDueToBreak()) {
+            activatedForBreak = true;
+            script.log("BREAK", "ProfileManager: Due for break");
+            return true;
         }
-        
+
+        if (script.getProfileManager().hasHopProfile() && script.getProfileManager().isDueToHop()) {
+            activatedForHop = true;
+            script.log("BREAK", "ProfileManager: Due for scheduled hop");
+            return true;
+        }
+
+        if (script.getProfileManager().isAFKEnabled() && script.getProfileManager().isDueToAFK()) {
+            activatedForAFK = true;
+            script.log("BREAK", "ProfileManager: Due for AFK pause");
+            return true;
+        }
+
         return false;
     }
     
@@ -120,48 +110,38 @@ public class PrepareForBreak extends Task {
         
         script.log("BREAK", "At safety tile - triggering " + reason);
         
-        try {
-            if (activatedForWhiteDot) {
-                script.getProfileManager().forceHop();
-                script.log("BREAK", "Forced white dot hop!");
-            } else if (activatedForBreak) {
-                script.getProfileManager().forceBreak();
-                script.log("BREAK", "Forced scheduled break");
-            } else if (activatedForHop) {
-                script.getProfileManager().forceHop();
-                script.log("BREAK", "Forced scheduled hop");
-            } else if (activatedForAFK) {
-                script.getProfileManager().forceAFK();
-                script.log("BREAK", "Forced AFK pause");
-            }
-            
-            StartThieving.resetAfterBreak();
+        if (activatedForWhiteDot) {
+            script.getProfileManager().forceHop();
+            script.log("BREAK", "Forced white dot hop!");
+        } else if (activatedForBreak) {
+            script.getProfileManager().forceBreak();
+            script.log("BREAK", "Forced scheduled break");
+        } else if (activatedForHop) {
+            script.getProfileManager().forceHop();
+            script.log("BREAK", "Forced scheduled hop");
+        } else if (activatedForAFK) {
+            script.getProfileManager().forceAFK();
+            script.log("BREAK", "Forced AFK pause");
+        }
 
-            // reset guard tracking and xp cycle for clean restart
-            if (guardTracker != null) {
-                guardTracker.resetCbCycle();
-                guardTracker.resetGuardTracking();
-                guardTracker.enableGuardSync(); // wait to see guard leave before starting
-            }
+        StartThieving.resetAfterBreak();
 
-        } catch (Exception e) {
-            script.log("BREAK", "Error executing " + reason + ": " + e.getMessage());
+        // reset guard tracking and xp cycle for clean restart
+        if (guardTracker != null) {
+            guardTracker.resetCbCycle();
+            guardTracker.resetGuardTracking();
+            guardTracker.enableGuardSync(); // wait to see guard leave before starting
         }
         
         return true;
     }
     
     private boolean tapOnTile(WorldPosition tile) {
-        try {
-            Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
-            if (tilePoly == null) {
-                return false;
-            }
-            return script.getFinger().tap(tilePoly);
-        } catch (Exception e) {
-            script.log("BREAK", "Error tapping tile: " + e.getMessage());
+        Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
+        if (tilePoly == null) {
             return false;
         }
+        return script.getFinger().tap(tilePoly);
     }
     
     private boolean isAtSafetyTile() {

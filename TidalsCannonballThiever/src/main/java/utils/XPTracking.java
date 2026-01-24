@@ -24,16 +24,12 @@ public class XPTracking {
 
     // try to get actual XP from built-in tracker (may work for some skills)
     public static int tryGetActualXp(ScriptCore core, SkillType skill) {
-        try {
-            Map<SkillType, XPTracker> trackers = core.getXPTrackers();
-            if (trackers != null && trackers.containsKey(skill)) {
-                XPTracker tracker = trackers.get(skill);
-                if (tracker != null) {
-                    return (int) tracker.getXp();
-                }
+        Map<SkillType, XPTracker> trackers = core.getXPTrackers();
+        if (trackers != null && trackers.containsKey(skill)) {
+            XPTracker tracker = trackers.get(skill);
+            if (tracker != null) {
+                return (int) tracker.getXp();
             }
-        } catch (Exception e) {
-            // fall through to return -1
         }
         return -1;
     }
@@ -77,25 +73,21 @@ public class XPTracking {
     // attempt to recalibrate custom tracker using built-in tracker (if now available)
     private void tryRecalibrate() {
         recalibrated = true;
-        try {
-            int actualXp = tryGetActualXp(core, SkillType.THIEVING);
-            if (actualXp > 0 && customThievingTracker != null) {
-                double ourXp = customThievingTracker.getXp();
-                double diff = actualXp - ourXp;
-                if (Math.abs(diff) > 100) {
-                    // significant difference - recreate tracker with correct starting XP
-                    // subtract XP we've already gained to get true starting XP
-                    int trueStartXp = actualXp - (int) customXpGained;
-                    customThievingTracker = new XPTracker(core, trueStartXp);
-                    // re-add the XP we've gained so far
-                    customThievingTracker.incrementXp(customXpGained);
-                    if (core instanceof com.osmb.api.script.Script) {
-                        ((com.osmb.api.script.Script) core).log("XP", "Recalibrated tracker: startXp=" + trueStartXp + ", currentXp=" + actualXp + " (was off by " + (int)diff + ")");
-                    }
+        int actualXp = tryGetActualXp(core, SkillType.THIEVING);
+        if (actualXp > 0 && customThievingTracker != null) {
+            double ourXp = customThievingTracker.getXp();
+            double diff = actualXp - ourXp;
+            if (Math.abs(diff) > 100) {
+                // significant difference - recreate tracker with correct starting XP
+                // subtract XP we've already gained to get true starting XP
+                int trueStartXp = actualXp - (int) customXpGained;
+                customThievingTracker = new XPTracker(core, trueStartXp);
+                // re-add the XP we've gained so far
+                customThievingTracker.incrementXp(customXpGained);
+                if (core instanceof com.osmb.api.script.Script) {
+                    ((com.osmb.api.script.Script) core).log("XP", "Recalibrated tracker: startXp=" + trueStartXp + ", currentXp=" + actualXp + " (was off by " + (int)diff + ")");
                 }
             }
-        } catch (Exception e) {
-            // recalibration failed, continue with estimated values
         }
     }
 

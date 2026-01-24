@@ -13,6 +13,7 @@ import strategies.SecondaryCollectorStrategy;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -424,7 +425,7 @@ public class TidalsSecondaryCollector extends Script {
             if (code == 200) {
                 log("STATS", "Stats reported: blooms=" + bloomIncrement + ", banked=" + bankedIncrement + ", trips=" + tripsIncrement + ", runtime=" + runtimeSecs + "s");
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }

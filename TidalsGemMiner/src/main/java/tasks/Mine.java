@@ -8,6 +8,7 @@ import com.osmb.api.shape.Polygon;
 import com.osmb.api.shape.Rectangle;
 import com.osmb.api.input.MenuEntry;
 import com.osmb.api.ui.chatbox.Chatbox;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.SearchablePixel;
@@ -121,7 +122,7 @@ public class Mine extends Task {
                     boolean clicked = script.getFinger().tap(new Rectangle(nearest.x - 5, nearest.y - 5, 10, 10), "Mine");
                     if (clicked) {
                         // wait and check for "no ore" message
-                        script.pollFramesUntil(() -> false, script.random(2000, 3000), true);
+                        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 6000, 0.002));
                         if (checkForNoOreMessage()) {
                             script.log(getClass(), "color-detected rock was empty");
                         } else {
@@ -177,7 +178,7 @@ public class Mine extends Task {
         // tap the rock to mine it
         if (!tapGemRock(targetRock)) {
             // brief delay to prevent spam clicking on failed taps
-            script.pollFramesUntil(() -> false, script.random(300, 500), true);
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
             return false;
         }
 
@@ -195,7 +196,7 @@ public class Mine extends Task {
             consecutiveNoOreCount++;
             script.log(getClass(), "consecutive no ore count: " + consecutiveNoOreCount);
             // wait before trying next rock to avoid spam clicking
-            script.pollFramesUntil(() -> false, script.random(800, 1200), true);
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(800, 2400, 0.002));
             return false;
         }
 
@@ -206,7 +207,7 @@ public class Mine extends Task {
             emptyRockPositions.add(rockPos);
             consecutiveNoOreCount++;
             // wait before trying next rock to avoid spam clicking
-            script.pollFramesUntil(() -> false, script.random(600, 1000), true);
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 2000, 0.002));
             return false;
         }
 
@@ -285,7 +286,7 @@ public class Mine extends Task {
             }
 
             return false;
-        }, script.random(6_000, 8_000));
+        }, RandomUtils.uniformRandom(6000, 8000));
     }
 
     private boolean tapGemRock(RSObject rock) {
@@ -345,7 +346,7 @@ public class Mine extends Task {
             }
 
             return false;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             script.log(getClass(), "error checking chatbox: " + e.getMessage());
             return false;
         }
@@ -390,7 +391,7 @@ public class Mine extends Task {
             }
 
             return centers;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             script.log(getClass(), "error in color detection: " + e.getMessage());
             return Collections.emptyList();
         }
