@@ -100,8 +100,8 @@ public class Process extends Task {
             if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
                 script.log(getClass(), "level up");
                 script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.submitTask(() -> 
-                    script.getWidgetManager().getDialogue().getDialogueType() != DialogueType.TAP_HERE_TO_CONTINUE, 
+                script.pollFramesUntil(() ->
+                    script.getWidgetManager().getDialogue().getDialogueType() != DialogueType.TAP_HERE_TO_CONTINUE,
                     2000);
             }
 
@@ -112,7 +112,7 @@ public class Process extends Task {
             if (RandomUtils.uniformRandom(5) == 0) {
                 script.pollFramesHuman(() -> true, delay);
             } else {
-                script.submitTask(() -> true, delay);
+                script.pollFramesUntil(() -> false, delay);
             }
         }
 

@@ -4,6 +4,7 @@ import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 
 import java.util.function.Supplier;
 
@@ -45,7 +46,7 @@ public class RetryUtils {
                 return true;
             }
 
-            script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
         }
         script.log(RetryUtils.class, description + " failed after " + maxAttempts + " attempts");
         return false;
@@ -68,7 +69,7 @@ public class RetryUtils {
                 return true;
             }
 
-            script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
         }
         script.log(RetryUtils.class, description + " failed after " + maxAttempts + " attempts");
         return false;
@@ -87,7 +88,7 @@ public class RetryUtils {
                 return true;
             }
 
-            script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
         }
         script.log(RetryUtils.class, description + " failed after " + maxAttempts + " attempts");
         return false;
@@ -135,7 +136,7 @@ public class RetryUtils {
                 return false;
             }
 
-            script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
         }
         script.log(RetryUtils.class, description + " failed after " + maxAttempts + " attempts");
         return false;
@@ -158,7 +159,7 @@ public class RetryUtils {
                 return true;
             }
 
-            script.pollFramesUntil(() -> false, script.random(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(RETRY_DELAY_MIN, RETRY_DELAY_MAX), true);
         }
         script.log(RetryUtils.class, description + " failed after " + maxAttempts + " attempts");
         return false;

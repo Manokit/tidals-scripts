@@ -2,6 +2,7 @@ package utilities;
 
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.tabs.Tab;
+import com.osmb.api.utils.RandomUtils;
 
 import java.util.Set;
 
@@ -57,7 +58,7 @@ public class TabUtils {
      */
     public static boolean openAndWaitEquipment(Script script, int waitMs) {
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, waitMs);
+        script.pollFramesHuman(() -> true, waitMs);
         return true;
     }
 
@@ -68,7 +69,7 @@ public class TabUtils {
      * @return true (always returns true after waiting)
      */
     public static boolean openAndWaitEquipment(Script script) {
-        return openAndWaitEquipment(script, script.random(200, 400));
+        return openAndWaitEquipment(script, RandomUtils.weightedRandom(200, 400));
     }
 
     /**
@@ -82,7 +83,7 @@ public class TabUtils {
      */
     public static boolean openAndVerifyEquipment(Script script, int[] itemIds, int timeout) {
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(150, 300));
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(150, 300));
 
         return script.pollFramesUntil(() -> {
             for (int itemId : itemIds) {

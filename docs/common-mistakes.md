@@ -194,7 +194,48 @@ script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(300, 600, 450, 75
 
 ---
 
-### 9. Stale Inventory Snapshots
+### 9. Catching Exception Instead of RuntimeException
+
+**CRITICAL**: Never catch `Exception` in script code that runs on the main script thread. OSMB uses `PriorityTaskException` and `HaltScriptException` for script control flow - catching these prevents the framework from stopping or interrupting your script properly.
+
+```java
+// WRONG - Catches framework control exceptions
+try {
+    SpriteDefinition sprite = script.getSpriteManager().getSprite(spriteId, 0);
+    // ...
+} catch (Exception e) {
+    // BUG: Also catches PriorityTaskException, HaltScriptException!
+    script.log(getClass(), "failed: " + e.getMessage());
+    return false;
+}
+
+// CORRECT - Only catch runtime exceptions from your code
+try {
+    SpriteDefinition sprite = script.getSpriteManager().getSprite(spriteId, 0);
+    // ...
+} catch (RuntimeException e) {
+    // OK: Won't interfere with OSMB's script control
+    script.log(getClass(), "failed: " + e.getMessage());
+    return false;
+}
+```
+
+**When `catch (Exception e)` IS safe:**
+- Code running on non-script threads (paint/render thread, daemon threads)
+- `onPaint()` methods - these run on the render thread
+- Webhook/HTTP code running on separate daemon threads
+- Code using Java APIs that throw checked exceptions (like `java.util.prefs.Preferences`)
+
+**When to use `catch (RuntimeException e)`:**
+- Any code in `poll()`, task execution, or main script flow
+- Utility methods called from the script thread
+- Anywhere OSMB might need to interrupt your script
+
+**Rule**: Default to `catch (RuntimeException e)` unless you have a specific reason to catch broader exceptions and you've verified the code runs off the main script thread.
+
+---
+
+### 10. Stale Inventory Snapshots
 ```java
 // WRONG - Using old snapshot after deposit
 ItemGroupResult inv = getInventory().search(Set.of());
@@ -214,7 +255,7 @@ bank.withdraw(itemID, freeSlots);
 
 ---
 
-### 10. Resources in Wrong Location
+### 11. Resources in Wrong Location
 ```java
 // WRONG - Won't be found
 // MyScript/resources/logo.png
@@ -227,7 +268,7 @@ bank.withdraw(itemID, freeSlots);
 
 ---
 
-### 11. Level 99 Handling in onPaint
+### 12. Level 99 Handling in onPaint
 ```java
 // WRONG - Shows "99 (+98)" levels gained
 public static int startLevel = 1;  // Never captures level 99!
@@ -240,7 +281,7 @@ public static int startLevel = 0;  // Correctly captures starting level
 
 ---
 
-### 12. Not Checking Widget Visibility
+### 13. Not Checking Widget Visibility
 ```java
 // WRONG - Assuming object is fully visible
 getFinger().tap(objectPoly, "Mine");
@@ -258,7 +299,7 @@ if (visibility >= 0.5) {
 
 ---
 
-### 13. Double-Tap Bug with tapGetResponse
+### 14. Double-Tap Bug with tapGetResponse
 ```java
 // WRONG - Causes double interaction (opens menu, then taps again)
 MenuEntry response = getFinger().tapGetResponse(true, bounds);
@@ -500,7 +541,8 @@ public int poll() {
 10. **Test edge cases** (level 99, full bank, etc.)
 11. **Fixed delays**: `pollFramesUntil(() -> false, ms)` - never `() -> true` which exits immediately!
 12. **Humanized delays**: `pollFramesHuman(() -> true, ms)` - adds natural variance
-13. **Use gaussianRandom** for human-like timing on animations and action delays
+13. **Use RandomUtils** (gaussianRandom, weightedRandom) for human-like timing - never `script.random()`
+14. **Catch RuntimeException** not Exception - let OSMB control flow exceptions bubble up
 
 ---
 

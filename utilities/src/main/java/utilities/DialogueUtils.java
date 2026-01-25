@@ -2,6 +2,7 @@ package utilities;
 
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+import com.osmb.api.utils.RandomUtils;
 
 /**
  * Dialogue utilities for handling game dialogues.
@@ -146,7 +147,7 @@ public class DialogueUtils {
             DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
             if (type != DialogueType.ITEM_OPTION) {
                 script.log(DialogueUtils.class, "item dialogue closed, attempt " + attempt + "/" + maxAttempts);
-                script.pollFramesUntil(() -> false, script.random(200, 400), true);
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400), true);
                 continue;
             }
 
@@ -156,7 +157,7 @@ public class DialogueUtils {
                 return true;
             }
 
-            script.pollFramesUntil(() -> false, script.random(300, 500), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500), true);
         }
 
         script.log(DialogueUtils.class, "item selection failed after " + maxAttempts + " attempts");

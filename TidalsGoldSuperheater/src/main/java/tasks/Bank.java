@@ -36,7 +36,7 @@ public class Bank extends Task {
             return false;
         }
 
-        script.submitTask(() -> true, RandomUtils.weightedRandom(200, 800, 0.003));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 800, 0.003));
 
         task = "Search bank";
 
@@ -65,7 +65,7 @@ public class Bank extends Task {
         // deposit all except nats
         task = "Deposit";
         script.getWidgetManager().getBank().depositAll(Set.of(ItemID.NATURE_RUNE));
-        script.submitTask(() -> true, RandomUtils.weightedRandom(200, 1000, 0.003));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 1000, 0.003));
 
         // refresh inv after deposit
         inv = script.getWidgetManager().getInventory().search(Collections.emptySet());
@@ -86,7 +86,7 @@ public class Bank extends Task {
 
         task = "Close bank";
         script.getWidgetManager().getBank().close();
-        script.submitTask(() -> !script.getWidgetManager().getBank().isVisible(), 3000);
+        script.pollFramesUntil(() -> !script.getWidgetManager().getBank().isVisible(), 3000);
 
         return false;
     }
@@ -106,6 +106,6 @@ public class Bank extends Task {
             return;
         }
 
-        script.submitTask(() -> script.getWidgetManager().getBank().isVisible(), 10000);
+        script.pollFramesUntil(() -> script.getWidgetManager().getBank().isVisible(), 10000);
     }
 }

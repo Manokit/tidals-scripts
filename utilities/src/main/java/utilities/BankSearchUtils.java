@@ -92,7 +92,7 @@ public class BankSearchUtils {
             spriteInitialized = true;
             return true;
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             script.log(BankSearchUtils.class, "failed to load search button sprite: " + e.getMessage());
             return false;
         }

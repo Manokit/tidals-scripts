@@ -6,6 +6,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Rectangle;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
@@ -152,7 +153,7 @@ public class BankingUtils {
 
         boolean result = script.getWidgetManager().getBank().depositAll(keepItems);
         if (result) {
-            script.pollFramesHuman(() -> false, script.random(300, 600));
+            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
         }
         return result;
     }
@@ -197,7 +198,7 @@ public class BankingUtils {
             return -1;
         }
 
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
         return slots;
     }
 
@@ -224,7 +225,7 @@ public class BankingUtils {
 
         boolean result = script.getWidgetManager().getBank().withdraw(itemId, amount);
         if (result) {
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
         }
         return result;
     }
