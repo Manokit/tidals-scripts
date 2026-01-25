@@ -477,7 +477,7 @@ public class TidalsGemCutter extends Script {
 
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, textMuted.getRGB(), textMuted.getRGB());
 
-        try { lastCanvasFrame.set(c.toImageCopy()); } catch (Exception ignored) {}
+        lastCanvasFrame.set(c.toImageCopy());
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
@@ -531,7 +531,7 @@ public class TidalsGemCutter extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "Logo loaded: " + w + "x" + h);
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "Error loading logo: " + e.getMessage());
         }
     }
@@ -631,7 +631,7 @@ public class TidalsGemCutter extends Script {
                 log("WEBHOOK", "failed, http " + code);
             }
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("WEBHOOK", "error: " + e.getMessage());
         } finally {
             try { if (baos != null) baos.close(); } catch (IOException ignored) {}

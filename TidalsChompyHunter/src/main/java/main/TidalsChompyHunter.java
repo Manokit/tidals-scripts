@@ -545,12 +545,19 @@ public class TidalsChompyHunter extends Script {
      * "You've scratched up a total of 42 chompy bird kills so far!"
      */
     private int parseTotalKills(String line) {
+        if (line == null || line.isEmpty()) {
+            return -1;
+        }
+
+        String[] parts = line.split("total of ");
+        if (parts.length < 2) {
+            return -1;
+        }
+
+        String numPart = parts[1].split(" ")[0];
         try {
-            String[] parts = line.split("total of ");
-            if (parts.length < 2) return -1;
-            String numPart = parts[1].split(" ")[0];
             return Integer.parseInt(numPart.replaceAll(",", ""));
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             return -1;
         }
     }
@@ -834,7 +841,7 @@ public class TidalsChompyHunter extends Script {
             }
 
             logoImage = new Image(px, w, h);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -910,7 +917,7 @@ public class TidalsChompyHunter extends Script {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "Exception occurred while fetching version from GitHub.");
         }
         return null;

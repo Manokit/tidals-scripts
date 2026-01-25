@@ -151,6 +151,11 @@ public class RetryUtils {
     }
 
     public static boolean inventoryInteract(Script script, ItemSearchResult item, String action, String description, int maxAttempts) {
+        if (item == null) {
+            script.log(RetryUtils.class, description + " failed - item not found");
+            return false;
+        }
+
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             script.log(RetryUtils.class, description + " attempt " + attempt + "/" + maxAttempts);
 

@@ -237,7 +237,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         String prayerMethodUsed = "";
 
         // check inventory for ardy cloak
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
         script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
@@ -407,7 +406,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     public int collect() {
         // initialize cached inventory count if not set (first trip without banking)
         if (cachedInventoryCount < 0) {
-            script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
             script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 250));
             ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
             cachedInventoryCount = (inv != null) ? (INVENTORY_SIZE - inv.getFreeSlots()) : 0;
@@ -885,7 +883,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
     private boolean tryArdougneCloakTeleport() {
         // check inventory first
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
         script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));

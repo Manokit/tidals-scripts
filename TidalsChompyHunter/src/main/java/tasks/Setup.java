@@ -79,11 +79,8 @@ public class Setup extends Task {
 
         List<String> errors = new ArrayList<>();
 
-        // open inventory tab first
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        boolean invAccessible = script.pollFramesUntil(() ->
-            script.getWidgetManager().getInventory().search(Set.of()) != null,
-            3000);
+        ItemGroupResult inventoryCheck = script.getWidgetManager().getInventory().search(Set.of());
+        boolean invAccessible = inventoryCheck != null;
 
         if (!invAccessible) {
             script.log(getClass(), "ERROR: inventory not accessible");
@@ -161,11 +158,7 @@ public class Setup extends Task {
         checkZoomLevel();
 
         // check bow for total kills (nice-to-have, don't stop if fails)
-        try {
-            checkBowForTotalKills();
-        } catch (Exception e) {
-            script.log(getClass(), "warning: failed to get total kills from bow - " + e.getMessage());
-        }
+        checkBowForTotalKills();
 
         // enable arrow detection for chompy spawn detection
         script.getWidgetManager().getMinimap().arrowDetectionEnabled(true);
@@ -313,41 +306,36 @@ public class Setup extends Task {
      * check and set zoom level to optimal for chompy detection
      */
     private void checkZoomLevel() {
-        try {
-            task = "checking zoom";
-            boolean opened = script.getWidgetManager().getSettings().open();
-            if (!opened) {
-                script.log(getClass(), "could not open settings tab to check zoom");
-                return;
-            }
+        task = "checking zoom";
+        boolean opened = script.getWidgetManager().getSettings().open();
+        if (!opened) {
+            script.log(getClass(), "could not open settings tab to check zoom");
+            return;
+        }
 
-            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
-            UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
-            if (zoomResult != null && zoomResult.isFound()) {
-                int currentZoom = zoomResult.get();
-                script.log(getClass(), "current zoom level: " + currentZoom);
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
+        UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
+        if (zoomResult != null && zoomResult.isFound()) {
+            int currentZoom = zoomResult.get();
+            script.log(getClass(), "current zoom level: " + currentZoom);
 
-                if (currentZoom != TARGET_ZOOM_LEVEL) {
-                    script.log(getClass(), "setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
-                    boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
-                    if (set) {
-                        script.log(getClass(), "zoom level set to " + TARGET_ZOOM_LEVEL);
-                    } else {
-                        script.log(getClass(), "failed to set zoom level");
-                    }
+            if (currentZoom != TARGET_ZOOM_LEVEL) {
+                script.log(getClass(), "setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
+                boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
+                if (set) {
+                    script.log(getClass(), "zoom level set to " + TARGET_ZOOM_LEVEL);
                 } else {
-                    script.log(getClass(), "zoom level already optimal");
+                    script.log(getClass(), "failed to set zoom level");
                 }
             } else {
-                script.log(getClass(), "could not read zoom level, attempting to set anyway...");
-                script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
+                script.log(getClass(), "zoom level already optimal");
             }
-
-            script.getWidgetManager().getSettings().close();
-            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
-
-        } catch (Exception e) {
-            script.log(getClass(), "error checking zoom level: " + e.getMessage());
+        } else {
+            script.log(getClass(), "could not read zoom level, attempting to set anyway...");
+            script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
         }
+
+        script.getWidgetManager().getSettings().close();
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
     }
 }

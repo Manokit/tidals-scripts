@@ -2,6 +2,7 @@ package tasks;
 
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
+import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.trackers.experience.XPTracker;
@@ -214,7 +215,13 @@ public class Cut extends Task {
         int secondID = firstIsGem ? CHISEL_ID : gemID;
 
         task = "Use item 1";
-        if (!RetryUtils.inventoryInteract(script, inv.getRandomItem(firstID), "Use", "use first item")) {
+        ItemSearchResult firstItem = inv.getRandomItem(firstID);
+        if (firstItem == null) {
+            script.log(getClass(), "first item not found");
+            return false;
+        }
+
+        if (!RetryUtils.inventoryInteract(script, firstItem, "Use", "use first item")) {
             script.log(getClass(), "first item failed");
             return false;
         }
@@ -222,7 +229,13 @@ public class Cut extends Task {
         script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 600, 0.002));
 
         task = "Use item 2";
-        if (!RetryUtils.inventoryInteract(script, inv.getRandomItem(secondID), "Use", "use second item")) {
+        ItemSearchResult secondItem = inv.getRandomItem(secondID);
+        if (secondItem == null) {
+            script.log(getClass(), "second item not found");
+            return false;
+        }
+
+        if (!RetryUtils.inventoryInteract(script, secondItem, "Use", "use second item")) {
             script.log(getClass(), "second item failed");
             return false;
         }
@@ -303,7 +316,13 @@ public class Cut extends Task {
                 break;
             }
 
-            boolean dropped = RetryUtils.inventoryInteract(script, inventory.getRandomItem(CRUSHED_GEM_ID), "Drop", "drop crushed gem");
+            ItemSearchResult crushedGem = inventory.getRandomItem(CRUSHED_GEM_ID);
+            if (crushedGem == null) {
+                script.log(getClass(), "crushed gem not found");
+                break;
+            }
+
+            boolean dropped = RetryUtils.inventoryInteract(script, crushedGem, "Drop", "drop crushed gem");
             if (dropped) {
                 script.log(getClass(), "dropped crushed gem");
                 // brief wait between drops

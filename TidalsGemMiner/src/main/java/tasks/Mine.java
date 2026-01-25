@@ -1,6 +1,7 @@
 package tasks;
 
 import com.osmb.api.item.ItemGroupResult;
+import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
@@ -11,6 +12,7 @@ import com.osmb.api.ui.chatbox.Chatbox;
 import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.utils.timing.Timer;
+import com.osmb.api.visual.PixelAnalyzer;
 import com.osmb.api.visual.SearchablePixel;
 import com.osmb.api.visual.PixelCluster;
 import com.osmb.api.visual.color.ColorModel;
@@ -25,6 +27,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static main.TidalsGemMiner.*;
@@ -91,9 +94,6 @@ public class Mine extends Task {
 
         boolean isUpperMine = selectedLocation.name().equals("upper");
 
-        // get positions where respawn circles are visible (depleted rocks)
-        List<WorldPosition> respawnCircles = getRespawnCirclePositions();
-
         // find available gem rocks that are interactable and not depleted
         List<RSObject> gemRocks = script.getObjectManager().getObjects(obj ->
                 obj != null &&
@@ -102,10 +102,17 @@ public class Mine extends Task {
                 obj.getName().equalsIgnoreCase(TARGET_OBJECT_NAME) &&
                 obj.getActions() != null &&
                 Arrays.asList(obj.getActions()).contains("Mine") &&
-                !respawnCircles.contains(obj.getWorldPosition()) &&
                 // for upper mine, also filter out rocks we know are empty (distance-based check)
                 (!isUpperMine || !isPositionMarkedEmpty(obj.getWorldPosition()))
         );
+
+        if (gemRocks != null && !gemRocks.isEmpty()) {
+            gemRocks = new ArrayList<>(gemRocks);
+            Set<WorldPosition> respawnCirclePositions = getRespawnCirclePositions(gemRocks);
+            if (!respawnCirclePositions.isEmpty()) {
+                gemRocks.removeIf(obj -> respawnCirclePositions.contains(obj.getWorldPosition()));
+            }
+        }
 
         // if no rocks from ObjectManager, try color detection as fallback
         if (gemRocks == null || gemRocks.isEmpty()) {
@@ -239,13 +246,36 @@ public class Mine extends Task {
         return inventory != null && inventory.isFull();
     }
 
-    private List<WorldPosition> getRespawnCirclePositions() {
+    private Set<WorldPosition> getRespawnCirclePositions(List<RSObject> objects) {
         try {
-            List<Rectangle> respawnCircles = script.getPixelAnalyzer().findRespawnCircles();
-            return script.getUtils().getWorldPositionForRespawnCircles(respawnCircles, 20);
+            if (objects == null || objects.isEmpty()) {
+                return Collections.emptySet();
+            }
+
+            Map<RSObject, PixelAnalyzer.RespawnCircle> respawnCircleObjects =
+                    script.getPixelAnalyzer().getRespawnCircleObjects(
+                            objects,
+                            PixelAnalyzer.RespawnCircleDrawType.TOP_CENTER,
+                            20,
+                            6
+                    );
+
+            if (respawnCircleObjects == null || respawnCircleObjects.isEmpty()) {
+                return Collections.emptySet();
+            }
+
+            Set<WorldPosition> positions = new HashSet<>();
+            for (RSObject obj : respawnCircleObjects.keySet()) {
+                WorldPosition pos = obj.getWorldPosition();
+                if (pos != null) {
+                    positions.add(pos);
+                }
+            }
+
+            return positions;
         } catch (RuntimeException e) {
             script.log(getClass(), "error getting respawn circles: " + e.getMessage());
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
     }
 
@@ -272,6 +302,18 @@ public class Mine extends Task {
     }
 
     private boolean waitForMiningCompletion(WorldPosition targetPos) {
+        RectangleArea respawnArea = null;
+        if (targetPos != null) {
+            respawnArea = new RectangleArea(
+                    targetPos.getX(),
+                    targetPos.getY(),
+                    1,
+                    1,
+                    targetPos.getPlane()
+            );
+        }
+
+        RectangleArea finalRespawnArea = respawnArea;
         return script.pollFramesUntil(() -> {
             // check if inventory is full
             ItemGroupResult inventory = script.getWidgetManager().getInventory().search(Collections.emptySet());
@@ -280,9 +322,16 @@ public class Mine extends Task {
             }
 
             // check if respawn circle appeared at target position
-            List<WorldPosition> respawnCircles = getRespawnCirclePositions();
-            if (targetPos != null && respawnCircles.contains(targetPos)) {
-                return true;
+            if (finalRespawnArea != null) {
+                PixelAnalyzer.RespawnCircle circle = script.getPixelAnalyzer().getRespawnCircle(
+                        finalRespawnArea,
+                        PixelAnalyzer.RespawnCircleDrawType.TOP_CENTER,
+                        20,
+                        6
+                );
+                if (circle != null) {
+                    return true;
+                }
             }
 
             return false;

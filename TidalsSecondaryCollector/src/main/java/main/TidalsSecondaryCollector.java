@@ -6,7 +6,6 @@ import com.osmb.api.script.SkillCategory;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
 import com.osmb.api.item.ItemGroupResult;
-import com.osmb.api.ui.tabs.Tab;
 import strategies.MortMyreFungusCollector;
 import strategies.SecondaryCollectorStrategy;
 
@@ -186,14 +185,8 @@ public class TidalsSecondaryCollector extends Script {
         statusMessage = "setting up...";
         log(getClass(), "running setup");
 
-        // open inventory first
-        getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        boolean opened = pollFramesUntil(() ->
-                        getWidgetManager().getInventory().search(Set.of()) != null,
-                3000
-        );
-
-        if (!opened) {
+        ItemGroupResult inventoryCheck = getWidgetManager().getInventory().search(Set.of());
+        if (inventoryCheck == null) {
             log(getClass(), "failed to open inventory");
             return 600;
         }
@@ -368,7 +361,7 @@ public class TidalsSecondaryCollector extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "logo loaded: " + w + "x" + h);
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
