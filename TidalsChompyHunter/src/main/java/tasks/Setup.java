@@ -121,7 +121,7 @@ public class Setup extends Task {
 
         // switch to equipment tab
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
+        script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
 
         // SETUP-02: check ogre bow equipped
         UIResult<ItemSearchResult> bowCheck = script.getWidgetManager().getEquipment().findItem(OGRE_BOWS);
@@ -235,7 +235,7 @@ public class Setup extends Task {
 
         // open equipment tab if not already
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
+        script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
 
         // try each bow id until one succeeds (we already validated one is equipped)
         boolean success = false;
@@ -321,7 +321,7 @@ public class Setup extends Task {
                 return;
             }
 
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
+            script.submitTask(() -> false, RandomUtils.weightedRandom(200, 400));
             UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
             if (zoomResult != null && zoomResult.isFound()) {
                 int currentZoom = zoomResult.get();
@@ -344,7 +344,7 @@ public class Setup extends Task {
             }
 
             script.getWidgetManager().getSettings().close();
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
+            script.submitTask(() -> false, RandomUtils.weightedRandom(200, 400));
 
         } catch (Exception e) {
             script.log(getClass(), "error checking zoom level: " + e.getMessage());

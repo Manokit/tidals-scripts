@@ -21,7 +21,7 @@ if (tree != null) {
 
 ---
 
-### 2. Using while Loops Instead of submitTask
+### 2. Using while Loops Instead of pollFramesUntil
 ```java
 // WRONG - Blocks everything
 while (!bank.isVisible()) {
@@ -29,10 +29,10 @@ while (!bank.isVisible()) {
 }
 
 // RIGHT - Proper waiting
-submitTask(() -> bank.isVisible(), 5000);
+pollFramesUntil(() -> bank.isVisible(), 5000);
 ```
 
-**Rule**: Never use blocking loops. Use submitTask or pollFramesUntil.
+**Rule**: Never use blocking loops. Use `pollFramesUntil` or `pollFramesHuman`.
 
 ---
 
@@ -97,7 +97,7 @@ if (bank.isVisible()) {
 
 // RIGHT - Wait for bank to load
 if (bank.isVisible()) {
-    pollFramesHuman(() -> false, random(300, 500));
+    pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 500));
     ItemGroupResult result = bank.search(Set.of(itemID));
 }
 ```
@@ -106,7 +106,95 @@ if (bank.isVisible()) {
 
 ---
 
-### 7. Stale Inventory Snapshots
+### 7. Wrong Lambda in Delay Patterns (CRITICAL)
+
+The most common timing bug - using the wrong `true`/`false` in delay lambdas:
+
+```java
+// WRONG - Exits IMMEDIATELY (0ms delay!) because condition is instantly true
+script.pollFramesUntil(() -> true, 2000);  // BUG: no delay at all!
+
+// WRONG - pollFramesHuman with false adds timeout + human delay (double wait)
+script.pollFramesHuman(() -> false, 500);  // waits 500ms + 200-400ms = 700-900ms total
+
+// CORRECT - For fixed delays, use pollFramesUntil with false (waits full timeout)
+script.pollFramesUntil(() -> false, 2000);  // exactly 2000ms delay
+
+// CORRECT - For humanized delays, use pollFramesHuman with true
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));  // instant + human delay
+```
+
+**How it works:**
+| Method | `() -> true` | `() -> false` |
+|--------|--------------|---------------|
+| `pollFramesUntil` | Exits immediately (0ms) | Waits full timeout |
+| `pollFramesHuman` | Exits + adds human delay (~200-400ms) | Waits timeout + human delay |
+
+**Best practices:**
+```java
+// FIXED DELAY (animation wait, post-action pause)
+script.pollFramesUntil(() -> false, 2000);
+
+// HUMANIZED DELAY (between actions, adds natural variance)
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
+
+// CONDITIONAL WAIT (wait for something to happen)
+script.pollFramesUntil(() -> bank.isVisible(), 5000);
+
+// CONDITIONAL WAIT + HUMANIZED (wait for condition, then add reaction time)
+script.pollFramesHuman(() -> inventory.isFull(), 30000);
+```
+
+**Rule**: For pure delays use `pollFramesUntil(() -> false, ms)`. For humanized delays use `pollFramesHuman(() -> true, ms)`. Never use `pollFramesUntil(() -> true, ms)` - it does nothing!
+
+**DEPRECATED**: Do NOT use `submitTask` - it may be async and not block properly. Always use `pollFramesUntil` or `pollFramesHuman`.
+
+---
+
+### 8. Using script.random() Instead of RandomUtils (DEPRECATED)
+
+**NEVER use `script.random()`** - it produces uniform distribution which looks robotic. Always use `RandomUtils` methods for human-like randomness.
+
+```java
+// WRONG - uniform distribution, robotic timing
+script.pollFramesHuman(() -> true, script.random(200, 400));  // DON'T DO THIS
+
+// CORRECT - use RandomUtils methods instead
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));  // weighted toward lower
+script.pollFramesHuman(() -> true, RandomUtils.gaussianRandom(200, 400, 300, 50));  // clusters around 300
+```
+
+**RandomUtils methods to use:**
+
+| Method | Use Case |
+|--------|----------|
+| `gaussianRandom(min, max, mean, stdDev)` | Animation waits, action delays - clusters around mean |
+| `weightedRandom(min, max)` | Short delays - weighted toward lower values (faster reactions) |
+| `exponentialRandom(mean, min, max)` | Human-like pauses - most near mean, occasional longer |
+| `triangularRandom(min, max, midpoint)` | When you want a specific peak value |
+
+**Examples:**
+```java
+// Animation wait (1.8-2.4s, clusters around 2.1s)
+script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1800, 2400, 2100, 150));
+
+// Short reaction delay (200-400ms, weighted toward faster)
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
+
+// Retry delay (300-500ms, weighted toward faster)
+script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
+
+// Bank loading wait (300-600ms, gaussian around 450ms)
+script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(300, 600, 450, 75));
+```
+
+**Rule**: Always use `RandomUtils` methods. For animation waits use `gaussianRandom`. For short delays use `weightedRandom`. Never use `script.random()`.
+
+**DEPRECATED**: `script.random()` produces uniform distribution - avoid it entirely.
+
+---
+
+### 9. Stale Inventory Snapshots
 ```java
 // WRONG - Using old snapshot after deposit
 ItemGroupResult inv = getInventory().search(Set.of());
@@ -116,7 +204,7 @@ bank.withdraw(itemID, freeSlots); // Tries to withdraw 0!
 
 // RIGHT - Get fresh snapshot after operations
 bank.depositAll(keepItems);
-pollFramesHuman(() -> false, random(300, 600));
+pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
 ItemGroupResult inv = getInventory().search(Set.of());
 int freeSlots = inv.getFreeSlots(); // = 27
 bank.withdraw(itemID, freeSlots);
@@ -126,7 +214,7 @@ bank.withdraw(itemID, freeSlots);
 
 ---
 
-### 8. Resources in Wrong Location
+### 10. Resources in Wrong Location
 ```java
 // WRONG - Won't be found
 // MyScript/resources/logo.png
@@ -139,7 +227,7 @@ bank.withdraw(itemID, freeSlots);
 
 ---
 
-### 9. Level 99 Handling in onPaint
+### 11. Level 99 Handling in onPaint
 ```java
 // WRONG - Shows "99 (+98)" levels gained
 public static int startLevel = 1;  // Never captures level 99!
@@ -152,7 +240,7 @@ public static int startLevel = 0;  // Correctly captures starting level
 
 ---
 
-### 10. Not Checking Widget Visibility
+### 12. Not Checking Widget Visibility
 ```java
 // WRONG - Assuming object is fully visible
 getFinger().tap(objectPoly, "Mine");
@@ -170,7 +258,7 @@ if (visibility >= 0.5) {
 
 ---
 
-### 11. Double-Tap Bug with tapGetResponse
+### 13. Double-Tap Bug with tapGetResponse
 ```java
 // WRONG - Causes double interaction (opens menu, then taps again)
 MenuEntry response = getFinger().tapGetResponse(true, bounds);
@@ -249,7 +337,7 @@ BooleanSupplier waitForDialogue = () -> {
     return type == DialogueType.TEXT_OPTION;
 };
 
-if (!pollFramesHuman(waitForDialogue, random(4000, 6000))) {
+if (!pollFramesHuman(waitForDialogue, RandomUtils.gaussianRandom(4000, 6000, 5000, 500))) {
     log(getClass(), "Dialogue timeout - expected TEXT_OPTION");
     return false;
 }
@@ -278,7 +366,7 @@ if (!rock.exists()) {
 
 // RIGHT - Human-like delay
 if (!rock.exists()) {
-    submitTask(() -> false, RandomUtils.uniformRandom(200, 600));
+    pollFramesHuman(() -> true, RandomUtils.uniformRandom(200, 600));
     clickNextRock();
 }
 ```
@@ -401,7 +489,7 @@ public int poll() {
 ## Best Practices Summary
 
 1. **Always null-check** API return values
-2. **Use submitTask/pollFrames** not while loops
+2. **Use pollFramesUntil/pollFramesHuman** not while loops (avoid deprecated submitTask)
 3. **onNewFrame is READ-ONLY** - no actions
 4. **Add 300-500ms delay** after opening bank
 5. **Get fresh snapshots** after inventory/bank changes
@@ -410,6 +498,9 @@ public int poll() {
 8. **Verify visually** not via collision map
 9. **Add comprehensive logging** when debugging
 10. **Test edge cases** (level 99, full bank, etc.)
+11. **Fixed delays**: `pollFramesUntil(() -> false, ms)` - never `() -> true` which exits immediately!
+12. **Humanized delays**: `pollFramesHuman(() -> true, ms)` - adds natural variance
+13. **Use gaussianRandom** for human-like timing on animations and action delays
 
 ---
 

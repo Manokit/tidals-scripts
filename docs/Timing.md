@@ -180,7 +180,7 @@ public boolean waitForCondition(BooleanSupplier condition, long timeoutMs) {
         if (condition.getAsBoolean()) {
             return true;
         }
-        script.submitTask(() -> false, 100);  // brief wait
+        script.pollFramesUntil(() -> false, 100);  // brief wait
     }
     return false;  // timed out
 }

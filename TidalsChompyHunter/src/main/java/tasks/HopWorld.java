@@ -40,6 +40,11 @@ public class HopWorld extends Task {
             return false;
         }
 
+        // don't hop while in combat - finish the kill first
+        if (AttackChompy.inCombat) {
+            return false;
+        }
+
         // only activate when crash detected (works before OR after setup)
         if (!DetectPlayers.crashDetected) {
             return false;

@@ -152,23 +152,25 @@ public boolean skipYawCheck() {
 
 ## Waiting and Timing
 
-### submitTask - Condition-Based Waiting
+### pollFramesUntil - Condition-Based Waiting (BLOCKING)
 ```java
-// Wait for condition with timeout
-boolean success = submitTask(() -> bank.isVisible(), 5000);
+// Wait for condition with timeout - BLOCKS until condition true or timeout
+boolean success = pollFramesUntil(() -> bank.isVisible(), 5000);
+
+// Fixed delay (condition never true, waits full timeout)
+pollFramesUntil(() -> false, 2000);  // waits exactly 2000ms
 ```
 
-### pollFramesUntil - Frame-Based Polling
+### pollFramesHuman - Human-Like Delays (BLOCKING)
 ```java
-// Similar to submitTask but with frame-based polling
-pollFramesUntil(() -> someCondition(), 5000);
+// Condition + human delay after (200-400ms added when condition met)
+pollFramesHuman(() -> inventory.isFull(), 30000);
+
+// Humanized delay (condition instantly true, then adds human delay)
+pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));  // humanized delay
 ```
 
-### pollFramesHuman - Human-Like Delays
-```java
-// Add human-like random delays
-pollFramesHuman(() -> false, random(300, 600));
-```
+**DEPRECATED**: Do NOT use `submitTask` - it may be async. Always use `pollFramesUntil` or `pollFramesHuman`.
 
 ### Random Delays
 ```java

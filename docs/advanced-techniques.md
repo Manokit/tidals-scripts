@@ -49,7 +49,7 @@ private boolean lootItem(int itemId) {
         getFinger().tap(itemPoly, "Take");
         
         // Wait for item to be picked up
-        return submitTask(() -> {
+        return pollFramesUntil(() -> {
             ItemGroupResult inv = getWidgetManager().getInventory().search(Set.of(itemId));
             return inv != null && inv.contains(itemId);
         }, 3000);
@@ -93,7 +93,7 @@ private int lootValuableItems() {
         Polygon itemPoly = loot.getConvexHull();
         if (itemPoly != null) {
             getFinger().tap(itemPoly, "Take");
-            pollFramesHuman(() -> false, random(300, 600));
+            pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
         }
     }
     
@@ -280,7 +280,7 @@ private boolean eatFood() {
         SearchableItem food = invSnapshot.getItem(foodId);
         if (food != null) {
             food.interact("Eat");
-            pollFramesHuman(() -> false, random(300, 600));
+            pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
             return true;
         }
     }
@@ -388,7 +388,7 @@ public void onNewFrame() {
         // Level up dialogue appeared
         log("Level up detected, continuing dialogue");
         dialogue.continueChatDialogue();
-        pollFramesHuman(() -> false, random(1000, 2000));
+        pollFramesHuman(() -> true, RandomUtils.gaussianRandom(1000, 2000, 1500, 250));
     }
 }
 ```

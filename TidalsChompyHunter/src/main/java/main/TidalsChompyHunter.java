@@ -176,6 +176,12 @@ public class TidalsChompyHunter extends Script {
      */
     @Override
     public boolean canHopWorlds() {
+        // block hop while in combat
+        if (AttackChompy.inCombat) {
+            log(getClass(), "blocking hop - in combat");
+            return false;
+        }
+
         // clean up stale toads first
         cleanupStaleToads();
 
@@ -194,6 +200,12 @@ public class TidalsChompyHunter extends Script {
      */
     @Override
     public boolean canBreak() {
+        // block break while in combat
+        if (AttackChompy.inCombat) {
+            log(getClass(), "blocking break - in combat");
+            return false;
+        }
+
         // clean up stale toads first
         cleanupStaleToads();
 

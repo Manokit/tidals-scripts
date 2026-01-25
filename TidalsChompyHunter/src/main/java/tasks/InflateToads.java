@@ -28,7 +28,7 @@ public class InflateToads extends Task {
 
     // constants
     private static final int MAX_INFLATE_ATTEMPTS = 5;
-    private static final int TARGET_GROUND_TOADS = 3;  // keep this many on ground
+    private static final int TARGET_GROUND_TOADS = 5;  // keep this many on ground
     private static final int MIN_GROUND_TOADS = 2;  // refill when below this
     private static final int MAX_INVENTORY_TOADS = 3;  // stockpile up to this in inventory
     private static final int TILE_CUBE_HEIGHT = 40;
@@ -90,7 +90,7 @@ public class InflateToads extends Task {
         int groundToads = countActiveGroundToads();
 
         // refill mode: inflate when ground toads below target AND inventory has space
-        // covers groundToads 0, 1, and 2 (anything below target of 3)
+        // covers groundToads 0-4 (anything below target of 5)
         if (groundToads < TARGET_GROUND_TOADS && inventoryToads < MAX_INVENTORY_TOADS) {
             return true;
         }
@@ -250,7 +250,7 @@ public class InflateToads extends Task {
                 script.log(getClass(), "toad did not arrive in inventory, will re-detect position");
             }
 
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
+            script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
         }
 
         script.log(getClass(), "failed to inflate any toad after " + maxTotalAttempts + " attempts");

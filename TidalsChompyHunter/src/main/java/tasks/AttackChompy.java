@@ -160,6 +160,16 @@ public class AttackChompy extends Task {
     }
 
     /**
+     * add a position to the ignored list (called when we detect someone else's chompy)
+     * prevents us from trying to attack or pluck a chompy that isn't ours
+     */
+    public static void addIgnoredPosition(WorldPosition pos) {
+        if (pos != null) {
+            ignoredPositionTimestamps.put(posKey(pos), System.currentTimeMillis());
+        }
+    }
+
+    /**
      * get all currently ignored positions for paint overlay
      * converts integer keys back to WorldPositions
      */
@@ -279,6 +289,7 @@ public class AttackChompy extends Task {
 
         // use breakCondition to stop early when we reach the area
         WalkConfig config = new WalkConfig.Builder()
+                .setWalkMethods(false, true)
                 .breakDistance(2)
                 .tileRandomisationRadius(1)
                 .timeout(5000)
@@ -338,7 +349,7 @@ public class AttackChompy extends Task {
 
             // brief monitoring wait (prevents tight loop)
             script.log(getClass(), "[execute] waiting " + MONITORING_POLL_MS + "ms before next scan");
-            script.pollFramesUntil(() -> true, MONITORING_POLL_MS);
+            script.submitTask(() -> false, MONITORING_POLL_MS);
             return true;  // return true to keep monitoring
         }
 
@@ -354,7 +365,7 @@ public class AttackChompy extends Task {
             currentChompyPosition = null;
             int delay = RandomUtils.weightedRandom(300, 1000, 0.002);
             script.log(getClass(), "[execute] waiting " + delay + "ms before retry");
-            script.pollFramesUntil(() -> true, delay);
+            script.submitTask(() -> false, delay);
             return true;
         }
 
@@ -840,19 +851,31 @@ public class AttackChompy extends Task {
         for (int attempt = 1; attempt <= PLUCK_MAX_ATTEMPTS; attempt++) {
             script.log(getClass(), "pluck attempt " + attempt + "/" + PLUCK_MAX_ATTEMPTS);
 
+            // reset flag before attempt
+            pluckStarted = false;
+
             // direct tap "Pluck" - opens menu and clicks in one action
             boolean plucked = script.getFinger().tap(tileCube, "Pluck");
 
             if (plucked) {
-                script.log(getClass(), "pluck action sent - waiting for animation");
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 2400));
-                TidalsChompyHunter.corpsePositions.remove(corpsePos);
-                ignoredPositionTimestamps.put(posKey(corpsePos), System.currentTimeMillis());
-                script.log(getClass(), "corpse plucked (" + TidalsChompyHunter.corpsePositions.size() + " remaining)");
-                return true;
+                script.log(getClass(), "pluck action sent - waiting for chat confirmation");
+
+                // wait for "You start plucking" chat message (covers walking to corpse)
+                boolean confirmed = script.pollFramesUntil(() -> pluckStarted, 6000);
+
+                if (confirmed) {
+                    script.log(getClass(), "pluck confirmed via chat - waiting for animation to complete");
+                    waitForPluckAnimation();
+                    TidalsChompyHunter.corpsePositions.remove(corpsePos);
+                    ignoredPositionTimestamps.put(posKey(corpsePos), System.currentTimeMillis());
+                    script.log(getClass(), "corpse plucked (" + TidalsChompyHunter.corpsePositions.size() + " remaining)");
+                    return true;
+                } else {
+                    script.log(getClass(), "pluck not confirmed - may have failed to reach corpse");
+                }
             }
 
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
+            script.submitTask(() -> false, RandomUtils.weightedRandom(200, 400));
         }
 
         // primary position failed - try nearby NPCs
@@ -888,14 +911,24 @@ public class AttackChompy extends Task {
             Polygon npcTileCube = script.getSceneProjector().getTileCube(npcPos, TILE_CUBE_HEIGHT);
             if (npcTileCube == null) continue;
 
+            // reset flag before attempt
+            pluckStarted = false;
+
             // simple direct pluck
             boolean plucked = script.getFinger().tap(npcTileCube, "Pluck");
             if (plucked) {
-                script.log(getClass(), "[fallback] plucked at " + npcPos.getX() + "," + npcPos.getY());
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 2400));
-                TidalsChompyHunter.corpsePositions.remove(corpsePos);
-                ignoredPositionTimestamps.put(posKey(npcPos), System.currentTimeMillis());
-                return true;
+                script.log(getClass(), "[fallback] pluck action sent at " + npcPos.getX() + "," + npcPos.getY());
+
+                // wait for chat confirmation
+                boolean confirmed = script.pollFramesUntil(() -> pluckStarted, 6000);
+
+                if (confirmed) {
+                    script.log(getClass(), "[fallback] pluck confirmed - waiting for animation to complete");
+                    waitForPluckAnimation();
+                    TidalsChompyHunter.corpsePositions.remove(corpsePos);
+                    ignoredPositionTimestamps.put(posKey(npcPos), System.currentTimeMillis());
+                    return true;
+                }
             }
         }
 
@@ -944,6 +977,26 @@ public class AttackChompy extends Task {
         if (removed > 0) {
             script.log(getClass(), "validated corpses: " + removed + " removed, " + TidalsChompyHunter.corpsePositions.size() + " remaining");
         }
+    }
+
+    /**
+     * wait for pluck animation to complete
+     * uses fixed delay after chat confirmation - pixel detection unreliable for this animation
+     * pluck animation takes ~3 ticks (1800ms), adding variance for human-like timing
+     */
+    private void waitForPluckAnimation() {
+        // gaussian-ish delay: center around 2100ms with some variance
+        int baseDelay = 2100;
+        int variance = script.random(-300, 300);
+        int delay = Math.max(1800, Math.min(2400, baseDelay + variance));
+
+        script.log(getClass(), "waiting " + delay + "ms for pluck animation");
+
+        // use pollFramesUntil which is DOCUMENTED to block
+        // submitTask might be async based on the "submit" naming
+        script.pollFramesUntil(() -> false, delay);
+
+        script.log(getClass(), "pluck animation wait complete");
     }
 
     /**
@@ -1280,7 +1333,7 @@ public class AttackChompy extends Task {
             Polygon tileCube = script.getSceneProjector().getTileCube(currentPos, TILE_CUBE_HEIGHT);
             if (tileCube == null) {
                 script.log(getClass(), "[attack] getTileCube returned null - retrying");
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500), true);
+                script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
                 continue;
             }
 
@@ -1329,14 +1382,17 @@ public class AttackChompy extends Task {
 
             if (success) {
                 if (lastActionWasPluck) {
-                    // we plucked a corpse
-                    script.log(getClass(), "[attack] plucked corpse in one action");
+                    // we plucked a corpse - wait for animation like the dedicated pluck method does
+                    script.log(getClass(), "[attack] plucked corpse in one action - waiting for animation");
+                    waitForPluckAnimation();
                     ignoredPositionTimestamps.put(posKey(currentPos), System.currentTimeMillis());
                     removeTrackedChompy(currentPos);
                     TidalsChompyHunter.corpsePositions.remove(currentPos);
-                    script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 1200));
                     return false; // didn't attack, return false
                 } else {
+                    // record that WE initiated this attack - for health bar crash detection
+                    // this tells DetectPlayers that any health bar appearing soon is OURS
+                    DetectPlayers.recordOurAttack();
                     script.log(getClass(), "[attack] SUCCESS - attack sent on attempt " + attempt);
                     return true;
                 }
@@ -1353,7 +1409,7 @@ public class AttackChompy extends Task {
 
             // tap failed - retry with delay
             script.log(getClass(), "[attack] attempt " + attempt + " failed - waiting before retry");
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500), true);
+            script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
         }
 
         // all attempts failed - likely a false positive or chompy despawned

@@ -59,7 +59,7 @@ private boolean buildItem() {
         return type == DialogueType.TEXT_OPTION;
     };
 
-    if (!pollFramesHuman(waitForTextOption, random(4000, 6000))) {
+    if (!pollFramesHuman(waitForTextOption, RandomUtils.gaussianRandom(4000, 6000, 5000, 500))) {
         log(getClass(), "TEXT_OPTION dialogue did not appear.");
         return false;
     }
@@ -83,7 +83,7 @@ private boolean buildItem() {
     BooleanSupplier waitForItemOption = () ->
         getWidgetManager().getDialogue().getDialogueType() == DialogueType.ITEM_OPTION;
 
-    if (!pollFramesHuman(waitForItemOption, random(4000, 6000))) {
+    if (!pollFramesHuman(waitForItemOption, RandomUtils.gaussianRandom(4000, 6000, 5000, 500))) {
         log(getClass(), "ITEM_OPTION dialogue did not appear.");
         return false;
     }
@@ -119,12 +119,12 @@ private boolean waitUntilFinishedCrafting() {
         if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
             log(getClass(), "Level up detected!");
             getWidgetManager().getDialogue().continueChatDialogue();
-            pollFramesHuman(() -> false, random(1000, 3000));
+            pollFramesHuman(() -> true, RandomUtils.gaussianRandom(1000, 3000, 2000, 500));
             return true;
         }
 
         // Timeout after random duration
-        if (amountChangeTimer.timeElapsed() > random(70000, 78000)) {
+        if (amountChangeTimer.timeElapsed() > RandomUtils.gaussianRandom(70000, 78000, 74000, 2000)) {
             return true;
         }
 
@@ -135,7 +135,7 @@ private boolean waitUntilFinishedCrafting() {
         return !inv.contains(ItemID.MAHOGANY_PLANK);
     };
 
-    return pollFramesHuman(condition, random(70000, 78000));
+    return pollFramesHuman(condition, RandomUtils.gaussianRandom(70000, 78000, 74000, 2000));
 }
 ```
 
@@ -340,14 +340,14 @@ private boolean castTeleportSpell() {
 
 // Randomized cooldown (anti-ban)
 private long getCooldownForSpell() {
-    int roll = random(100);
+    int roll = RandomUtils.uniformRandom(100);
 
     if (roll < 50) {
-        return random(1800, 1901);  // ~1.8-1.9s
+        return RandomUtils.gaussianRandom(1800, 1901, 1850, 25);  // ~1.8-1.9s
     } else if (roll < 90) {
-        return random(1850, 2001);  // ~1.85-2.0s
+        return RandomUtils.gaussianRandom(1850, 2001, 1925, 40);  // ~1.85-2.0s
     } else {
-        return random(1900, 2301);  // ~1.9-2.3s
+        return RandomUtils.gaussianRandom(1900, 2301, 2100, 100);  // ~1.9-2.3s
     }
 }
 ```
