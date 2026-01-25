@@ -165,7 +165,7 @@ public class DropToads extends Task {
 
                 // no collision - ALWAYS find the toad visually before proceeding
                 // wait for toad to be visible on ground before searching
-                script.submitTask(() -> false, script.random(800, 1200));
+                script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(800, 1200, 1000, 100));
 
                 script.log(getClass(), "drop succeeded - searching for toad to track...");
 
@@ -192,7 +192,7 @@ public class DropToads extends Task {
                 // wait for game to auto-move player after drop (creates straight line of toads)
                 if (dropped < toDrop) {
                     script.log(getClass(), "waiting for auto-move...");
-                    script.submitTask(() -> true, RandomUtils.weightedRandom(900, 1100));
+                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(900, 1100));
                 }
             } else {
                 script.log(getClass(), "failed to drop toad");
@@ -348,7 +348,7 @@ public class DropToads extends Task {
 
             // wait for drop animation + auto-walk to complete before returning
             // this ensures player has moved away so toad is visible for verification
-            script.submitTask(() -> false, RandomUtils.gaussianRandom(2000, 3000, 2500, 300));
+            script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(2000, 3000, 2500, 300));
 
             // wait for player to fully stop moving
             waitForPlayerToStop(5, 3000);

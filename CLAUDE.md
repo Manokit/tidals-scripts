@@ -255,36 +255,6 @@ public abstract class Task {
 }
 ```
 
-### Humanization Patterns (ALWAYS USE)
-
-**Random delays between actions:**
-```java
-// standard delay (200-400ms) - use between most actions
-script.submitTask(() -> false, script.random(200, 400));
-
-// longer delay (300-600ms) - use after bank operations
-script.submitTask(() -> false, script.random(300, 600));
-
-// human-style delay with variance logging
-script.pollFramesHuman(() -> false, script.random(200, 400));
-```
-
-**Variable delays with occasional longer pauses:**
-```java
-// normal 2-3 tick delay, 10% chance of extra pause
-int delay = script.random(1200, 1800);
-if (script.random(10) == 0) {
-    delay += script.random(600, 1200);  // occasional longer pause
-}
-
-// ~20% chance to use human delay (logs the ⏳ message)
-if (script.random(5) == 0) {
-    script.pollFramesHuman(() -> false, delay);
-} else {
-    script.submitTask(() -> false, delay);
-}
-```
-
 ### Caching Patterns (USE WHEN POSSIBLE)
 
 **Cache inventory slots to avoid re-scanning:**
@@ -339,7 +309,7 @@ DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
 if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
     script.log(getClass(), "level up");
     script.getWidgetManager().getDialogue().continueChatDialogue();
-    script.submitTask(() ->
+    script.pollFramesUntil(() ->
         script.getWidgetManager().getDialogue().getDialogueType() != DialogueType.TAP_HERE_TO_CONTINUE,
         2000);
 }
@@ -866,7 +836,7 @@ private boolean interactWithRetry(Polygon poly, String action, String descriptio
             return true;
         }
 
-        script.pollFramesUntil(() -> false, script.random(300, 500), true);
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
     }
     script.log(getClass(), description + " failed after " + maxAttempts + " attempts");
     return false;
@@ -883,7 +853,7 @@ private boolean equipmentInteractWithRetry(int itemId, String action, String des
             return true;
         }
 
-        script.pollFramesUntil(() -> false, script.random(300, 500), true);
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
     }
     script.log(getClass(), description + " failed after " + maxAttempts + " attempts");
     return false;
@@ -900,7 +870,7 @@ private boolean objectInteractWithRetry(RSObject obj, String action, String desc
             return true;
         }
 
-        script.pollFramesUntil(() -> false, script.random(300, 500), true);
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
     }
     script.log(getClass(), description + " failed after " + maxAttempts + " attempts");
     return false;

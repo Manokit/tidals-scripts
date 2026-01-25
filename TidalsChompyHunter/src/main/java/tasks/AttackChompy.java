@@ -349,7 +349,7 @@ public class AttackChompy extends Task {
 
             // brief monitoring wait (prevents tight loop)
             script.log(getClass(), "[execute] waiting " + MONITORING_POLL_MS + "ms before next scan");
-            script.submitTask(() -> false, MONITORING_POLL_MS);
+            script.pollFramesUntil(() -> false, MONITORING_POLL_MS);
             return true;  // return true to keep monitoring
         }
 
@@ -365,7 +365,7 @@ public class AttackChompy extends Task {
             currentChompyPosition = null;
             int delay = RandomUtils.weightedRandom(300, 1000, 0.002);
             script.log(getClass(), "[execute] waiting " + delay + "ms before retry");
-            script.submitTask(() -> false, delay);
+            script.pollFramesUntil(() -> false, delay);
             return true;
         }
 
@@ -875,7 +875,7 @@ public class AttackChompy extends Task {
                 }
             }
 
-            script.submitTask(() -> false, RandomUtils.weightedRandom(200, 400));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
         }
 
         // primary position failed - try nearby NPCs
@@ -985,17 +985,11 @@ public class AttackChompy extends Task {
      * pluck animation takes ~3 ticks (1800ms), adding variance for human-like timing
      */
     private void waitForPluckAnimation() {
-        // gaussian-ish delay: center around 2100ms with some variance
-        int baseDelay = 2100;
-        int variance = script.random(-300, 300);
-        int delay = Math.max(1800, Math.min(2400, baseDelay + variance));
+        // gaussian delay centered around 2100ms
+        int delay = RandomUtils.gaussianRandom(1800, 2400, 2100, 150);
 
         script.log(getClass(), "waiting " + delay + "ms for pluck animation");
-
-        // use pollFramesUntil which is DOCUMENTED to block
-        // submitTask might be async based on the "submit" naming
         script.pollFramesUntil(() -> false, delay);
-
         script.log(getClass(), "pluck animation wait complete");
     }
 
@@ -1333,7 +1327,7 @@ public class AttackChompy extends Task {
             Polygon tileCube = script.getSceneProjector().getTileCube(currentPos, TILE_CUBE_HEIGHT);
             if (tileCube == null) {
                 script.log(getClass(), "[attack] getTileCube returned null - retrying");
-                script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
                 continue;
             }
 
@@ -1409,7 +1403,7 @@ public class AttackChompy extends Task {
 
             // tap failed - retry with delay
             script.log(getClass(), "[attack] attempt " + attempt + " failed - waiting before retry");
-            script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
         }
 
         // all attempts failed - likely a false positive or chompy despawned

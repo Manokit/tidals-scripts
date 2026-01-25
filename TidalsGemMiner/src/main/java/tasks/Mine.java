@@ -253,7 +253,7 @@ public class Mine extends Task {
         Timer stationaryTimer = new Timer();
         WorldPosition[] lastPosition = { script.getWorldPosition() };
 
-        return script.submitTask(() -> {
+        return script.pollFramesUntil(() -> {
             WorldPosition current = script.getWorldPosition();
             if (current == null) {
                 return false;
@@ -272,7 +272,7 @@ public class Mine extends Task {
     }
 
     private boolean waitForMiningCompletion(WorldPosition targetPos) {
-        return script.submitTask(() -> {
+        return script.pollFramesUntil(() -> {
             // check if inventory is full
             ItemGroupResult inventory = script.getWidgetManager().getInventory().search(Collections.emptySet());
             if (inventory != null && inventory.isFull()) {

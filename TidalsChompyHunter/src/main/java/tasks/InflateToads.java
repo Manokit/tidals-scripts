@@ -243,14 +243,14 @@ public class InflateToads extends Task {
                 if (gotToad) {
                     script.log(getClass(), "toad inflated successfully");
                     // humanize: brief pause after picking up toad
-                    script.submitTask(() -> true, RandomUtils.weightedRandom(200, 600));
+                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 600));
                     return true;
                 }
 
                 script.log(getClass(), "toad did not arrive in inventory, will re-detect position");
             }
 
-            script.submitTask(() -> false, RandomUtils.weightedRandom(300, 500));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
         }
 
         script.log(getClass(), "failed to inflate any toad after " + maxTotalAttempts + " attempts");
@@ -309,8 +309,8 @@ public class InflateToads extends Task {
 
             Rectangle clusterBounds = nearest.getBounds();
             // add small random offset for humanization (+/- 3 pixels)
-            int offsetX = script.random(-3, 4);
-            int offsetY = script.random(-3, 4);
+            int offsetX = RandomUtils.uniformRandom(-3, 4);
+            int offsetY = RandomUtils.uniformRandom(-3, 4);
             Point clickPoint = new Point(
                     clusterBounds.x + clusterBounds.width / 2 + offsetX,
                     clusterBounds.y + clusterBounds.height / 2 + offsetY

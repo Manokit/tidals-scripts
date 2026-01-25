@@ -98,7 +98,7 @@ public class HopWorld extends Task {
 
             // wait for OSMB to stabilize and identify our position
             // prevents Setup from seeing our own dot as "another player"
-            script.submitTask(() -> true, POST_HOP_STABILIZATION_MS);
+            script.pollFramesHuman(() -> true, POST_HOP_STABILIZATION_MS);
             script.log(getClass(), "stabilization complete, resetting state");
 
             // reset state for new world
@@ -156,7 +156,7 @@ public class HopWorld extends Task {
     private boolean validateEquipment() {
         // open equipment tab
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.submitTask(() -> true, RandomUtils.weightedRandom(200, 400));
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
 
         // verify bow equipped
         UIResult<ItemSearchResult> bowCheck = script.getWidgetManager()

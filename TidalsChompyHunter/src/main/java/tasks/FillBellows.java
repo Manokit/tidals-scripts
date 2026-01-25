@@ -6,6 +6,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.walker.WalkConfig;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 import main.TidalsChompyHunter;
 import utils.Task;
 import utilities.RetryUtils;
@@ -148,7 +149,7 @@ public class FillBellows extends Task {
             }
 
             // wait for player to walk to bubble and start animation
-            script.submitTask(() -> false, script.random(1200, 1800));
+            script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1200, 1800, 1500, 150));
 
             // success - wait for bellows to fill
             return waitForBellowsToFill();
@@ -207,7 +208,7 @@ public class FillBellows extends Task {
         TidalsChompyHunter.bellowsEmpty = false;
 
         // wait for fill animation to complete before walking
-        script.submitTask(() -> false, script.random(1800, 2400));
+        script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1800, 2400, 2100, 150));
 
         // return to drop area
         walkToDropArea();
