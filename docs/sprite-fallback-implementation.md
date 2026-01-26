@@ -297,7 +297,7 @@ public class SpriteSearch {
             script.getWidgetManager().getTabs().openTab(
                 com.osmb.api.ui.tabs.Tab.INVENTORY
             );
-            script.submitTask(() ->
+            script.pollFramesUntil(() ->
                 script.getWidgetManager().getInventory().isVisible(), 2000);
         }
 
@@ -321,7 +321,7 @@ public class SpriteSearch {
             script.getWidgetManager().getTabs().openTab(
                 com.osmb.api.ui.tabs.Tab.INVENTORY
             );
-            script.submitTask(() ->
+            script.pollFramesUntil(() ->
                 script.getWidgetManager().getInventory().isVisible(), 2000);
         }
 
@@ -344,7 +344,7 @@ public class SpriteSearch {
             script.getWidgetManager().getTabs().openTab(
                 com.osmb.api.ui.tabs.Tab.INVENTORY
             );
-            script.submitTask(() ->
+            script.pollFramesUntil(() ->
                 script.getWidgetManager().getInventory().isVisible(), 2000);
         }
 
@@ -439,7 +439,7 @@ public class SpriteSearch {
             script.getWidgetManager().getTabs().openTab(
                 com.osmb.api.ui.tabs.Tab.EQUIPMENT
             );
-            script.submitTask(() ->
+            script.pollFramesUntil(() ->
                 script.getWidgetManager().getEquipment().isVisible(), 2000);
         }
 

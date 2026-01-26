@@ -4,6 +4,7 @@ import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
@@ -79,7 +80,7 @@ public class ReturnToThieving extends Task {
             script.log("RETURN", "Moving from safety tile to stall position...");
             // try direct tile tap first for short distance
             if (tapOnTile(target)) {
-                script.pollFramesHuman(() -> false, script.random(400, 600));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(400, 1200, 0.002));
                 if (isAtThievingTile()) {
                     script.log("RETURN", "Arrived via tile tap");
                     return true;
@@ -95,7 +96,7 @@ public class ReturnToThieving extends Task {
             boolean walked = script.getWalker().walkTo(target, config);
 
             // brief settle time after walk
-            script.pollFramesHuman(() -> false, script.random(300, 500));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
 
             if (walked || isAtThievingTile()) {
                 script.log("RETURN", "Arrived at stall position");
@@ -112,13 +113,9 @@ public class ReturnToThieving extends Task {
     }
     
     private boolean tapOnTile(WorldPosition tile) {
-        try {
-            Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
-            if (tilePoly == null) return false;
-            return script.getFinger().tap(tilePoly);
-        } catch (Exception e) {
-            return false;
-        }
+        Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
+        if (tilePoly == null) return false;
+        return script.getFinger().tap(tilePoly);
     }
 
     private boolean isInThievingArea() {

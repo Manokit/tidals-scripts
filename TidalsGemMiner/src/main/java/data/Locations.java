@@ -18,13 +18,19 @@ public final class Locations {
     // upper mine: centered around (2823, 2999) - small area with few rocks
     private static final Area UPPER_MINING_AREA = new RectangleArea(2818, 2994, 12, 12, 0);
     // underground mine: larger area with many rocks
-    private static final Area UNDERGROUND_MINING_AREA = new RectangleArea(2828, 9377, 20, 20, 0);
+    // expanded to include all hardcoded rock positions (X: 2826-2849, Y: 9379-9399)
+    private static final Area UNDERGROUND_MINING_AREA = new RectangleArea(2825, 9377, 26, 24, 0);
+
+    // approach area for underground deposit chest - walk to this area before interacting
+    // covers tiles where deposit chest is visible and reachable
+    private static final Area UNDERGROUND_APPROACH_AREA = new RectangleArea(2839, 9383, 6, 5, 0);
 
     public record MiningLocation(
             String name,
             String displayName,
             WorldPosition minePosition,
             WorldPosition bankPosition,
+            Area approachArea,  // area to walk to before banking (null = use bankPosition directly)
             String depositObjectName,
             String depositAction,
             int[] priorityRegions,
@@ -48,6 +54,7 @@ public final class Locations {
             "Upper Mine",
             UPPER_MINE_POSITION,
             UPPER_BANK_POSITION,
+            null,  // no approach area - use distance-based logic
             "Bank Deposit Box",
             "Deposit",
             new int[]{11310},
@@ -59,6 +66,7 @@ public final class Locations {
             "Underground Mine",
             UNDERGROUND_MINE_POSITION,
             UNDERGROUND_BANK_POSITION,
+            UNDERGROUND_APPROACH_AREA,  // walk to general area before depositing
             "Bank Deposit Chest",
             "Deposit",
             new int[]{11410},

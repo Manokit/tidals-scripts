@@ -6,13 +6,13 @@ import com.osmb.api.script.SkillCategory;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
 import com.osmb.api.item.ItemGroupResult;
-import com.osmb.api.ui.tabs.Tab;
 import strategies.MortMyreFungusCollector;
 import strategies.SecondaryCollectorStrategy;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -185,14 +185,8 @@ public class TidalsSecondaryCollector extends Script {
         statusMessage = "setting up...";
         log(getClass(), "running setup");
 
-        // open inventory first
-        getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        boolean opened = pollFramesUntil(() ->
-                        getWidgetManager().getInventory().search(Set.of()) != null,
-                3000
-        );
-
-        if (!opened) {
+        ItemGroupResult inventoryCheck = getWidgetManager().getInventory().search(Set.of());
+        if (inventoryCheck == null) {
             log(getClass(), "failed to open inventory");
             return 600;
         }
@@ -367,7 +361,7 @@ public class TidalsSecondaryCollector extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "logo loaded: " + w + "x" + h);
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -424,7 +418,7 @@ public class TidalsSecondaryCollector extends Script {
             if (code == 200) {
                 log("STATS", "Stats reported: blooms=" + bloomIncrement + ", banked=" + bankedIncrement + ", trips=" + tripsIncrement + ", runtime=" + runtimeSecs + "s");
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }

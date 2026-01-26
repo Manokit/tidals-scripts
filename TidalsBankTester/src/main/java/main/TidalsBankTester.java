@@ -6,6 +6,7 @@ import com.osmb.api.script.SkillCategory;
 import javafx.scene.Scene;
 import utilities.BankSearchUtils;
 import utilities.BankingUtils;
+import com.osmb.api.utils.RandomUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -78,7 +79,7 @@ public class TidalsBankTester extends Script {
                 log("Failed to open bank!");
                 return 2000;
             }
-            pollFramesHuman(() -> false, random(500, 800));
+            pollFramesUntil(() -> false, RandomUtils.weightedRandom(500, 800));
             return 0;
         }
 
@@ -106,9 +107,9 @@ public class TidalsBankTester extends Script {
             log("[SUCCESS] Verified withdraw of " + qtyStr + " x " + itemName);
 
             // deposit back
-            pollFramesHuman(() -> false, random(300, 500));
+            pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
             getWidgetManager().getBank().depositAll(Collections.emptySet());
-            pollFramesHuman(() -> false, random(200, 400));
+            pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
         } else {
             log("[FAILED] Could not withdraw " + itemName);
         }

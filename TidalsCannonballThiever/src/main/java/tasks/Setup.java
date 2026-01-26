@@ -1,10 +1,10 @@
 package tasks;
 
-import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Rectangle;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
 import com.osmb.api.ui.component.tabs.skill.SkillsTabComponent;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
 import utils.Task;
 
@@ -85,40 +85,35 @@ public class Setup extends Task {
     private static final int TARGET_ZOOM_LEVEL = 3;
 
     private void checkZoomLevel() {
-        try {
-            boolean opened = script.getWidgetManager().getSettings().open();
-            if (!opened) {
-                script.log("SETUP", "Could not open settings tab to check zoom");
-                return;
-            }
+        boolean opened = script.getWidgetManager().getSettings().open();
+        if (!opened) {
+            script.log("SETUP", "Could not open settings tab to check zoom");
+            return;
+        }
 
-            script.pollFramesHuman(() -> false, script.random(200, 400));
-            UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
-            if (zoomResult != null && zoomResult.isFound()) {
-                int currentZoom = zoomResult.get();
-                script.log("SETUP", "Current zoom level: " + currentZoom);
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+        UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
+        if (zoomResult != null && zoomResult.isFound()) {
+            int currentZoom = zoomResult.get();
+            script.log("SETUP", "Current zoom level: " + currentZoom);
 
-                if (currentZoom != TARGET_ZOOM_LEVEL) {
-                    script.log("SETUP", "Setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
-                    boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
-                    if (set) {
-                        script.log("SETUP", "Zoom level set to " + TARGET_ZOOM_LEVEL);
-                    } else {
-                        script.log("SETUP", "Failed to set zoom level");
-                    }
+            if (currentZoom != TARGET_ZOOM_LEVEL) {
+                script.log("SETUP", "Setting zoom level to " + TARGET_ZOOM_LEVEL + "...");
+                boolean set = script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
+                if (set) {
+                    script.log("SETUP", "Zoom level set to " + TARGET_ZOOM_LEVEL);
                 } else {
-                    script.log("SETUP", "Zoom level already optimal");
+                    script.log("SETUP", "Failed to set zoom level");
                 }
             } else {
-                script.log("SETUP", "Could not read zoom level, attempting to set anyway...");
-                script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
+                script.log("SETUP", "Zoom level already optimal");
             }
-
-            script.getWidgetManager().getSettings().close();
-            script.pollFramesHuman(() -> false, script.random(200, 400));
-
-        } catch (Exception e) {
-            script.log("SETUP", "Error checking zoom level: " + e.getMessage());
+        } else {
+            script.log("SETUP", "Could not read zoom level, attempting to set anyway...");
+            script.getWidgetManager().getSettings().setZoomLevel(TARGET_ZOOM_LEVEL);
         }
+
+        script.getWidgetManager().getSettings().close();
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
     }
 }

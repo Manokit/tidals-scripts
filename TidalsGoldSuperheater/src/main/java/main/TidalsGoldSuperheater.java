@@ -436,7 +436,7 @@ public class TidalsGoldSuperheater extends Script {
 
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, textMuted.getRGB(), textMuted.getRGB());
 
-        try { lastCanvasFrame.set(c.toImageCopy()); } catch (Exception ignored) {}
+        lastCanvasFrame.set(c.toImageCopy());
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
@@ -490,7 +490,7 @@ public class TidalsGoldSuperheater extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "logo loaded: " + w + "x" + h);
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -584,7 +584,7 @@ public class TidalsGoldSuperheater extends Script {
                 log("WEBHOOK", "Webhook failed. HTTP " + code);
             }
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("WEBHOOK", "Error: " + e.getMessage());
         } finally {
             try { if (baos != null) baos.close(); } catch (IOException ignored) {}
@@ -671,7 +671,7 @@ public class TidalsGoldSuperheater extends Script {
             } else {
                 log("STATS", "Failed to report stats, HTTP " + code);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
@@ -702,7 +702,7 @@ public class TidalsGoldSuperheater extends Script {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("VERSIONCHECK", "Exception occurred while fetching version from GitHub.");
         }
         return null;

@@ -100,7 +100,12 @@ public class TidalsLoadoutTester extends Script {
             getStageController().show(scene, "Loadout Tester Setup", false);
 
             log("Setup UI shown");
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
+            // rethrow OSMB control flow exceptions
+            if (e.getClass().getName().contains("HaltScript") ||
+                e.getClass().getName().contains("PriorityTask")) {
+                throw e;
+            }
             log("ERROR in onStart: " + e.getMessage());
             e.printStackTrace();
         }

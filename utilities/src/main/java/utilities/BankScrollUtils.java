@@ -3,6 +3,7 @@ package utilities;
 import com.osmb.api.definition.SpriteDefinition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Rectangle;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.visual.image.ImageSearchResult;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
@@ -104,7 +105,7 @@ public class BankScrollUtils {
             initialized = true;
             return true;
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             script.log(BankScrollUtils.class, "failed to load scroll sprites: " + e.getMessage());
             return false;
         }
@@ -141,7 +142,7 @@ public class BankScrollUtils {
 
         if (tapped) {
             // human-like delay after tapping
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
             script.log(BankScrollUtils.class, "scroll down tapped successfully");
         } else {
             script.log(BankScrollUtils.class, "failed to tap scroll down button");
@@ -181,7 +182,7 @@ public class BankScrollUtils {
 
         if (tapped) {
             // human-like delay after tapping
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
             script.log(BankScrollUtils.class, "scroll up tapped successfully");
         } else {
             script.log(BankScrollUtils.class, "failed to tap scroll up button");

@@ -10,8 +10,10 @@ import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.shape.Rectangle;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
+import com.osmb.api.ui.spellbook.SpellNotFoundException;
 import com.osmb.api.ui.spellbook.StandardSpellbook;
 import com.osmb.api.ui.tabs.Tab;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
 import com.osmb.api.visual.PixelCluster;
 import com.osmb.api.visual.SearchablePixel;
@@ -20,6 +22,8 @@ import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.walker.WalkConfig;
 import main.TidalsSecondaryCollector.State;
 import utilities.RetryUtils;
+
+import java.io.IOException;
 
 import java.awt.Point;
 import java.util.ArrayList;
@@ -178,7 +182,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         // open equipment tab
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
 
         // 1. check bloom tool (weapon slot)
         UIResult<ItemSearchResult> bloomTool = script.getWidgetManager().getEquipment().findItem(BLOOM_TOOLS);
@@ -222,7 +226,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                     break;
                 }
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             script.log(getClass(), "error checking crafting cape: " + e.getMessage());
         }
 
@@ -233,8 +237,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         String prayerMethodUsed = "";
 
         // check inventory for ardy cloak
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
         if (inv != null) {
@@ -251,7 +254,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         // check if ardy cloak equipped
         if (!hasPrayerMethod) {
             script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
             UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(ARDOUGNE_CLOAKS);
             if (ardyCloak.isFound()) {
@@ -270,10 +273,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         }
 
         script.log(getClass(), "prayer method: " + prayerMethodUsed);
-
-        // back to inventory
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
 
         // 5. pre-trip prayer restore if not near mort myre log area and prayer not full
         // skip if we're already close to the collection area - just start the trip
@@ -308,7 +307,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                         if (cloak != null) {
                             boolean success = RetryUtils.inventoryInteract(script, cloak, "Monastery Teleport", "pre-trip ardy cloak (inventory)");
                             if (success) {
-                                script.pollFramesHuman(() -> false, script.random(2000, 3000));
+                                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
                                 walkToAltarAndPray();
                                 return;
                             }
@@ -319,14 +318,14 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         } else if (detectedPrayerMethod.equals("ardy_equipped")) {
             // use ardy cloak from equipment
             script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
             for (int cloakId : ARDOUGNE_CLOAKS) {
                 UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(cloakId);
                 if (ardyCloak.isFound()) {
                     boolean success = RetryUtils.equipmentInteract(script,cloakId, "Kandarin Monastery", "pre-trip ardy cloak (equipped)");
                     if (success) {
-                        script.pollFramesHuman(() -> false, script.random(2000, 3000));
+                        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
                         walkToAltarAndPray();
                         return;
                     }
@@ -340,10 +339,10 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                         null
                 );
                 if (success) {
-                    script.pollFramesHuman(() -> false, script.random(2000, 3000));
+                    script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
                     walkToLumbridgeAltarAndPray();
                 }
-            } catch (Exception e) {
+            } catch (SpellNotFoundException e) {
                 script.log(getClass(), "failed to cast lumbridge teleport: " + e.getMessage());
             }
         }
@@ -359,7 +358,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 .breakDistance(3)
                 .build();
         script.getWalker().walkTo(KANDARIN_ALTAR, config);
-        script.pollFramesHuman(() -> false, script.random(500, 800));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(500, 800));
 
         RSObject altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
         if (altar != null) {
@@ -384,7 +383,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 .breakDistance(3)
                 .build();
         script.getWalker().walkTo(LUMBRIDGE_ALTAR, config);
-        script.pollFramesHuman(() -> false, script.random(500, 800));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(500, 800));
 
         RSObject altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
         if (altar != null) {
@@ -403,8 +402,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     public int collect() {
         // initialize cached inventory count if not set (first trip without banking)
         if (cachedInventoryCount < 0) {
-            script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-            script.pollFramesUntil(() -> false, script.random(150, 250));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 250));
             ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
             cachedInventoryCount = (inv != null) ? (INVENTORY_SIZE - inv.getFreeSlots()) : 0;
             script.log(getClass(), "initialized cached inventory count: " + cachedInventoryCount);
@@ -449,13 +447,13 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                     .build();
             script.getWalker().walkTo(FOUR_LOG_TILE, config);
             // short wait after walking to let position settle
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
             return 600;
         }
 
         // ensure equipment tab is open (stay here for bloom + collection)
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesUntil(() -> false, script.random(150, 250));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 250));
 
         // cast bloom using equipment interact
         if (equippedBloomToolId == 0) {
@@ -476,7 +474,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         bloomCasts++;
 
         // wait for bloom animation (~3 ticks = 1800ms), ignoreTasks to prevent random tab opens
-        script.pollFramesUntil(() -> false, script.random(1800, 2000), true);
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(1800, 2000), true);
 
         // collect fungus (stays on equipment tab - no inventory checking needed)
         return collectGroundFungus();
@@ -489,7 +487,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         if (fungusPositions.isEmpty()) {
             allowAFK = true;
             script.log(getClass(), "no fungus detected, re-enabling afk/hop");
-            return script.random(300, 500);
+            return RandomUtils.weightedRandom(300, 500);
         }
 
         // calculate how many logs we can pick based on available slots
@@ -526,13 +524,13 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             for (int attempt = 1; attempt <= 3 && !tapped; attempt++) {
                 tapped = script.getFinger().tap(tilePoly, "Pick");
                 if (!tapped) {
-                    script.pollFramesUntil(() -> false, script.random(200, 300), true);
+                    script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 300), true);
                 }
             }
 
             if (tapped) {
                 // wait for pick animation (~1 tick = 600ms)
-                script.pollFramesUntil(() -> false, script.random(600, 800), true);
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 800), true);
 
                 // update cached count - get min of 2 and remaining slots (handles partial fill)
                 int slotsRemaining = INVENTORY_SIZE - cachedInventoryCount;
@@ -551,11 +549,11 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         allowAFK = true;
 
         // occasional human delay after collection cycle
-        if (script.random(0, 3) == 0) {
-            script.pollFramesHuman(() -> false, script.random(200, 400));
+        if (RandomUtils.uniformRandom(0, 3) == 0) {
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
         }
 
-        return script.random(50, 150);
+        return RandomUtils.weightedRandom(50, 150);
     }
     
     private List<WorldPosition> detectFungusPositions() {
@@ -692,7 +690,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.log(getClass(), "handling bank interface");
 
         // wait for bank to load
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 500));
 
         // count fungus in inventory before depositing
         ItemGroupResult invBeforeDeposit = script.getWidgetManager().getInventory().search(Set.of(MORT_MYRE_FUNGUS));
@@ -705,7 +703,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         Set<Integer> keepItems = toIntegerSet(ARDOUGNE_CLOAKS);
         script.getWidgetManager().getBank().depositAll(keepItems);
 
-        script.pollFramesHuman(() -> false, script.random(300, 600));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 600));
 
         // track banked items
         if (fungusToBank > 0) {
@@ -724,7 +722,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         // close bank
         script.getWidgetManager().getBank().close();
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         bankTrips++;
         script.log(getClass(), "banking complete, bank trips: " + bankTrips);
@@ -743,7 +741,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                     return useCraftingCapeTeleport();
                 }
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             script.log(getClass(), "error checking crafting cape: " + e.getMessage());
         }
 
@@ -755,7 +753,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.log(getClass(), "using crafting cape teleport");
 
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         // find which cape we have
         int capeId = 0;
@@ -776,7 +774,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 600;
         }
 
-        script.pollFramesHuman(() -> false, script.random(2000, 3000));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
 
         // tap bank chest directly - game will path us there
         script.log(getClass(), "tapping bank chest");
@@ -817,7 +815,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.log(getClass(), "using ver sinhaza bank (drakan's medallion)");
 
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         // teleport to ver sinhaza
         boolean success = RetryUtils.equipmentInteract(script, DRAKANS_MEDALLION, "Ver Sinhaza", "drakan's medallion teleport");
@@ -825,7 +823,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 600;
         }
 
-        script.pollFramesHuman(() -> false, script.random(2000, 3000));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
 
         // walk to bank area
         script.log(getClass(), "walking to ver sinhaza bank");
@@ -881,8 +879,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
     private boolean tryArdougneCloakTeleport() {
         // check inventory first
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
         if (inv != null) {
@@ -892,7 +889,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                     if (cloak != null) {
                         boolean success = RetryUtils.inventoryInteract(script,cloak, "Monastery Teleport", "ardougne cloak (inventory)");
                         if (success) {
-                            script.pollFramesHuman(() -> false, script.random(2000, 3000));
+                            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
                             return true;
                         }
                     }
@@ -902,14 +899,14 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         // check equipped
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         for (int cloakId : ARDOUGNE_CLOAKS) {
             UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(cloakId);
             if (ardyCloak.isFound()) {
                 boolean success = RetryUtils.equipmentInteract(script,cloakId, "Kandarin Monastery", "ardougne cloak (equipped)");
                 if (success) {
-                    script.pollFramesHuman(() -> false, script.random(2000, 3000));
+                    script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
                     return true;
                 }
             }
@@ -939,7 +936,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.getWalker().walkTo(KANDARIN_ALTAR, config);
 
         // wait for position to settle after walking
-        script.pollFramesHuman(() -> false, script.random(400, 600));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(400, 600));
 
         // try to find and pray at altar after walking
         altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
@@ -968,10 +965,10 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 return 0;
             }
 
-            script.pollFramesHuman(() -> false, script.random(2000, 3000));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
             return walkToLumbridgeChurch();
 
-        } catch (Exception e) {
+        } catch (SpellNotFoundException e) {
             script.log(getClass(), "ERROR: lumbridge teleport not available - stopping");
             script.stop();
             return 0;
@@ -998,7 +995,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         script.getWalker().walkTo(LUMBRIDGE_ALTAR, config);
 
         // wait for position to settle after walking
-        script.pollFramesHuman(() -> false, script.random(400, 600));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(400, 600));
 
         // try to find and pray at altar after walking
         altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
@@ -1063,7 +1060,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
     private int useDrakansMedallionTeleport() {
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
 
         boolean success = RetryUtils.equipmentInteract(script,DRAKANS_MEDALLION, "Ver Sinhaza", "drakan's medallion teleport");
         if (!success) {
@@ -1072,7 +1069,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             return 0;
         }
 
-        script.pollFramesHuman(() -> false, script.random(2000, 3000));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(2000, 3000));
         return walkToLogTile();
     }
 

@@ -19,6 +19,7 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -305,23 +306,19 @@ public class TidalsCannonballThiever extends Script {
         if (inventoryInitialized)
             return;
 
-        try {
-            Set<Integer> allIds = getAllTrackedItemIds();
-            ItemGroupResult inv = getWidgetManager().getInventory().search(allIds);
+        Set<Integer> allIds = getAllTrackedItemIds();
+        ItemGroupResult inv = getWidgetManager().getInventory().search(allIds);
 
-            if (inv != null) {
-                lastInventorySnapshot.clear();
-                for (int itemId : allIds) {
-                    int count = inv.getAmount(itemId);
-                    if (count > 0) {
-                        lastInventorySnapshot.put(itemId, count);
-                    }
+        if (inv != null) {
+            lastInventorySnapshot.clear();
+            for (int itemId : allIds) {
+                int count = inv.getAmount(itemId);
+                if (count > 0) {
+                    lastInventorySnapshot.put(itemId, count);
                 }
-                inventoryInitialized = true;
-                log("INVENTORY", "Initialized inventory snapshot with " + lastInventorySnapshot.size() + " item types");
             }
-        } catch (Exception e) {
-            log("INVENTORY", "Failed to initialize inventory: " + e.getMessage());
+            inventoryInitialized = true;
+            log("INVENTORY", "Initialized inventory snapshot with " + lastInventorySnapshot.size() + " item types");
         }
     }
 
@@ -337,74 +334,69 @@ public class TidalsCannonballThiever extends Script {
     private static final double ORE_STALL_XP = 191.0;
 
     private void checkInventoryForChanges() {
-        try {
-            Set<Integer> allIds = getAllTrackedItemIds();
-            ItemGroupResult inv = getWidgetManager().getInventory().search(allIds);
+        Set<Integer> allIds = getAllTrackedItemIds();
+        ItemGroupResult inv = getWidgetManager().getInventory().search(allIds);
 
-            if (inv == null)
-                return;
+        if (inv == null)
+            return;
 
-            boolean cannonballGained = false;
-            boolean oreGained = false;
+        boolean cannonballGained = false;
+        boolean oreGained = false;
 
-            for (Map.Entry<String, Integer> entry : CANNONBALL_TYPES.entrySet()) {
-                String type = entry.getKey();
-                int itemId = entry.getValue();
+        for (Map.Entry<String, Integer> entry : CANNONBALL_TYPES.entrySet()) {
+            String type = entry.getKey();
+            int itemId = entry.getValue();
 
-                int currentCount = inv.getAmount(itemId);
-                int lastCount = lastInventorySnapshot.getOrDefault(itemId, 0);
+            int currentCount = inv.getAmount(itemId);
+            int lastCount = lastInventorySnapshot.getOrDefault(itemId, 0);
 
-                if (currentCount > lastCount) {
-                    int gained = currentCount - lastCount;
-                    cannonballCounts.merge(type, gained, Integer::sum);
-                    cannonballsStolen += gained;
+            if (currentCount > lastCount) {
+                int gained = currentCount - lastCount;
+                cannonballCounts.merge(type, gained, Integer::sum);
+                cannonballsStolen += gained;
 
-                    // calculate gp earned using locked-in price
-                    int price = getItemPrice(itemId);
-                    long gpGained = (long) gained * price;
-                    totalGpEarned += gpGained;
+                // calculate gp earned using locked-in price
+                int price = getItemPrice(itemId);
+                long gpGained = (long) gained * price;
+                totalGpEarned += gpGained;
 
-                    log("LOOT", "+" + gained + " " + type + " (total: " + cannonballCounts.get(type) + ", +" + gpGained + " gp)");
-                    cannonballGained = true;
-                }
-                lastInventorySnapshot.put(itemId, currentCount);
+                log("LOOT", "+" + gained + " " + type + " (total: " + cannonballCounts.get(type) + ", +" + gpGained + " gp)");
+                cannonballGained = true;
             }
+            lastInventorySnapshot.put(itemId, currentCount);
+        }
 
-            for (Map.Entry<String, Integer> entry : ORE_TYPES.entrySet()) {
-                String type = entry.getKey();
-                int itemId = entry.getValue();
+        for (Map.Entry<String, Integer> entry : ORE_TYPES.entrySet()) {
+            String type = entry.getKey();
+            int itemId = entry.getValue();
 
-                int currentCount = inv.getAmount(itemId);
-                int lastCount = lastInventorySnapshot.getOrDefault(itemId, 0);
+            int currentCount = inv.getAmount(itemId);
+            int lastCount = lastInventorySnapshot.getOrDefault(itemId, 0);
 
-                if (currentCount > lastCount) {
-                    int gained = currentCount - lastCount;
-                    oreCounts.merge(type, gained, Integer::sum);
-                    oresStolen += gained;
+            if (currentCount > lastCount) {
+                int gained = currentCount - lastCount;
+                oreCounts.merge(type, gained, Integer::sum);
+                oresStolen += gained;
 
-                    // calculate gp earned using locked-in price
-                    int price = getItemPrice(itemId);
-                    long gpGained = (long) gained * price;
-                    totalGpEarned += gpGained;
+                // calculate gp earned using locked-in price
+                int price = getItemPrice(itemId);
+                long gpGained = (long) gained * price;
+                totalGpEarned += gpGained;
 
-                    log("LOOT", "+" + gained + " " + type + " (total: " + oreCounts.get(type) + ", +" + gpGained + " gp)");
-                    oreGained = true;
-                }
-                lastInventorySnapshot.put(itemId, currentCount);
+                log("LOOT", "+" + gained + " " + type + " (total: " + oreCounts.get(type) + ", +" + gpGained + " gp)");
+                oreGained = true;
             }
+            lastInventorySnapshot.put(itemId, currentCount);
+        }
 
-            // track XP based on which stall was stolen from
-            if (xpTracking != null) {
-                if (cannonballGained) {
-                    xpTracking.addThievingXp(CANNONBALL_STALL_XP);
-                }
-                if (oreGained) {
-                    xpTracking.addThievingXp(ORE_STALL_XP);
-                }
+        // track XP based on which stall was stolen from
+        if (xpTracking != null) {
+            if (cannonballGained) {
+                xpTracking.addThievingXp(CANNONBALL_STALL_XP);
             }
-
-        } catch (Exception e) {
-            // inventory check can fail during transitions, safe to ignore
+            if (oreGained) {
+                xpTracking.addThievingXp(ORE_STALL_XP);
+            }
         }
     }
 
@@ -470,7 +462,7 @@ public class TidalsCannonballThiever extends Script {
                         // small delay between requests to avoid rate limiting
                         Thread.sleep(100);
 
-                    } catch (Exception e) {
+                    } catch (IOException | InterruptedException e) {
                         // silently skip failed items
                     }
                 }
@@ -494,7 +486,7 @@ public class TidalsCannonballThiever extends Script {
                     }
                 }
 
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log("PRICES", "Failed to update prices: " + e.getMessage());
             }
         }, "PriceUpdater");
@@ -811,7 +803,7 @@ public class TidalsCannonballThiever extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "logo loaded: " + w + "x" + h);
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -869,7 +861,7 @@ public class TidalsCannonballThiever extends Script {
                 log("STATS", "Stats reported: xp=" + xpIncrement + ", gp=" + gpIncrement + ", cannonballs=" + cannonballIncrement + ", ores="
                         + oreIncrement + ", runtime=" + runtimeSecs + "s");
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }
@@ -900,7 +892,7 @@ public class TidalsCannonballThiever extends Script {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log("VERSIONCHECK", "Exception occurred while fetching version from GitHub.");
         }
         return null;

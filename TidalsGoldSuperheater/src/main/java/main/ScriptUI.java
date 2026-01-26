@@ -12,6 +12,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.prefs.Preferences;
 
@@ -159,7 +160,7 @@ public class ScriptUI {
         startButton.setOnAction(e -> saveSettings());
         root.getChildren().add(startButton);
 
-        Scene scene = new Scene(root, 300, 340);
+        Scene scene = new Scene(root, 300, 420);
         scene.setFill(Color.web(BG_COLOR));
         return scene;
     }
@@ -198,7 +199,7 @@ public class ScriptUI {
             view.setPreserveRatio(true);
             view.setFitWidth(160);
             return view;
-        } catch (Exception e) {
+        } catch (IOException e) {
             return null;
         }
     }

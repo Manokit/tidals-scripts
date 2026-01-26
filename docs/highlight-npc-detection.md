@@ -284,7 +284,7 @@ private int flee() {
 
 private int hide() {
     log("Hiding, waiting for guard to calm down...");
-    pollFramesHuman(() -> false, random(2000, 4000));
+    pollFramesHuman(() -> true, RandomUtils.gaussianRandom(2000, 4000, 3000, 500));
     
     if (!isGuardNearby()) {
         log("Guard gone, returning to stall");

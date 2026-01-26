@@ -5,6 +5,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 
@@ -84,7 +85,7 @@ public class StartThieving extends Task {
                 boolean walked = script.getWalker().walkTo(getThievingTile(), minimapConfig);
                 // skip humanised delay in two-stall mode - timing critical
                 if (!twoStallMode) {
-                    script.pollFramesHuman(() -> false, script.random(200, 400));
+                    script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
                 }
 
                 if (!walked && !isAtExactThievingTile()) {
@@ -140,8 +141,8 @@ public class StartThieving extends Task {
         script.log("THIEVE", "Clear - starting to steal...");
 
         // skip delays in two-stall mode - timing critical
-        if (!twoStallMode && script.random(1, 100) <= 25) {
-            script.pollFramesHuman(() -> false, script.random(80, 200));
+        if (!twoStallMode && RandomUtils.uniformRandom(1, 100) <= 25) {
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(80, 400, 0.002));
             if (guardTracker.isAnyGuardInDangerZone()) {
                 script.log("THIEVE", "ABORT - Guard moved in during delay!");
                 return false;
@@ -185,7 +186,7 @@ public class StartThieving extends Task {
             if (tapped) break;
             // skip delay in two-stall mode - timing critical
             if (!twoStallMode) {
-                script.pollFramesHuman(() -> false, script.random(200, 400));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
             }
         }
 
@@ -215,7 +216,7 @@ public class StartThieving extends Task {
 
             // skip delay in two-stall mode - timing critical
             if (!twoStallMode) {
-                script.pollFramesHuman(() -> false, script.random(200, 400));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
             }
             justCompletedGuardSync = false;
             return true;

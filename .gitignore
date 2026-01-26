@@ -28,6 +28,9 @@ discord_post.md
 Context.md
 context.md
 
+# Local change logs per script
+**/Changes/
+
 build.gradle.planning/
 
 .cursor/

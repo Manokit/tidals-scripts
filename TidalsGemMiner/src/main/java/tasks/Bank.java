@@ -3,16 +3,19 @@ package tasks;
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
 import com.osmb.api.item.ItemSearchResult;
+import com.osmb.api.location.area.Area;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.ui.depositbox.DepositBox;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.timing.Timer;
 import com.osmb.api.walker.WalkConfig;
 import utils.Task;
 import utilities.RetryUtils;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -116,15 +119,28 @@ public class Bank extends Task {
             return false;
         }
 
+        Area approachArea = selectedLocation.approachArea();
         WorldPosition bankPos = selectedLocation.bankPosition();
 
-        // check if we're close enough to bank
-        double distanceToBank = myPos.distanceTo(bankPos);
-        if (distanceToBank > 10) {
-            task = "Walking to bank";
-            script.log(getClass(), "walking to bank at " + bankPos);
-            script.getWalker().walkTo(bankPos, new WalkConfig.Builder().build());
-            return false;
+        if (approachArea != null) {
+            // underground mine: walk to approach area, not exact tile
+            if (!approachArea.contains(myPos)) {
+                task = "Walking to deposit area";
+                WorldPosition randomTarget = approachArea.getRandomPosition();
+                script.log(getClass(), "walking to approach area: " + randomTarget);
+                script.getWalker().walkTo(randomTarget, new WalkConfig.Builder().build());
+                return false;
+            }
+            // already in approach area - proceed to interact
+        } else {
+            // upper mine: use original distance-based logic
+            double distanceToBank = myPos.distanceTo(bankPos);
+            if (distanceToBank > 10) {
+                task = "Walking to bank";
+                script.log(getClass(), "walking to bank at " + bankPos);
+                script.getWalker().walkTo(bankPos, new WalkConfig.Builder().build());
+                return false;
+            }
         }
 
         // find deposit object based on location
@@ -140,7 +156,7 @@ public class Bank extends Task {
         }
 
         // wait for deposit box to load
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
 
         task = "Depositing";
         if (cuttingEnabled) {
@@ -154,12 +170,12 @@ public class Bank extends Task {
         }
 
         // wait for deposit to complete
-        script.pollFramesHuman(() -> false, script.random(300, 600));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
 
         // close deposit box
         task = "Closing deposit box";
         depositBox.close();
-        script.pollFramesHuman(() -> !depositBox.isVisible(), 5000);
+        script.pollFramesUntil(() -> !depositBox.isVisible(), RandomUtils.weightedRandom(5000, 10000, 0.002));
 
         // don't walk back - Mine task will handle walking to rocks
         return false; // re-evaluate state
@@ -187,7 +203,7 @@ public class Bank extends Task {
         AtomicReference<Timer> posTimer = new AtomicReference<>(new Timer());
         AtomicReference<WorldPosition> prevPos = new AtomicReference<>(null);
 
-        script.pollFramesHuman(() -> {
+        script.pollFramesUntil(() -> {
             WorldPosition current = script.getWorldPosition();
             if (current == null) return false;
 
@@ -199,27 +215,43 @@ public class Bank extends Task {
             // done when deposit box visible or idle for 2+ seconds
             return script.getWidgetManager().getDepositBox().isVisible() ||
                     posTimer.get().timeElapsed() > 2000;
-        }, 15000);
+        }, RandomUtils.weightedRandom(15000, 30000, 0.002));
     }
 
     private void depositGemsIndividually(DepositBox depositBox, int[] gemIds) {
+        Set<Integer> itemIdsToRecognise = new HashSet<>();
         for (int gemId : gemIds) {
-            // search for this gem in deposit box
-            ItemGroupResult items = depositBox.search(Set.of(gemId));
-            if (items == null || !items.contains(gemId)) {
+            itemIdsToRecognise.add(gemId);
+        }
+
+        ItemGroupResult items = depositBox.search(itemIdsToRecognise);
+        if (items == null) {
+            return;
+        }
+
+        for (int gemId : gemIds) {
+            if (!items.contains(gemId)) {
                 continue;
             }
 
             // get a random item of this type and deposit it (all of them)
             ItemSearchResult gem = items.getRandomItem(gemId);
             if (gem == null) {
+                items = depositBox.search(itemIdsToRecognise);
+                if (items == null) {
+                    return;
+                }
                 continue;
             }
 
             script.log(getClass(), "depositing gem: " + gemId);
             boolean deposited = RetryUtils.inventoryInteract(script, gem, "Deposit-All", "deposit gem " + gemId);
             if (deposited) {
-                script.pollFramesHuman(() -> false, script.random(200, 400));
+                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+                items = depositBox.search(itemIdsToRecognise);
+                if (items == null) {
+                    return;
+                }
             } else {
                 script.log(getClass(), "failed to deposit gem: " + gemId);
             }

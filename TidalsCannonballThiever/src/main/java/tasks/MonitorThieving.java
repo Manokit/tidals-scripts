@@ -2,6 +2,7 @@ package tasks;
 
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.script.Script;
+import com.osmb.api.utils.RandomUtils;
 import utils.Task;
 
 import java.util.Set;
@@ -40,12 +41,8 @@ public class MonitorThieving extends Task {
     }
     
     private boolean isInventoryFull() {
-        try {
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-            return inv != null && inv.isFull();
-        } catch (Exception e) {
-            return false;
-        }
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
+        return inv != null && inv.isFull();
     }
     
     // switch after 4 xp drops or guard detection - whichever comes first

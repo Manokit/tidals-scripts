@@ -3,6 +3,7 @@ package utilities.items;
 import com.osmb.api.script.Script;
 import com.osmb.api.visual.image.Image;
 
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
@@ -24,7 +25,7 @@ import javax.imageio.ImageIO;
 public final class SpriteCache {
 
     private static final String GE_API_SPRITE_URL = "https://secure.runescape.com/m=itemdb_oldschool/obj_sprite.gif?id=";
-    private static final String USER_AGENT = "OSMB-Script";
+    private static final String USER_AGENT = "Mozilla/5.0";
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 5000;
 
@@ -84,7 +85,7 @@ public final class SpriteCache {
         try {
             // use quantity 1, default zoom, transparent background (0)
             return script.getItemManager().getItemImage(itemId, 1, null, 0);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // item manager may throw on invalid IDs
             return null;
         }
@@ -114,7 +115,7 @@ public final class SpriteCache {
                     return null;
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             // network error, 404, or other issues - return null
         }
         return null;

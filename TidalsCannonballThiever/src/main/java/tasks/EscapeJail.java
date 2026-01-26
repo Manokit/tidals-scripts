@@ -6,6 +6,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.walker.WalkConfig;
@@ -115,7 +116,7 @@ public class EscapeJail extends Task {
             // pathing back to stall is a separate concern
             escapeAttempts = 0;
 
-            script.pollFramesHuman(() -> false, script.random(600, 1000));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 2000, 0.002));
             boolean pathed = pathBackToStall();
 
             if (pathed) {
@@ -170,17 +171,14 @@ public class EscapeJail extends Task {
     }
 
     private boolean chatContainsSuccess() {
-        try {
-            UIResultList<String> chatText = script.getWidgetManager().getChatbox().getText();
-            if (chatText == null)
-                return false;
+        UIResultList<String> chatText = script.getWidgetManager().getChatbox().getText();
+        if (chatText == null)
+            return false;
 
-            for (String line : chatText.asList()) {
-                if (line != null && line.contains("succeed")) {
-                    return true;
-                }
+        for (String line : chatText.asList()) {
+            if (line != null && line.contains("succeed")) {
+                return true;
             }
-        } catch (Exception e) {
         }
         return false;
     }
@@ -188,48 +186,42 @@ public class EscapeJail extends Task {
     private boolean pathBackToStall() {
         script.log("JAIL", "Walking back to stall...");
 
-        try {
-            // screen walk to first waypoint (step out of cell area)
-            script.log("JAIL", "Stepping out of cell");
-            WalkConfig exitConfig = new WalkConfig.Builder()
-                    .setWalkMethods(true, false)
-                    .breakDistance(1)
-                    .tileRandomisationRadius(0)
-                    .timeout(10000)
-                    .build();
+        // screen walk to first waypoint (step out of cell area)
+        script.log("JAIL", "Stepping out of cell");
+        WalkConfig exitConfig = new WalkConfig.Builder()
+                .setWalkMethods(true, false)
+                .breakDistance(1)
+                .tileRandomisationRadius(0)
+                .timeout(10000)
+                .build();
 
-            if (!script.getWalker().walkTo(JAIL_PATH[0], exitConfig)) {
-                script.log("JAIL", "Failed to step out of cell");
-                return false;
-            }
-
-            script.pollFramesHuman(() -> false, script.random(200, 400));
-
-            // minimap walk the rest of the path (clicking ahead while moving)
-            List<WorldPosition> minimapPath = Arrays.asList(JAIL_PATH).subList(1, JAIL_PATH.length);
-            if (!walkMinimapPath(minimapPath)) {
-                script.log("JAIL", "Failed minimap path");
-                return false;
-            }
-
-            // final approach: screen walk to exact thieving tile
-            script.log("JAIL", "Screen walking to thieving tile");
-            WalkConfig screenConfig = new WalkConfig.Builder()
-                    .setWalkMethods(true, false)
-                    .breakDistance(0)
-                    .tileRandomisationRadius(0)
-                    .timeout(10000)
-                    .build();
-
-            script.getWalker().walkTo(getThievingTile(), screenConfig);
-            script.pollFramesHuman(() -> false, script.random(300, 500));
-
-            return isAtThievingTile();
-
-        } catch (Exception e) {
-            script.log("JAIL", "Error pathing back: " + e.getMessage());
+        if (!script.getWalker().walkTo(JAIL_PATH[0], exitConfig)) {
+            script.log("JAIL", "Failed to step out of cell");
             return false;
         }
+
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+
+        // minimap walk the rest of the path (clicking ahead while moving)
+        List<WorldPosition> minimapPath = Arrays.asList(JAIL_PATH).subList(1, JAIL_PATH.length);
+        if (!walkMinimapPath(minimapPath)) {
+            script.log("JAIL", "Failed minimap path");
+            return false;
+        }
+
+        // final approach: screen walk to exact thieving tile
+        script.log("JAIL", "Screen walking to thieving tile");
+        WalkConfig screenConfig = new WalkConfig.Builder()
+                .setWalkMethods(true, false)
+                .breakDistance(0)
+                .tileRandomisationRadius(0)
+                .timeout(10000)
+                .build();
+
+        script.getWalker().walkTo(getThievingTile(), screenConfig);
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
+
+        return isAtThievingTile();
     }
 
     // click ahead on minimap while moving - don't wait for arrival at each waypoint
@@ -254,7 +246,7 @@ public class EscapeJail extends Task {
 
             WorldPosition myPos = script.getWorldPosition();
             if (myPos == null) {
-                script.pollFramesHuman(() -> false, 100);
+                script.pollFramesUntil(() -> true, 100);
                 continue;
             }
 
@@ -272,7 +264,7 @@ public class EscapeJail extends Task {
             } else {
                 // re-click current target periodically to keep momentum
                 long now = System.currentTimeMillis();
-                if (now - lastClickTime > script.random(800, 1200)) {
+                if (now - lastClickTime > RandomUtils.uniformRandom(800, 1200)) {
                     clickMinimap(currentTarget);
                     lastClickTime = now;
                 }
@@ -280,11 +272,11 @@ public class EscapeJail extends Task {
 
             // close containers while walking
             script.getWidgetManager().getTabManager().closeContainer();
-            script.pollFramesHuman(() -> false, script.random(80, 150));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(80, 300, 0.002));
         }
 
         // wait a moment after last waypoint
-        script.pollFramesHuman(() -> false, script.random(200, 400));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
         return true;
     }
 
@@ -324,13 +316,9 @@ public class EscapeJail extends Task {
     }
 
     private boolean hasSailorsAmulet() {
-        try {
-            TabUtils.openAndWaitEquipment(script);
-            UIResult<ItemSearchResult> amulet = script.getWidgetManager().getEquipment().findItem(SAILORS_AMULET);
-            return amulet != null && amulet.isFound();
-        } catch (Exception e) {
-            return false;
-        }
+        TabUtils.openAndWaitEquipment(script);
+        UIResult<ItemSearchResult> amulet = script.getWidgetManager().getEquipment().findItem(SAILORS_AMULET);
+        return amulet != null && amulet.isFound();
     }
 
     private boolean teleportWithAmulet() {
@@ -359,7 +347,7 @@ public class EscapeJail extends Task {
             WorldPosition newPos = script.getWorldPosition();
             script.log("JAIL", "Teleport successful! Now at " + (newPos != null ?
                 (int)newPos.getX() + ", " + (int)newPos.getY() : "unknown"));
-            script.pollFramesHuman(() -> false, script.random(600, 1000));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 2000, 0.002));
             return true;
         }
 
@@ -378,7 +366,7 @@ public class EscapeJail extends Task {
                     .build();
 
             boolean walked = script.getWalker().walkTo(getThievingTile(), config);
-            script.pollFramesHuman(() -> false, script.random(300, 500));
+            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
 
             if (walked || isAtThievingTile()) {
                 script.log("JAIL", "Arrived at stall from dock!");

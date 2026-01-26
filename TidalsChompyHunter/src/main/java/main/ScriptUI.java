@@ -12,6 +12,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.prefs.Preferences;
 
@@ -244,7 +245,7 @@ public class ScriptUI {
             view.setPreserveRatio(true);
             view.setFitWidth(160);
             return view;
-        } catch (Exception e) {
+        } catch (IOException e) {
             return null;
         }
     }

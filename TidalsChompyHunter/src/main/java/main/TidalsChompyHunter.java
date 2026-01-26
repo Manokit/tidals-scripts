@@ -27,6 +27,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -85,6 +86,21 @@ public class TidalsChompyHunter extends Script {
 
     // track chompy corpse positions (cleared when plucked or despawned)
     public static List<WorldPosition> corpsePositions = new ArrayList<>();
+
+    // ownership tracking - when we last had toads on ground (for grace period after consumption)
+    public static long lastToadPresentTime = 0;
+    private static final long TOAD_OWNERSHIP_GRACE_MS = 30_000;  // 30 seconds
+
+    /**
+     * check if we have an ownership claim on chompies in this world
+     * true if we have toads on ground OR we're within grace period of having toads
+     * prevents attacking someone else's chompies on fresh login/hop
+     */
+    public static boolean hasOwnershipClaim() {
+        boolean hasToads = !droppedToadPositions.isEmpty();
+        boolean inGrace = (System.currentTimeMillis() - lastToadPresentTime) < TOAD_OWNERSHIP_GRACE_MS;
+        return hasToads || inGrace;
+    }
 
     // settings from ScriptUI
     public static boolean pluckingEnabled = false;
@@ -175,6 +191,12 @@ public class TidalsChompyHunter extends Script {
      */
     @Override
     public boolean canHopWorlds() {
+        // block hop while in combat
+        if (AttackChompy.inCombat) {
+            log(getClass(), "blocking hop - in combat");
+            return false;
+        }
+
         // clean up stale toads first
         cleanupStaleToads();
 
@@ -193,6 +215,12 @@ public class TidalsChompyHunter extends Script {
      */
     @Override
     public boolean canBreak() {
+        // block break while in combat
+        if (AttackChompy.inCombat) {
+            log(getClass(), "blocking break - in combat");
+            return false;
+        }
+
         // clean up stale toads first
         cleanupStaleToads();
 
@@ -354,7 +382,7 @@ public class TidalsChompyHunter extends Script {
                 } else {
                     log(getClass(), "Webhook failed: HTTP " + code);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 log(getClass(), "Webhook error: " + e.getMessage());
             }
         }, "MilestoneWebhook");
@@ -421,7 +449,7 @@ public class TidalsChompyHunter extends Script {
                 } else {
                     log(getClass(), "webhook failed: HTTP " + code);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 log(getClass(), "webhook error: " + e.getMessage());
             }
         }, "PeriodicWebhook");
@@ -532,12 +560,19 @@ public class TidalsChompyHunter extends Script {
      * "You've scratched up a total of 42 chompy bird kills so far!"
      */
     private int parseTotalKills(String line) {
+        if (line == null || line.isEmpty()) {
+            return -1;
+        }
+
+        String[] parts = line.split("total of ");
+        if (parts.length < 2) {
+            return -1;
+        }
+
+        String numPart = parts[1].split(" ")[0];
         try {
-            String[] parts = line.split("total of ");
-            if (parts.length < 2) return -1;
-            String numPart = parts[1].split(" ")[0];
             return Integer.parseInt(numPart.replaceAll(",", ""));
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             return -1;
         }
     }
@@ -821,7 +856,7 @@ public class TidalsChompyHunter extends Script {
             }
 
             logoImage = new Image(px, w, h);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -866,7 +901,7 @@ public class TidalsChompyHunter extends Script {
             if (code == 200) {
                 log(getClass(), "stats reported: kills=" + killIncrement + ", arrows=" + arrowsUsedIncrement + ", runtime=" + runtimeSecs + "s");
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "stats error: " + e.getClass().getSimpleName());
         }
     }
@@ -897,7 +932,7 @@ public class TidalsChompyHunter extends Script {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             log(getClass(), "Exception occurred while fetching version from GitHub.");
         }
         return null;

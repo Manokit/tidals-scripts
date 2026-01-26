@@ -47,7 +47,7 @@ public class BankTask extends Task {
 
         // Deposit all except tools
         bank.depositAll(Set.of(ItemID.BRONZE_AXE));
-        script.pollFramesHuman(() -> false, script.random(300, 600));
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
         bank.close();
 
         return false; // Return to main loop
@@ -170,12 +170,12 @@ private boolean waitUntilFinishedCrafting() {
         if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
             log(getClass(), "Level up detected!");
             getWidgetManager().getDialogue().continueChatDialogue();
-            pollFramesHuman(() -> false, random(1000, 3000));
+            pollFramesHuman(() -> true, RandomUtils.gaussianRandom(1000, 3000, 2000, 500));
             return true;
         }
 
         // Timeout after random duration
-        if (craftingTimer.timeElapsed() > random(70000, 78000)) {
+        if (craftingTimer.timeElapsed() > RandomUtils.gaussianRandom(70000, 78000, 74000, 2000)) {
             return true;
         }
 
@@ -186,7 +186,7 @@ private boolean waitUntilFinishedCrafting() {
         return !inv.contains(ItemID.MAHOGANY_PLANK);
     };
 
-    return pollFramesHuman(condition, random(70000, 78000));
+    return pollFramesHuman(condition, RandomUtils.gaussianRandom(70000, 78000, 74000, 2000));
 }
 ```
 
@@ -232,14 +232,14 @@ private boolean castTeleportSpell() {
 
 // Weighted random cooldown distribution
 private long getCooldownForSpell() {
-    int roll = random(100);
+    int roll = RandomUtils.uniformRandom(100);
 
     if (roll < 50) {
-        return random(1800, 1901);  // ~1.8-1.9s (50% chance)
+        return RandomUtils.gaussianRandom(1800, 1901, 1850, 25);  // ~1.8-1.9s (50% chance)
     } else if (roll < 90) {
-        return random(1850, 2001);  // ~1.85-2.0s (40% chance)
+        return RandomUtils.gaussianRandom(1850, 2001, 1925, 40);  // ~1.85-2.0s (40% chance)
     } else {
-        return random(1900, 2301);  // ~1.9-2.3s (10% chance)
+        return RandomUtils.gaussianRandom(1900, 2301, 2100, 100);  // ~1.9-2.3s (10% chance)
     }
 }
 ```
@@ -463,12 +463,12 @@ private boolean pickItemWithVerification(Polygon tilePoly) {
 
         boolean tapped = script.getFinger().tap(tilePoly, "Pick");
         if (!tapped) {
-            script.pollFramesUntil(() -> false, script.random(300, 500), true);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500), true);
             continue;
         }
 
         // wait for item to appear in inventory
-        script.pollFramesUntil(() -> false, script.random(800, 1000), true);
+        script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(800, 1000, 900, 50), true);
 
         // verify count increased
         ItemGroupResult invAfter = script.getWidgetManager().getInventory()
@@ -579,7 +579,7 @@ public int collect() {
         script.log(getClass(), "collection complete, afk/hop re-enabled");
     }
 
-    return script.random(50, 150);
+    return RandomUtils.weightedRandom(50, 150);
 }
 ```
 

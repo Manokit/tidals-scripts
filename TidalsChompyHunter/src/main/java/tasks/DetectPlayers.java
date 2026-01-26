@@ -4,6 +4,7 @@ import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.utils.UIResultList;
+import com.osmb.api.utils.RandomUtils;
 import main.TidalsChompyHunter;
 import utils.DetectedPlayer;
 import utils.Task;
@@ -21,10 +22,11 @@ public class DetectPlayers extends Task {
     // chompy hunting area - covers the swamp where chompies spawn
     private static final RectangleArea CHOMPY_HUNTING_AREA = new RectangleArea(2379, 3039, 25, 19, 0);
 
-    // crash threshold - random between 7-12 seconds (set on each new detection)
-    public static long crashThresholdMs = 7000;
-    private static final long MIN_THRESHOLD_MS = 7000;
-    private static final long MAX_THRESHOLD_MS = 12000;
+    // crash threshold - random between 5-7 seconds (set on each new detection)
+    // lower threshold since we now have ownership-based protection against false attacks
+    public static long crashThresholdMs = 5000;
+    private static final long MIN_THRESHOLD_MS = 5000;
+    private static final long MAX_THRESHOLD_MS = 7000;
 
     // legacy setting kept for UI compatibility (not used in area-based detection)
     public static int detectionRadius = 9;
@@ -101,6 +103,7 @@ public class DetectPlayers extends Task {
         if (!TidalsChompyHunter.setupComplete) {
             return false;
         }
+
         WorldPosition playerPos = script.getWorldPosition();
         if (playerPos == null) {
             return false;
@@ -187,7 +190,7 @@ public class DetectPlayers extends Task {
                 // start persistent area tracking if not already
                 if (areaOccupiedSince == 0) {
                     areaOccupiedSince = System.currentTimeMillis();
-                    crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
+                    crashThresholdMs = RandomUtils.gaussianRandom((int) MIN_THRESHOLD_MS, (int) MAX_THRESHOLD_MS, (int) ((MIN_THRESHOLD_MS + MAX_THRESHOLD_MS) / 2), 1000);
                     script.log(getClass(), "AREA OCCUPIED - player at " + formatPos(singleDot) +
                                " dist=" + (int)distFromUs + " (threshold: " + crashThresholdMs + "ms)");
                 }
@@ -241,7 +244,7 @@ public class DetectPlayers extends Task {
                 // start persistent area tracking if not already
                 if (areaOccupiedSince == 0) {
                     areaOccupiedSince = System.currentTimeMillis();
-                    crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
+                    crashThresholdMs = RandomUtils.gaussianRandom((int) MIN_THRESHOLD_MS, (int) MAX_THRESHOLD_MS, (int) ((MIN_THRESHOLD_MS + MAX_THRESHOLD_MS) / 2), 1000);
                     script.log(getClass(), "AREA OCCUPIED - player at " + formatPos(otherPlayer) + " (threshold: " + crashThresholdMs + "ms)");
                 }
 

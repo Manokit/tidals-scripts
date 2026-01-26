@@ -14,7 +14,7 @@ private boolean openBank() {
     );
     
     if (bankBooth != null && bankBooth.interact("Bank")) {
-        return submitTask(() -> bank.isVisible(), 5000);
+        return pollFramesUntil(() -> bank.isVisible(), 5000);
     }
     return false;
 }
@@ -94,7 +94,7 @@ if (!script.getWidgetManager().getBank().isVisible()) {
 }
 
 // Give bank a moment to fully load before searching
-script.pollFramesHuman(() -> false, script.random(300, 500));
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 500));
 
 // Now search for items
 ItemGroupResult bankSnapshot = script.getWidgetManager().getBank().search(Set.of(itemID));
@@ -124,7 +124,7 @@ bank.withdraw(selectedItemID, emptySlots); // Tries to withdraw 0 items!
 bank.depositAll(Set.of(ItemID.CHISEL));
 
 // Wait for deposit to complete
-script.pollFramesHuman(() -> false, script.random(300, 600));
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
 
 // Get FRESH inventory snapshot after deposit
 ItemGroupResult inventorySnapshot = getWidgetManager().getInventory().search(Collections.emptySet());
@@ -241,7 +241,7 @@ private boolean handleDepositBox() {
             getWorldPosition(), "Bank deposit box"
         );
         if (box != null && box.interact("Deposit")) {
-            submitTask(() -> depositBox.isVisible(), 5000);
+            pollFramesUntil(() -> depositBox.isVisible(), 5000);
         }
         return false;
     }
@@ -272,20 +272,20 @@ private int bank() {
             getWorldPosition(), "Bank booth"
         );
         if (bankBooth != null && bankBooth.interact("Bank")) {
-            submitTask(() -> bank.isVisible(), 5000);
+            pollFramesUntil(() -> bank.isVisible(), 5000);
         }
         return 600;
     }
     
     // Step 2: Wait for bank to load
-    pollFramesHuman(() -> false, random(300, 500));
+    pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 500));
     
     // Step 3: Deposit all except pickaxe
     Set<Integer> keepItems = Set.of(PICKAXE_ID);
     bank.depositAll(keepItems);
     
     // Step 4: Wait for deposit, then verify
-    pollFramesHuman(() -> false, random(300, 600));
+    pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
     
     // Step 5: Get fresh inventory snapshot
     ItemGroupResult inv = getWidgetManager().getInventory().search(Set.of(ORE_ID));

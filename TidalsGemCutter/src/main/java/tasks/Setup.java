@@ -4,7 +4,6 @@ import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
 import com.osmb.api.ui.component.tabs.skill.SkillsTabComponent;
-import com.osmb.api.ui.tabs.Tab;
 import com.osmb.api.script.Script;
 import utils.Task;
 
@@ -42,22 +41,7 @@ public class Setup extends Task {
             return false;
         }
 
-        // open inventory
-        task = "Open inventory";
-        script.log(getClass(), "opening inventory");
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-
-        boolean opened = script.pollFramesUntil(() ->
-            script.getWidgetManager().getInventory().search(Set.of()) != null,
-            3000
-        );
-
-        if (!opened) {
-            script.log(getClass(), "inventory not open");
-            return false;
-        }
-
-        // check chisel
+        // check chisel - search() opens inventory tab automatically
         task = "Check chisel";
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(ItemID.CHISEL));
 

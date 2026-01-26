@@ -5,6 +5,7 @@ import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.shape.Rectangle;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResultList;
 import com.osmb.api.visual.PixelCluster;
 import com.osmb.api.visual.SearchablePixel;
@@ -27,7 +28,7 @@ public class InflateToads extends Task {
 
     // constants
     private static final int MAX_INFLATE_ATTEMPTS = 5;
-    private static final int TARGET_GROUND_TOADS = 3;  // keep this many on ground
+    private static final int TARGET_GROUND_TOADS = 5;  // keep this many on ground
     private static final int MIN_GROUND_TOADS = 2;  // refill when below this
     private static final int MAX_INVENTORY_TOADS = 3;  // stockpile up to this in inventory
     private static final int TILE_CUBE_HEIGHT = 40;
@@ -89,7 +90,7 @@ public class InflateToads extends Task {
         int groundToads = countActiveGroundToads();
 
         // refill mode: inflate when ground toads below target AND inventory has space
-        // covers groundToads 0, 1, and 2 (anything below target of 3)
+        // covers groundToads 0-4 (anything below target of 5)
         if (groundToads < TARGET_GROUND_TOADS && inventoryToads < MAX_INVENTORY_TOADS) {
             return true;
         }
@@ -148,7 +149,8 @@ public class InflateToads extends Task {
             }
 
             // INTERRUPT: check for live chompy spawn (filters out corpses)
-            if (AttackChompy.hasLiveChompy(script)) {
+            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
+            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - stopping inflation early");
                 return true;
             }
@@ -189,7 +191,8 @@ public class InflateToads extends Task {
 
         for (int attempt = 1; attempt <= maxTotalAttempts; attempt++) {
             // INTERRUPT: check for live chompy spawn before each attempt (filters out corpses)
-            if (AttackChompy.hasLiveChompy(script)) {
+            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
+            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - interrupting inflate to attack");
                 return true;  // exit early, let AttackChompy activate
             }
@@ -242,14 +245,14 @@ public class InflateToads extends Task {
                 if (gotToad) {
                     script.log(getClass(), "toad inflated successfully");
                     // humanize: brief pause after picking up toad
-                    script.submitTask(() -> false, script.random(200, 600));
+                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 600));
                     return true;
                 }
 
                 script.log(getClass(), "toad did not arrive in inventory, will re-detect position");
             }
 
-            script.pollFramesUntil(() -> false, script.random(300, 500));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
         }
 
         script.log(getClass(), "failed to inflate any toad after " + maxTotalAttempts + " attempts");
@@ -308,8 +311,8 @@ public class InflateToads extends Task {
 
             Rectangle clusterBounds = nearest.getBounds();
             // add small random offset for humanization (+/- 3 pixels)
-            int offsetX = script.random(-3, 4);
-            int offsetY = script.random(-3, 4);
+            int offsetX = RandomUtils.uniformRandom(-3, 4);
+            int offsetY = RandomUtils.uniformRandom(-3, 4);
             Point clickPoint = new Point(
                     clusterBounds.x + clusterBounds.width / 2 + offsetX,
                     clusterBounds.y + clusterBounds.height / 2 + offsetY

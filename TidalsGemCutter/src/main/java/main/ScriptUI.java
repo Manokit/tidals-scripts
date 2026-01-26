@@ -34,13 +34,21 @@ public class ScriptUI {
     private ComboBox<Integer> webhookIntervalComboBox;
     private CheckBox includeUsernameCheckBox;
 
-    // Uncut gem options (common gems only)
+    // Uncut gem options (semi-precious first, then precious)
     private static final Integer[] GEM_OPTIONS = {
+            ItemID.UNCUT_OPAL,
+            ItemID.UNCUT_JADE,
+            ItemID.UNCUT_RED_TOPAZ,
             ItemID.UNCUT_SAPPHIRE,
             ItemID.UNCUT_EMERALD,
             ItemID.UNCUT_RUBY,
             ItemID.UNCUT_DIAMOND
     };
+
+    // semi-precious gems cannot be made into bolt tips
+    private static final java.util.Set<Integer> CRUSHABLE_GEMS = java.util.Set.of(
+            ItemID.UNCUT_OPAL, ItemID.UNCUT_JADE, ItemID.UNCUT_RED_TOPAZ
+    );
 
     public ScriptUI(Script script) {
         this.script = script;
@@ -92,6 +100,27 @@ public class ScriptUI {
                 useBankedGemsCheckBox.setSelected(false);
             }
         });
+
+        // Disable bolt tips for semi-precious gems (no bolt tip variants exist)
+        gemComboBox.setOnAction(e -> {
+            Integer selected = gemComboBox.getSelectionModel().getSelectedItem();
+            boolean isCrushable = selected != null && CRUSHABLE_GEMS.contains(selected);
+            makeBoltTipsCheckBox.setDisable(isCrushable);
+            if (isCrushable) {
+                makeBoltTipsCheckBox.setSelected(false);
+                useBankedGemsCheckBox.setSelected(false);
+                useBankedGemsCheckBox.setDisable(true);
+            }
+        });
+
+        // Set initial state for bolt tips based on loaded gem
+        boolean initialIsCrushable = CRUSHABLE_GEMS.contains(savedGemId);
+        if (initialIsCrushable) {
+            makeBoltTipsCheckBox.setDisable(true);
+            makeBoltTipsCheckBox.setSelected(false);
+            useBankedGemsCheckBox.setDisable(true);
+            useBankedGemsCheckBox.setSelected(false);
+        }
 
         mainBox.getChildren().addAll(gemLabel, gemComboBox, makeBoltTipsCheckBox, useBankedGemsCheckBox);
         Tab mainTab = new Tab("Main", mainBox);

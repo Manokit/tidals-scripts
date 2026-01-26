@@ -6,6 +6,7 @@ import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.ui.component.tabs.skill.SkillType;
 import com.osmb.api.ui.component.tabs.skill.SkillsTabComponent;
 import com.osmb.api.ui.tabs.Tab;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.script.Script;
 
 import main.TidalsGoldSuperheater;
@@ -35,23 +36,8 @@ public class Setup extends Task {
     @Override
     public boolean execute() {
         task = "Setup";
-        
-        // open inventory
-        task = "Open inventory";
-        script.log(getClass(), "opening inventory");
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
 
-        boolean opened = script.pollFramesUntil(() ->
-            script.getWidgetManager().getInventory().search(Set.of()) != null,
-            3000
-        );
-
-        if (!opened) {
-            script.log(getClass(), "inventory not open, retrying");
-            return false;
-        }
-        
-        // check nature runes
+        // check nature runes - search() opens inventory tab automatically
         task = "Check runes";
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(ItemID.NATURE_RUNE));
         
@@ -67,7 +53,7 @@ public class Setup extends Task {
         // check fire source
         task = "Check equipment";
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> false, script.random(300, 500));
+        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.003));
         
         com.osmb.api.utils.UIResult<ItemSearchResult> fireResult = script.getWidgetManager().getEquipment().findItem(
             STAFF_OF_FIRE,
@@ -127,12 +113,7 @@ public class Setup extends Task {
             script.stop();
             return false;
         }
-        
-        // back to inventory
-        task = "Open inventory";
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesHuman(() -> false, script.random(200, 400));
-        
+
         task = "Ready";
         script.log(getClass(), "setup done");
         setupDone = true;
