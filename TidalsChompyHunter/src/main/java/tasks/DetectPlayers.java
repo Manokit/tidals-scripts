@@ -3,13 +3,7 @@ package tasks;
 import com.osmb.api.location.area.impl.RectangleArea;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.script.Script;
-import com.osmb.api.shape.Polygon;
-import com.osmb.api.shape.Rectangle;
 import com.osmb.api.utils.UIResultList;
-import com.osmb.api.visual.PixelCluster;
-import com.osmb.api.visual.SearchablePixel;
-import com.osmb.api.visual.color.ColorModel;
-import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import com.osmb.api.utils.RandomUtils;
 import main.TidalsChompyHunter;
 import utils.DetectedPlayer;
@@ -28,10 +22,11 @@ public class DetectPlayers extends Task {
     // chompy hunting area - covers the swamp where chompies spawn
     private static final RectangleArea CHOMPY_HUNTING_AREA = new RectangleArea(2379, 3039, 25, 19, 0);
 
-    // crash threshold - random between 7-12 seconds (set on each new detection)
-    public static long crashThresholdMs = 7000;
-    private static final long MIN_THRESHOLD_MS = 7000;
-    private static final long MAX_THRESHOLD_MS = 12000;
+    // crash threshold - random between 5-7 seconds (set on each new detection)
+    // lower threshold since we now have ownership-based protection against false attacks
+    public static long crashThresholdMs = 5000;
+    private static final long MIN_THRESHOLD_MS = 5000;
+    private static final long MAX_THRESHOLD_MS = 7000;
 
     // legacy setting kept for UI compatibility (not used in area-based detection)
     public static int detectionRadius = 9;
@@ -61,35 +56,6 @@ public class DetectPlayers extends Task {
     private static long areaOccupiedSince = 0;  // timestamp when we first detected a player
     private static int consecutiveClearReadings = 0;
     private static final int CLEAR_READINGS_TO_RESET = 10;  // need 10 frames of "clear" to reset
-
-    // === HEALTH BAR CRASH DETECTION ===
-    // detects when a chompy's health bar appears but we didn't attack it
-    // this means someone else is killing our chompies = direct crash evidence
-
-    // health bar pixel detection (user-provided values)
-    private static final SearchablePixel HEALTH_BAR_GREEN = new SearchablePixel(
-            -16711936,  // green portion of health bar
-            new SingleThresholdComparator(2),
-            ColorModel.RGB
-    );
-    private static final SearchablePixel HEALTH_BAR_RED = new SearchablePixel(
-            -65536,  // red portion of health bar (damage taken)
-            new SingleThresholdComparator(2),
-            ColorModel.RGB
-    );
-    private static final int HEALTH_CLUSTER_MAX_DISTANCE = 3;
-    private static final int HEALTH_CLUSTER_MIN_SIZE = 5;
-
-    // track when WE initiated an attack - set by AttackChompy.recordOurAttack()
-    private static long lastAttackTime = 0;
-    // grace period after our attack before we consider a health bar "not ours"
-    // health bar appears within ~1 second of attack, so 1.5s gives buffer
-    private static final long ATTACK_GRACE_PERIOD_MS = 1500;
-
-    // cache health bar detection to avoid repeated scans
-    private static long lastHealthBarCheckTime = 0;
-    private static final long HEALTH_BAR_CHECK_INTERVAL_MS = 300;  // check every 300ms
-    private static boolean lastHealthBarVisible = false;
 
     public DetectPlayers(Script script) {
         super(script);
@@ -136,20 +102,6 @@ public class DetectPlayers extends Task {
 
         if (!TidalsChompyHunter.setupComplete) {
             return false;
-        }
-
-        // === HEALTH BAR CRASH DETECTION (PRIMARY) ===
-        // this is the most reliable crash signal - someone attacked a chompy we didn't
-        WorldPosition stolenChompy = detectHealthBarCrash();
-        if (stolenChompy != null) {
-            // add to AttackChompy's ignore list so we don't try to attack/pluck it
-            // this is critical - prevents trying to pluck someone else's kill
-            AttackChompy.addIgnoredPosition(stolenChompy);
-
-            // trigger crash - someone is stealing our chompies
-            crashDetected = true;
-            TidalsChompyHunter.task = "chompy stolen - hopping!";
-            return true;
         }
 
         WorldPosition playerPos = script.getWorldPosition();
@@ -349,154 +301,6 @@ public class DetectPlayers extends Task {
     }
 
     /**
-     * record that WE just sent an attack - called from AttackChompy before attacking
-     * used to distinguish our health bars from someone else's
-     */
-    public static void recordOurAttack() {
-        lastAttackTime = System.currentTimeMillis();
-    }
-
-    /**
-     * detect health bar crash - a health bar appeared but we didn't attack
-     * this is DIRECT EVIDENCE of being crashed (someone else attacking our chompy)
-     *
-     * returns the approximate world position of the stolen chompy if detected, null otherwise
-     */
-    public WorldPosition detectHealthBarCrash() {
-        // skip if anti-crash disabled
-        if (!TidalsChompyHunter.antiCrashEnabled) {
-            return null;
-        }
-
-        // throttle checks to avoid expensive pixel scans every frame
-        long now = System.currentTimeMillis();
-        if (now - lastHealthBarCheckTime < HEALTH_BAR_CHECK_INTERVAL_MS) {
-            return null;
-        }
-        lastHealthBarCheckTime = now;
-
-        // skip if attack in progress - covers entire attack sequence including
-        // the gap between starting attack and entering inCombat state
-        // also handles lingering health bars from recently killed chompies
-        if (AttackChompy.attackInProgress) {
-            lastHealthBarVisible = false;
-            return null;
-        }
-
-        // skip if WE are in combat - the health bar is ours
-        if (AttackChompy.inCombat) {
-            lastHealthBarVisible = false;
-            return null;
-        }
-
-        // skip if we just attacked - health bar is loading for our target
-        long timeSinceAttack = now - lastAttackTime;
-        if (timeSinceAttack < ATTACK_GRACE_PERIOD_MS) {
-            lastHealthBarVisible = false;
-            return null;
-        }
-
-        // detect any health bar on screen
-        PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
-                HEALTH_CLUSTER_MAX_DISTANCE,
-                HEALTH_CLUSTER_MIN_SIZE,
-                new SearchablePixel[]{HEALTH_BAR_GREEN, HEALTH_BAR_RED}
-        );
-
-        PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(null, query);
-        if (result == null || result.getClusters() == null || result.getClusters().isEmpty()) {
-            lastHealthBarVisible = false;
-            return null;
-        }
-
-        // health bar detected but we didn't attack!
-        // this only triggers once per appearance (not spam)
-        if (!lastHealthBarVisible) {
-            lastHealthBarVisible = true;
-
-            script.log(getClass(), "=== HEALTH BAR CRASH === health bar visible but we didn't attack!");
-
-            // try to find the world position of this stolen chompy
-            // use the health bar screen position to match to an NPC
-            WorldPosition stolenChompyPos = findStolenChompyPosition(result.getClusters());
-
-            if (stolenChompyPos != null) {
-                script.log(getClass(), "stolen chompy at " + stolenChompyPos.getX() + "," + stolenChompyPos.getY() +
-                        " - adding to ignore list");
-                // add to ignore so we don't try to attack/pluck it
-                int posKey = AttackChompy.posKey(stolenChompyPos);
-                // we can't directly access ignoredPositionTimestamps, so we'll return the position
-                // and let the caller (runDetection) add it
-            }
-
-            return stolenChompyPos;
-        }
-
-        return null;
-    }
-
-    /**
-     * find the world position of a chompy being attacked by someone else
-     * uses the health bar screen position to match against NPC positions
-     */
-    private WorldPosition findStolenChompyPosition(List<PixelCluster> healthBarClusters) {
-        if (healthBarClusters.isEmpty()) {
-            return null;
-        }
-
-        // health bars appear above NPCs, so get the first cluster's position
-        PixelCluster healthBar = healthBarClusters.get(0);
-        Rectangle bounds = healthBar.getBounds();
-        int healthBarX = bounds.x + bounds.width / 2;
-        int healthBarY = bounds.y + bounds.height / 2;
-
-        script.log(getClass(), "[healthBarCrash] health bar at screen(" + healthBarX + "," + healthBarY + ")");
-
-        // get NPC positions from minimap
-        UIResultList<WorldPosition> npcResult = script.getWidgetManager().getMinimap().getNPCPositions();
-        if (npcResult == null || npcResult.isNotFound()) {
-            return null;
-        }
-
-        WorldPosition playerPos = script.getWorldPosition();
-        if (playerPos == null) {
-            return null;
-        }
-
-        // find the NPC whose screen position is closest to the health bar
-        // health bar appears ABOVE the NPC, so we look for NPC slightly below
-        WorldPosition closestNpc = null;
-        double closestDist = 100;  // max screen distance
-
-        for (WorldPosition npcPos : npcResult.asList()) {
-            if (npcPos.distanceTo(playerPos) > 15) continue;
-
-            Polygon tileCube = script.getSceneProjector().getTileCube(npcPos, 70);
-            if (tileCube == null) continue;
-
-            Rectangle npcBounds = tileCube.getBounds();
-            int npcCenterX = npcBounds.x + npcBounds.width / 2;
-            // health bar is above NPC, so compare to top of tile cube
-            int npcTopY = npcBounds.y;
-
-            // health bar should be slightly above the NPC
-            double dist = Math.sqrt(Math.pow(healthBarX - npcCenterX, 2) + Math.pow(healthBarY - npcTopY, 2));
-
-            if (dist < closestDist) {
-                closestDist = dist;
-                closestNpc = npcPos;
-            }
-        }
-
-        if (closestNpc != null) {
-            script.log(getClass(), "[healthBarCrash] matched to NPC at " + closestNpc.getX() + "," + closestNpc.getY() +
-                    " (screenDist=" + (int)closestDist + ")");
-        }
-
-        return closestNpc;
-    }
-
-    /**
      * reset tracking state (called after world hop completes)
      */
     public static void resetTrackingState() {
@@ -505,9 +309,6 @@ public class DetectPlayers extends Task {
         areaOccupiedSince = 0;
         consecutiveSelfReadings = 0;
         consecutiveClearReadings = 0;
-        lastHealthBarVisible = false;
-        lastHealthBarCheckTime = 0;
-        // don't reset lastAttackTime - it's managed by AttackChompy
         // don't reset lastLoginTimestamp here - it's set once at script start
         // don't reset lastHopTimestamp here - it's managed by HopWorld
     }

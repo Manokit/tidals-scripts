@@ -133,6 +133,9 @@ public class HopWorld extends Task {
         TidalsChompyHunter.droppedToadPositions.clear();
         TidalsChompyHunter.corpsePositions.clear();
 
+        // reset ownership claim - fresh world, no claim until we drop toads
+        TidalsChompyHunter.lastToadPresentTime = 0;
+
         // reset state flags for clean hunting restart
         TidalsChompyHunter.bellowsEmpty = false;
         TidalsChompyHunter.toadAlreadyPlaced = false;

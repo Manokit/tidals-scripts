@@ -173,12 +173,14 @@ public class DropToads extends Task {
                 WorldPosition foundToad = findUntrackedToadNearby(lastDropPosition);
                 if (foundToad != null) {
                     TidalsChompyHunter.droppedToadPositions.put(foundToad, System.currentTimeMillis());
+                    TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
                     script.log(getClass(), "TRACKED toad at " + foundToad.getX() + "," + foundToad.getY() +
                             " (" + TidalsChompyHunter.droppedToadPositions.size() + " total tracked)");
                 } else {
                     // couldn't find toad - try lastDropPosition as fallback
                     if (lastDropPosition != null) {
                         TidalsChompyHunter.droppedToadPositions.put(lastDropPosition, System.currentTimeMillis());
+                        TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
                         script.log(getClass(), "FALLBACK: tracked at lastDropPosition " + lastDropPosition.getX() + "," + lastDropPosition.getY());
                     } else {
                         script.log(getClass(), "ERROR: could not find or track toad - this drop is lost");

@@ -208,6 +208,12 @@ public class AttackChompy extends Task {
             return false;
         }
 
+        // CORE RULE: no ownership claim = no chompies to attack
+        // prevents attacking someone else's chompies on fresh login/hop
+        if (!TidalsChompyHunter.hasOwnershipClaim()) {
+            return false;
+        }
+
         // don't activate if already in combat (with timeout safety valve)
         if (inCombat) {
             // safety valve: if combat has lasted more than 30s, something is stuck
@@ -314,8 +320,13 @@ public class AttackChompy extends Task {
             return false;
         }
 
-        // suppress health bar crash detection for entire attack sequence
-        // prevents false positives from lingering health bars of recently killed chompies
+        // safety: verify we still have ownership claim (toads could've been consumed during detection)
+        if (!TidalsChompyHunter.hasOwnershipClaim()) {
+            script.log(getClass(), "[execute] no ownership claim - aborting attack");
+            return false;
+        }
+
+        // track that attack sequence is in progress
         attackInProgress = true;
 
         try {
@@ -504,6 +515,11 @@ public class AttackChompy extends Task {
         if (!toRemove.isEmpty()) {
             script.log(AttackChompy.class, "verified toads: " + toRemove.size() + " removed, " +
                     TidalsChompyHunter.droppedToadPositions.size() + " remaining (was " + beforeCount + ")");
+        }
+
+        // refresh ownership timestamp if we still have toads
+        if (!TidalsChompyHunter.droppedToadPositions.isEmpty()) {
+            TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
         }
     }
 
@@ -1345,10 +1361,6 @@ public class AttackChompy extends Task {
             }
 
             Polygon shrunk = tileCube.getResized(SHRINK_FACTOR);
-
-            // record attack attempt BEFORE tap - grace period covers the entire attempt
-            // this prevents health bar crash detection from seeing our own chompy as "stolen"
-            DetectPlayers.recordOurAttack();
 
             // open menu - try Attack first, fall back to Pluck
             boolean success = script.getFinger().tapGameScreen(shrunk, menuEntries -> {

@@ -87,6 +87,21 @@ public class TidalsChompyHunter extends Script {
     // track chompy corpse positions (cleared when plucked or despawned)
     public static List<WorldPosition> corpsePositions = new ArrayList<>();
 
+    // ownership tracking - when we last had toads on ground (for grace period after consumption)
+    public static long lastToadPresentTime = 0;
+    private static final long TOAD_OWNERSHIP_GRACE_MS = 30_000;  // 30 seconds
+
+    /**
+     * check if we have an ownership claim on chompies in this world
+     * true if we have toads on ground OR we're within grace period of having toads
+     * prevents attacking someone else's chompies on fresh login/hop
+     */
+    public static boolean hasOwnershipClaim() {
+        boolean hasToads = !droppedToadPositions.isEmpty();
+        boolean inGrace = (System.currentTimeMillis() - lastToadPresentTime) < TOAD_OWNERSHIP_GRACE_MS;
+        return hasToads || inGrace;
+    }
+
     // settings from ScriptUI
     public static boolean pluckingEnabled = false;
     public static boolean webhookEnabled = false;
