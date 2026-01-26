@@ -646,7 +646,7 @@ public class TidalsGemMiner extends Script {
                         conn.setRequestMethod("GET");
                         conn.setConnectTimeout(5000);
                         conn.setReadTimeout(5000);
-                        conn.setRequestProperty("User-Agent", "OSMB-Script");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
 
                         if (conn.getResponseCode() == 200) {
                             BufferedReader reader = new BufferedReader(

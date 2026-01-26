@@ -25,7 +25,7 @@ import javax.imageio.ImageIO;
 public final class SpriteCache {
 
     private static final String GE_API_SPRITE_URL = "https://secure.runescape.com/m=itemdb_oldschool/obj_sprite.gif?id=";
-    private static final String USER_AGENT = "OSMB-Script";
+    private static final String USER_AGENT = "Mozilla/5.0";
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 5000;
 

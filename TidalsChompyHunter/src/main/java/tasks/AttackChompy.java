@@ -117,6 +117,10 @@ public class AttackChompy extends Task {
     // pluck detection via chat message (set by main script onNewFrame)
     public static volatile boolean pluckStarted = false;
 
+    // attack in progress flag - suppresses health bar crash detection during entire attack sequence
+    // covers the gap between starting attack and entering inCombat state
+    public static volatile boolean attackInProgress = false;
+
     // tracked chompies for spawn-order priority
     private static List<SpawnedChompy> trackedChompies = new ArrayList<>();
 
@@ -310,6 +314,11 @@ public class AttackChompy extends Task {
             return false;
         }
 
+        // suppress health bar crash detection for entire attack sequence
+        // prevents false positives from lingering health bars of recently killed chompies
+        attackInProgress = true;
+
+        try {
         TidalsChompyHunter.task = "hunting chompy";
         script.log(getClass(), "[execute] === CHOMPY HUNT CYCLE START ===");
 
@@ -427,6 +436,10 @@ public class AttackChompy extends Task {
 
         script.log(getClass(), "[execute] === CHOMPY HUNT CYCLE END ===");
         return true;
+        } finally {
+            // GUARANTEED cleanup - always clear attack flag
+            attackInProgress = false;
+        }
     }
 
     /**
@@ -1333,6 +1346,10 @@ public class AttackChompy extends Task {
 
             Polygon shrunk = tileCube.getResized(SHRINK_FACTOR);
 
+            // record attack attempt BEFORE tap - grace period covers the entire attempt
+            // this prevents health bar crash detection from seeing our own chompy as "stolen"
+            DetectPlayers.recordOurAttack();
+
             // open menu - try Attack first, fall back to Pluck
             boolean success = script.getFinger().tapGameScreen(shrunk, menuEntries -> {
                 // first look for Attack (live chompy) - check raw text contains "attack"
@@ -1384,9 +1401,6 @@ public class AttackChompy extends Task {
                     TidalsChompyHunter.corpsePositions.remove(currentPos);
                     return false; // didn't attack, return false
                 } else {
-                    // record that WE initiated this attack - for health bar crash detection
-                    // this tells DetectPlayers that any health bar appearing soon is OURS
-                    DetectPlayers.recordOurAttack();
                     script.log(getClass(), "[attack] SUCCESS - attack sent on attempt " + attempt);
                     return true;
                 }
@@ -1447,6 +1461,7 @@ public class AttackChompy extends Task {
     public static void resetAllState() {
         // combat state
         inCombat = false;
+        attackInProgress = false;
         currentChompyPosition = null;
         combatStartTime = 0;
         killDetected = false;

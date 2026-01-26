@@ -375,6 +375,14 @@ public class DetectPlayers extends Task {
         }
         lastHealthBarCheckTime = now;
 
+        // skip if attack in progress - covers entire attack sequence including
+        // the gap between starting attack and entering inCombat state
+        // also handles lingering health bars from recently killed chompies
+        if (AttackChompy.attackInProgress) {
+            lastHealthBarVisible = false;
+            return null;
+        }
+
         // skip if WE are in combat - the health bar is ours
         if (AttackChompy.inCombat) {
             lastHealthBarVisible = false;

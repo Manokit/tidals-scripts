@@ -160,7 +160,7 @@ public class ScriptUI {
         startButton.setOnAction(e -> saveSettings());
         root.getChildren().add(startButton);
 
-        Scene scene = new Scene(root, 300, 340);
+        Scene scene = new Scene(root, 300, 420);
         scene.setFill(Color.web(BG_COLOR));
         return scene;
     }
