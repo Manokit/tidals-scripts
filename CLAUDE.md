@@ -16,6 +16,8 @@ DON'T OVERENGINEER. No abstractions before they're needed.
 WHEN YOU'RE DONE MAKING CHANGES, ALWAYS BUILD THE SCRIPT.
 ALWAYS MAKE A DISCORD_POST.MD (see examples/discord-post.md).
 ```
+## If you need API Validation
+You have access to an MCP docs server with full chunks of the API you can call on if needed
 
 ## Git Commits
 Do not add Co-Authored-By trailers to commit messages.
