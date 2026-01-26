@@ -136,7 +136,8 @@ public class DropToads extends Task {
             }
 
             // INTERRUPT: check for live chompy spawn before each drop (filters out corpses)
-            if (AttackChompy.hasLiveChompy(script)) {
+            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
+            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - stopping drops to attack");
                 break;  // exit loop, return true below
             }

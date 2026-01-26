@@ -149,7 +149,8 @@ public class InflateToads extends Task {
             }
 
             // INTERRUPT: check for live chompy spawn (filters out corpses)
-            if (AttackChompy.hasLiveChompy(script)) {
+            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
+            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - stopping inflation early");
                 return true;
             }
@@ -190,7 +191,8 @@ public class InflateToads extends Task {
 
         for (int attempt = 1; attempt <= maxTotalAttempts; attempt++) {
             // INTERRUPT: check for live chompy spawn before each attempt (filters out corpses)
-            if (AttackChompy.hasLiveChompy(script)) {
+            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
+            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
                 script.log(getClass(), "chompy detected - interrupting inflate to attack");
                 return true;  // exit early, let AttackChompy activate
             }
