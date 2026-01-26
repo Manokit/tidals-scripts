@@ -63,7 +63,10 @@ public class Mine extends Task {
             new SingleThresholdComparator(TILE_COLOR_TOLERANCE),
             ColorModel.RGB
     );
-    private static final boolean VERBOSE_LOGGING = false;
+    // verbose logging - controlled from main script for easy debug builds
+    private boolean isVerbose() {
+        return TidalsGemMiner.VERBOSE_LOGGING;
+    }
 
     // hardcoded underground mine rock positions (plane 0, region 11410)
     private static final Set<WorldPosition> UNDERGROUND_ROCK_POSITIONS = Set.of(
@@ -89,13 +92,19 @@ public class Mine extends Task {
         new WorldPosition(2836, 9398, 0)
     );
     private static final long SWING_PICK_TIMEOUT_MS = 2500; // exit early if no swing pick within 2.5s
+    private static final int MAX_CONSECUTIVE_MISCLICKS = 5; // trigger recovery after 5 misclicks on same rock
 
     // cooldown tracking - prevents re-mining same rock
     private static final long ROCK_COOLDOWN_MS = 20_000; // 20 seconds
+    private static final long STUCK_ROCK_COOLDOWN_MS = 60_000; // 60 seconds for stuck rocks
     private final Map<WorldPosition, Long> recentlyMinedRocks = new HashMap<>();
 
     // stuck detection
     private long lastSuccessfulAction = 0;
+
+    // consecutive misclick tracking - detects stuck on depleted rock
+    private int consecutiveMisclickCount = 0;
+    private WorldPosition lastMisclickPosition = null;
 
     // track empty rocks in upper mine (positions that gave "no ore" message)
     private Set<WorldPosition> emptyRockPositions = new HashSet<>();
@@ -205,7 +214,31 @@ public class Mine extends Task {
 
             // misclick detection: no swing pick message = click didn't land on rock
             if (!mined && !miningResult.noOre() && !miningResult.swingPickSeen() && rockPos != null) {
-                script.log(getClass(), "misclick detected - no swing pick message, retrying same rock: " + rockPos);
+                // track consecutive misclicks on same position
+                if (rockPos.equals(lastMisclickPosition)) {
+                    consecutiveMisclickCount++;
+                } else {
+                    consecutiveMisclickCount = 1;
+                    lastMisclickPosition = rockPos;
+                }
+
+                // failsafe: if stuck on same rock too long, relocate
+                if (consecutiveMisclickCount >= MAX_CONSECUTIVE_MISCLICKS) {
+                    script.log(getClass(), "[STUCK] rock " + rockPos.getX() + "," + rockPos.getY()
+                            + " failed " + consecutiveMisclickCount + " times, relocating...");
+                    recoverFromStuckRock(rockPos, isUpperMine);
+                    return false;
+                }
+
+                // enhanced logging for debugging
+                WorldPosition currentPos = script.getWorldPosition();
+                String playerInfo = currentPos != null
+                        ? "player@" + currentPos.getX() + "," + currentPos.getY()
+                        : "player@unknown";
+                script.log(getClass(), "misclick " + consecutiveMisclickCount + "/" + MAX_CONSECUTIVE_MISCLICKS
+                        + " - rock " + rockPos.getX() + "," + rockPos.getY()
+                        + " (" + playerInfo + ")");
+
                 // short pause before retry - don't mark on cooldown
                 script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(200, 800, 400, 150));
                 return true;  // retry in next poll cycle (same rock still valid)
@@ -228,6 +261,8 @@ public class Mine extends Task {
                 gemsMined++;
                 lastSuccessfulAction = System.currentTimeMillis();
                 consecutiveNoOreCount = 0;
+                consecutiveMisclickCount = 0;
+                lastMisclickPosition = null;
 
                 // calculate GP from inventory change
                 calculateGpFromMine();
@@ -394,7 +429,31 @@ public class Mine extends Task {
 
         // misclick detection: no swing pick message = click didn't land on rock
         if (!mined && !miningResult.noOre() && !miningResult.swingPickSeen() && rockPos != null) {
-            script.log(getClass(), "misclick detected (ObjectManager) - no swing pick message, retrying: " + rockPos);
+            // track consecutive misclicks on same position
+            if (rockPos.equals(lastMisclickPosition)) {
+                consecutiveMisclickCount++;
+            } else {
+                consecutiveMisclickCount = 1;
+                lastMisclickPosition = rockPos;
+            }
+
+            // failsafe: if stuck on same rock too long, relocate
+            if (consecutiveMisclickCount >= MAX_CONSECUTIVE_MISCLICKS) {
+                script.log(getClass(), "[STUCK] rock " + rockPos.getX() + "," + rockPos.getY()
+                        + " failed " + consecutiveMisclickCount + " times (ObjectManager), relocating...");
+                recoverFromStuckRock(rockPos, isUpperMine);
+                return false;
+            }
+
+            // enhanced logging for debugging
+            WorldPosition currentPos = script.getWorldPosition();
+            String playerInfo = currentPos != null
+                    ? "player@" + currentPos.getX() + "," + currentPos.getY()
+                    : "player@unknown";
+            script.log(getClass(), "misclick " + consecutiveMisclickCount + "/" + MAX_CONSECUTIVE_MISCLICKS
+                    + " (ObjectManager) - rock " + rockPos.getX() + "," + rockPos.getY()
+                    + " (" + playerInfo + ")");
+
             script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(200, 800, 400, 150));
             return true;  // retry in next poll cycle
         }
@@ -414,6 +473,8 @@ public class Mine extends Task {
             gemsMined++;
             lastSuccessfulAction = System.currentTimeMillis();
             consecutiveNoOreCount = 0;
+            consecutiveMisclickCount = 0;
+            lastMisclickPosition = null;
             // clear empty positions on successful mine (rocks may have respawned)
             if (isUpperMine && !emptyRockPositions.isEmpty()) {
                 emptyRockPositions.clear();
@@ -495,33 +556,48 @@ public class Mine extends Task {
         long now = System.currentTimeMillis();
         recentlyMinedRocks.entrySet().removeIf(e -> now - e.getValue() > ROCK_COOLDOWN_MS);
 
-        logVerbose("tile target scan: known=" + rockPositions.size() + ", onCooldown=" + recentlyMinedRocks.size());
+        logVerbose("tile target scan: player=" + myPos.getX() + "," + myPos.getY()
+                + " known=" + rockPositions.size() + ", onCooldown=" + recentlyMinedRocks.size()
+                + " emptyMarked=" + emptyRockPositions.size());
+
         List<RockCandidate> candidates = new ArrayList<>();
+        int skippedPlane = 0, skippedCooldown = 0, skippedEmpty = 0, skippedArea = 0;
+        int skippedNotVisible = 0, skippedNoColor = 0, skippedRespawn = 0;
+
         for (WorldPosition pos : rockPositions) {
             if (pos == null || pos.getPlane() != myPos.getPlane()) {
+                skippedPlane++;
                 continue;
             }
 
             // skip rocks on cooldown (recently mined)
             if (recentlyMinedRocks.containsKey(pos)) {
-                logVerbose("tile target: skipping cooldown rock at " + pos);
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": on cooldown");
+                skippedCooldown++;
                 continue;
             }
 
             if (isUpperMine && isPositionMarkedEmpty(pos)) {
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": marked empty");
+                skippedEmpty++;
                 continue;
             }
             if (selectedLocation.miningArea() != null && !selectedLocation.miningArea().contains(pos)) {
+                skippedArea++;
                 continue;
             }
 
             Polygon tileCube = script.getSceneProjector().getTileCube(pos, TILE_CUBE_HEIGHT, true);
             if (tileCube == null || tileCube.numVertices() == 0) {
-                logVerbose("tile target: cube not visible for " + pos);
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": not visible on screen");
+                skippedNotVisible++;
                 continue;
             }
-            if (!hasGemColorInCube(tileCube)) {
-                logVerbose("tile target: no gem color at " + pos);
+
+            int colorMatches = countGemColorPixels(tileCube);
+            if (colorMatches == 0) {
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": no gem color (0 pixels)");
+                skippedNoColor++;
                 continue;
             }
 
@@ -534,12 +610,21 @@ public class Mine extends Task {
                     6
             );
             if (respawnCircle != null) {
-                logVerbose("tile target: respawn circle visible at " + pos + ", skipping");
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": respawn circle visible");
+                skippedRespawn++;
                 continue;
             }
 
-            candidates.add(new RockCandidate(pos, tileCube, pos.distanceTo(myPos)));
+            double dist = pos.distanceTo(myPos);
+            logVerbose("  valid " + pos.getX() + "," + pos.getY() + ": dist=" + String.format("%.1f", dist)
+                    + " colorPixels=" + colorMatches);
+            candidates.add(new RockCandidate(pos, tileCube, dist));
         }
+
+        logVerbose("tile target scan summary: valid=" + candidates.size()
+                + " skipped[cooldown=" + skippedCooldown + " empty=" + skippedEmpty
+                + " notVisible=" + skippedNotVisible + " noColor=" + skippedNoColor
+                + " respawn=" + skippedRespawn + " area=" + skippedArea + "]");
 
         if (candidates.isEmpty()) {
             logVerbose("tile target scan: no candidates after color check");
@@ -565,17 +650,19 @@ public class Mine extends Task {
     }
 
     private boolean hasGemColorInCube(Polygon tileCube) {
+        return countGemColorPixels(tileCube) > 0;
+    }
+
+    private int countGemColorPixels(Polygon tileCube) {
         if (tileCube == null) {
-            return false;
+            return 0;
         }
         List<Point> matches = script.getPixelAnalyzer().findPixelsOnGameScreen(
                 TILE_PIXEL_SKIP,
                 tileCube,
                 TILE_GEM_PIXEL
         );
-        boolean hasMatch = matches != null && !matches.isEmpty();
-        logVerbose("tile color check: matches=" + (matches == null ? 0 : matches.size()) + ", hit=" + hasMatch);
-        return hasMatch;
+        return matches == null ? 0 : matches.size();
     }
 
     private boolean tapRockCandidate(RockCandidate target) {
@@ -583,12 +670,20 @@ public class Mine extends Task {
             logVerbose("tap candidate: missing tile cube");
             return false;
         }
+
+        // debug: log tile cube bounds
+        Rectangle bounds = target.tileCube().getBounds();
+        logVerbose("tap candidate: rock=" + target.position().getX() + "," + target.position().getY()
+                + " cubeBounds=[" + bounds.x + "," + bounds.y + " " + bounds.width + "x" + bounds.height + "]");
+
         Point clickPoint = getGaussianPointInPolygon(target.tileCube());
         if (clickPoint != null) {
-            logVerbose("tap candidate: point=" + clickPoint);
-            return script.getFinger().tap(clickPoint);
+            logVerbose("tap candidate: clicking screen point (" + clickPoint.x + "," + clickPoint.y + ")");
+            boolean result = script.getFinger().tap(clickPoint);
+            logVerbose("tap candidate: tap result=" + result);
+            return result;
         }
-        logVerbose("tap candidate: fallback to polygon tap");
+        logVerbose("tap candidate: fallback to polygon tap (gaussian failed 6 attempts)");
         return script.getFinger().tapGameScreen(target.tileCube());
     }
 
@@ -669,10 +764,10 @@ public class Mine extends Task {
     }
 
     private void logVerbose(String message) {
-        if (!VERBOSE_LOGGING) {
+        if (!isVerbose()) {
             return;
         }
-        script.log(getClass(), "[VERBOSE] " + message);
+        script.log(getClass(), "[DEBUG] " + message);
     }
 
     private ChatSignal readMiningChatSignal() {
@@ -1050,6 +1145,69 @@ public class Mine extends Task {
             recentlyMinedRocks.put(pos, System.currentTimeMillis());
             logVerbose("marked rock on cooldown: " + pos);
         }
+    }
+
+    /**
+     * recovers from being stuck on a depleted rock by marking it and walking to a different area
+     */
+    private void recoverFromStuckRock(WorldPosition stuckPos, boolean isUpperMine) {
+        task = "Relocating";
+
+        // mark stuck rock as empty with extended cooldown
+        if (stuckPos != null) {
+            emptyRockPositions.add(stuckPos);
+            // use extended cooldown for stuck rocks (60s instead of 20s)
+            recentlyMinedRocks.put(stuckPos, System.currentTimeMillis() + (STUCK_ROCK_COOLDOWN_MS - ROCK_COOLDOWN_MS));
+            script.log(getClass(), "marked stuck rock as empty: " + stuckPos);
+        }
+
+        // reset misclick tracking
+        consecutiveMisclickCount = 0;
+        lastMisclickPosition = null;
+
+        // find a random rock position at least 3 tiles away
+        WorldPosition myPos = script.getWorldPosition();
+        if (myPos == null) {
+            script.log(getClass(), "cannot relocate - unknown position");
+            return;
+        }
+
+        Set<WorldPosition> rockPositions = isUpperMine ? knownRockPositions : UNDERGROUND_ROCK_POSITIONS;
+        List<WorldPosition> validTargets = new ArrayList<>();
+
+        int skippedStuck = 0, skippedCooldown = 0, skippedEmpty = 0, skippedTooClose = 0;
+        for (WorldPosition pos : rockPositions) {
+            if (pos == null) continue;
+            if (pos.equals(stuckPos)) { skippedStuck++; continue; }
+            if (recentlyMinedRocks.containsKey(pos)) { skippedCooldown++; continue; }
+            if (emptyRockPositions.contains(pos)) { skippedEmpty++; continue; }
+            if (pos.distanceTo(myPos) < 3.0) { skippedTooClose++; continue; }
+            validTargets.add(pos);
+        }
+
+        logVerbose("[recover] from=" + myPos.getX() + "," + myPos.getY()
+                + " stuck=" + stuckPos.getX() + "," + stuckPos.getY()
+                + " validTargets=" + validTargets.size()
+                + " skipped[stuck=" + skippedStuck + " cooldown=" + skippedCooldown
+                + " empty=" + skippedEmpty + " tooClose=" + skippedTooClose + "]");
+
+        if (validTargets.isEmpty()) {
+            script.log(getClass(), "[recover] no valid targets found - will wait and retry");
+            // just wait a bit and let normal flow handle it
+            script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1000, 3000, 2000, 500));
+            return;
+        }
+
+        // pick a random target
+        WorldPosition target = validTargets.get(RandomUtils.uniformRandom(0, validTargets.size() - 1));
+        double targetDist = target.distanceTo(myPos);
+        script.log(getClass(), "[recover] walking to " + target.getX() + "," + target.getY()
+                + " (dist=" + String.format("%.1f", targetDist) + ", " + validTargets.size() + " options)");
+
+        script.getWalker().walkTo(target, new WalkConfig.Builder().build());
+
+        // brief pause after walking
+        script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(400, 1200, 700, 200));
     }
 
     /**
