@@ -2,6 +2,8 @@ package utils;
 
 import com.osmb.api.location.position.types.WorldPosition;
 
+import java.util.Objects;
+
 /**
  * tracks a detected chompy's position and spawn time
  */
@@ -13,7 +15,7 @@ public class SpawnedChompy {
     private static final long STALE_TIMEOUT_MS = 10000;
 
     public SpawnedChompy(WorldPosition pos) {
-        this.position = pos;
+        this.position = Objects.requireNonNull(pos, "position required for chompy tracking");
         this.spawnTime = System.currentTimeMillis();
     }
 

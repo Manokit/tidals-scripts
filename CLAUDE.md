@@ -15,6 +15,7 @@ DON'T REINVENT. Read existing code before writing new.
 DON'T OVERENGINEER. No abstractions before they're needed.
 WHEN YOU'RE DONE MAKING CHANGES, ALWAYS BUILD THE SCRIPT.
 ALWAYS MAKE A DISCORD_POST.MD (see examples/discord-post.md).
+BEFORE NEW FEATURES OR BIG CHANGES → READ docs/common-mistakes.md FIRST.
 ```
 ## If you need API Validation
 You have access to an MCP docs server with full chunks of the API you can call on if needed
@@ -156,10 +157,11 @@ if (result == null || result.isNotFound()) return;
 ### Delays & Timing
 - **NEVER** use `script.random()` - produces uniform distribution (robotic)
 - **NEVER** use `submitTask()` - deprecated, may not block properly
+- **NEVER** use `pollFramesUntil(() -> true, ms)` - exits instantly with NO delay!
 - Use `RandomUtils.weightedRandom()` for short delays (weighted toward faster)
 - Use `RandomUtils.gaussianRandom()` for animation waits (clusters around mean)
 - Fixed delay: `pollFramesUntil(() -> false, ms)` - waits full timeout
-- Humanized delay: `pollFramesHuman(() -> true, ms)` - instant + human variance
+- Humanized delay: `pollFramesHuman(() -> true, ms)` - adds ~500-1000ms human variance
 
 ### Error Handling
 - Catch `RuntimeException`, not `Exception` - let OSMB control flow bubble up
@@ -244,9 +246,9 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 
 ## Documentation Index
 
-**Must Read:**
+**Must Read BEFORE Writing Code:**
 - `docs/critical-concepts.md` - Color bot fundamentals
-- `docs/common-mistakes.md` - Debugging guide, pitfalls
+- `docs/common-mistakes.md` - **READ THIS FIRST** for new features/major changes. Contains 15+ documented pitfalls with correct patterns.
 - `docs/Walker.md` - Walking code pitfalls
 - `docs/Paint.md` - Paint overlay & Setup UI standard
 

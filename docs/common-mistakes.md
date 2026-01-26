@@ -108,44 +108,51 @@ if (bank.isVisible()) {
 
 ### 7. Wrong Lambda in Delay Patterns (CRITICAL)
 
-The most common timing bug - using the wrong `true`/`false` in delay lambdas:
+The most common timing bug - using the wrong `true`/`false` in delay lambdas. **Tested and verified behavior:**
 
 ```java
-// WRONG - Exits IMMEDIATELY (0ms delay!) because condition is instantly true
+// WRONG - Exits IMMEDIATELY (~38ms overhead) because condition is instantly true
 script.pollFramesUntil(() -> true, 2000);  // BUG: no delay at all!
 
-// WRONG - pollFramesHuman with false adds timeout + human delay (double wait)
-script.pollFramesHuman(() -> false, 500);  // waits 500ms + 200-400ms = 700-900ms total
+// WRONG - pollFramesHuman with false adds timeout + large human delay
+script.pollFramesHuman(() -> false, 2000);  // waits ~3400ms (2000 + ~1400ms human)
 
 // CORRECT - For fixed delays, use pollFramesUntil with false (waits full timeout)
-script.pollFramesUntil(() -> false, 2000);  // exactly 2000ms delay
+script.pollFramesUntil(() -> false, 2000);  // exactly ~2000ms delay
 
 // CORRECT - For humanized delays, use pollFramesHuman with true
-script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));  // instant + human delay
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));  // ~500-1000ms with variance
 ```
 
-**How it works:**
-| Method | `() -> true` | `() -> false` |
-|--------|--------------|---------------|
-| `pollFramesUntil` | Exits immediately (0ms) | Waits full timeout |
-| `pollFramesHuman` | Exits + adds human delay (~200-400ms) | Waits timeout + human delay |
+**Actual tested behavior (from TidalsDelayTester):**
+
+| Pattern | Tested Result | What Happens |
+|---------|---------------|--------------|
+| `pollFramesUntil(() -> true, 2000)` | **38ms** | Exits immediately - NO WAIT |
+| `pollFramesUntil(() -> false, 2000)` | **2028ms** | Waits full timeout |
+| `pollFramesHuman(() -> true, 2000)` | **1131ms** | Exits + human(~1000ms) |
+| `pollFramesHuman(() -> false, 2000)` | **3402ms** | Timeout + human(~1400ms) |
+| `pollFramesUntil(() -> true, weighted)` | **50ms** | Exits immediately - **THIS IS THE BUG** |
+| `pollFramesHuman(() -> true, weighted)` | **729ms** | Exits + human(~685ms) - correct |
+
+**Key insight**: Human variance is NOT 200-400ms - it's typically **500-1400ms** and varies based on internal OSMB logic.
 
 **Best practices:**
 ```java
-// FIXED DELAY (animation wait, post-action pause)
-script.pollFramesUntil(() -> false, 2000);
+// FIXED DELAY (animation wait, exact timing needed)
+script.pollFramesUntil(() -> false, 2000);  // waits exactly ~2000ms
 
-// HUMANIZED DELAY (between actions, adds natural variance)
-script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
+// HUMANIZED DELAY (between actions, human-like timing)
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));  // adds ~500-1000ms with variance
 
-// CONDITIONAL WAIT (wait for something to happen)
+// CONDITIONAL WAIT (wait for something to happen, no extra delay)
 script.pollFramesUntil(() -> bank.isVisible(), 5000);
 
 // CONDITIONAL WAIT + HUMANIZED (wait for condition, then add reaction time)
 script.pollFramesHuman(() -> inventory.isFull(), 30000);
 ```
 
-**Rule**: For pure delays use `pollFramesUntil(() -> false, ms)`. For humanized delays use `pollFramesHuman(() -> true, ms)`. Never use `pollFramesUntil(() -> true, ms)` - it does nothing!
+**Rule**: For pure fixed delays use `pollFramesUntil(() -> false, ms)`. For humanized delays use `pollFramesHuman(() -> true, ms)`. **NEVER use `pollFramesUntil(() -> true, ms)` - it provides NO delay!**
 
 **DEPRECATED**: Do NOT use `submitTask` - it may be async and not block properly. Always use `pollFramesUntil` or `pollFramesHuman`.
 
@@ -319,6 +326,60 @@ if (response != null && response.getAction().contains("Pick")) {
 ```
 
 **Rule**: When speed isn't critical, prefer direct `tap(shape, "Action")`. It's safer, cleaner, and avoids the double-tap bug. Only use `tapGetResponse` when you genuinely need to check what action is available before deciding what to do.
+
+---
+
+### 15. Lambda Null Safety for getWorldPosition (CRITICAL)
+
+Lambdas in `breakCondition()` or `pollFramesUntil()` execute **later**, when game state may have changed. If you call `script.getWorldPosition()` directly inside a lambda without checking, you risk NPE during loading screens, teleports, or frame skips.
+
+```java
+// WRONG - getWorldPosition() might return null when lambda executes
+WalkConfig config = new WalkConfig.Builder()
+        .breakCondition(() -> {
+            RSObject altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
+            return altar != null && altar.getWorldPosition().distanceTo(script.getWorldPosition()) <= 3;
+            // BUG: script.getWorldPosition() called twice, either could be null!
+        })
+        .build();
+
+// WRONG - Same issue in pollFramesUntil
+script.pollFramesUntil(() -> {
+    RSObject bank = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank booth");
+    return bank != null && bank.getWorldPosition().distanceTo(script.getWorldPosition()) <= 5;
+}, 15000);
+
+// CORRECT - Extract position, null check, then use safely
+WalkConfig config = new WalkConfig.Builder()
+        .breakCondition(() -> {
+            WorldPosition myPos = script.getWorldPosition();
+            if (myPos == null) return false;  // gracefully handle momentary loss
+            RSObject altar = script.getObjectManager().getClosestObject(myPos, "Altar");
+            return altar != null && altar.getWorldPosition().distanceTo(myPos) <= 3;
+        })
+        .build();
+
+// CORRECT - Same pattern for pollFramesUntil
+script.pollFramesUntil(() -> {
+    WorldPosition myPos = script.getWorldPosition();
+    if (myPos == null) return false;
+    RSObject bank = script.getObjectManager().getClosestObject(myPos, "Bank booth");
+    return bank != null && bank.getWorldPosition().distanceTo(myPos) <= 5;
+}, 15000);
+```
+
+**Why this is different from regular null checking:**
+- Regular method calls execute immediately - you can see the context
+- Lambda bodies are **deferred** - they run repeatedly during polling/walking
+- Position can briefly be null during teleports, loading, interface transitions
+- Calling `getWorldPosition()` multiple times in one lambda wastes CPU and risks inconsistency
+
+**The pattern:**
+1. Store in local variable: `WorldPosition myPos = script.getWorldPosition();`
+2. Check immediately: `if (myPos == null) return false;`
+3. Reuse the same variable for all distance checks in that lambda
+
+**Rule**: Always extract `getWorldPosition()` to a local variable inside lambdas, null-check it, then reuse that variable. Returning `false` on null gracefully lets the condition re-evaluate next frame.
 
 ---
 
@@ -539,10 +600,11 @@ public int poll() {
 8. **Verify visually** not via collision map
 9. **Add comprehensive logging** when debugging
 10. **Test edge cases** (level 99, full bank, etc.)
-11. **Fixed delays**: `pollFramesUntil(() -> false, ms)` - never `() -> true` which exits immediately!
-12. **Humanized delays**: `pollFramesHuman(() -> true, ms)` - adds natural variance
+11. **Fixed delays**: `pollFramesUntil(() -> false, ms)` - **NEVER `() -> true` which exits in ~38ms!**
+12. **Humanized delays**: `pollFramesHuman(() -> true, ms)` - adds ~500-1000ms human variance (not 200-400ms)
 13. **Use RandomUtils** (gaussianRandom, weightedRandom) for human-like timing - never `script.random()`
 14. **Catch RuntimeException** not Exception - let OSMB control flow exceptions bubble up
+15. **Lambda null safety**: Extract `getWorldPosition()` to local variable inside lambdas, null-check before use
 
 ---
 

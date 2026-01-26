@@ -2,6 +2,8 @@ package utils;
 
 import com.osmb.api.location.position.types.WorldPosition;
 
+import java.util.Objects;
+
 /**
  * tracks a detected player's position and first-seen time
  * used by DetectPlayers task to determine if player is crashing vs passing through
@@ -11,7 +13,7 @@ public class DetectedPlayer {
     private final long firstSeenTime;
 
     public DetectedPlayer(WorldPosition pos) {
-        this.position = pos;
+        this.position = Objects.requireNonNull(pos, "position required for player tracking");
         this.firstSeenTime = System.currentTimeMillis();
     }
 

@@ -12,6 +12,7 @@ import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
 import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 
 import static main.TidalsCannonballThiever.twoStallMode;
@@ -116,7 +117,7 @@ public class GuardTracker {
     private static final int CB_STALL_PLAYER_Y = 3295;
 
     public GuardTracker(Script script) {
-        this.script = script;
+        this.script = Objects.requireNonNull(script, "script required");
     }
 
     private long generateRandomDelay() {
