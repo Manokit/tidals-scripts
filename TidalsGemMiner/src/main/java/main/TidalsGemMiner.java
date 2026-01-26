@@ -29,17 +29,19 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @ScriptDefinition(
         name = "TidalsGemMiner",
         author = "Tidal",
         description = "Mines gems at Shilo Village with optional cutting",
         skillCategory = SkillCategory.MINING,
-        version = 1.1
+        version = 1.2
 )
 public class TidalsGemMiner extends Script {
-    public static final String scriptVersion = "1.1";
+    public static final String scriptVersion = "1.2";
 
     // state fields
     public static boolean setupDone = false;
@@ -71,6 +73,35 @@ public class TidalsGemMiner extends Script {
     private static int lastSentGemsMined = 0;
     private static int lastSentGemsCut = 0;
     private static long lastSentRuntime = 0;
+    private static long lastSentGp = 0;
+
+    // GP tracking - gem item IDs and prices
+    public static final Map<String, Integer> GEM_ITEM_IDS = Map.of(
+        "Uncut opal", 1625,
+        "Uncut jade", 1627,
+        "Uncut red topaz", 1629,
+        "Uncut sapphire", 1623,
+        "Uncut emerald", 1621,
+        "Uncut ruby", 1619,
+        "Uncut diamond", 1617,
+        "Uncut dragonstone", 1631
+    );
+    public static final Map<Integer, Integer> gemPrices = new ConcurrentHashMap<>();
+    public static boolean pricesLoaded = false;
+    public static long totalGpEarned = 0;
+
+    // Crafting XP per gem (banked XP tracking)
+    public static final Map<Integer, Double> GEM_CRAFTING_XP = Map.of(
+        1625, 15.0,    // Uncut opal
+        1627, 20.0,    // Uncut jade
+        1629, 25.0,    // Uncut red topaz
+        1623, 50.0,    // Uncut sapphire
+        1621, 67.5,    // Uncut emerald
+        1619, 85.0,    // Uncut ruby
+        1617, 107.5,   // Uncut diamond
+        1631, 137.5    // Uncut dragonstone
+    );
+    public static double bankedCraftingXp = 0;
 
     // ui and tasks
     private ScriptUI scriptUI;
@@ -124,6 +155,9 @@ public class TidalsGemMiner extends Script {
         tasks.add(new Mine(this));
 
         log("INFO", "Tasks initialized: " + tasks.size());
+
+        // fetch gem prices in background
+        updateGemPrices();
     }
 
     @Override
@@ -132,6 +166,11 @@ public class TidalsGemMiner extends Script {
             return selectedLocation.priorityRegions();
         }
         return new int[]{11310, 11410};
+    }
+
+    @Override
+    public boolean trackXP() {
+        return true;
     }
 
     @Override
@@ -156,15 +195,17 @@ public class TidalsGemMiner extends Script {
             int craftingXpIncrement = craftingXpGained - lastSentCraftingXp;
             int gemsMinedIncrement = gemsMined - lastSentGemsMined;
             int gemsCutIncrement = gemsCut - lastSentGemsCut;
+            long gpIncrement = totalGpEarned - lastSentGp;
             long runtimeIncrement = (elapsed / 1000) - lastSentRuntime;
 
-            sendStats(miningXpIncrement, craftingXpIncrement, gemsMinedIncrement, gemsCutIncrement, runtimeIncrement);
+            sendStats(miningXpIncrement, craftingXpIncrement, gemsMinedIncrement, gemsCutIncrement, gpIncrement, runtimeIncrement);
 
             // update last sent values AFTER sending
             lastSentMiningXp = miningXpGained;
             lastSentCraftingXp = craftingXpGained;
             lastSentGemsMined = gemsMined;
             lastSentGemsCut = gemsCut;
+            lastSentGp = totalGpEarned;
             lastSentRuntime = elapsed / 1000;
             lastStatsSent = nowMs;
         }
@@ -284,7 +325,11 @@ public class TidalsGemMiner extends Script {
         // calculate dynamic height based on content
         // base: runtime, gems, mining xp, mining xp/hr, mining level, mining ttl, state, version = 8
         // cutting adds: gems cut, crafting xp, crafting xp/hr, crafting level, crafting ttl = 5
-        int lineCount = cuttingEnabled ? 13 : 8;
+        // GP tracking adds: gp earned, gp/hr = 2
+        // Banked crafting XP adds: 1 line
+        int gpLines = (totalGpEarned > 0) ? 2 : 0;
+        int bankedXpLines = (bankedCraftingXp > 0) ? 1 : 0;
+        int lineCount = (cuttingEnabled ? 13 : 8) + gpLines + bankedXpLines;
         int separatorCount = cuttingEnabled ? 2 : 1;
         int separatorOverhead = separatorCount * 12;
         int footerPadding = 10;  // extra padding before state line
@@ -357,6 +402,22 @@ public class TidalsGemMiner extends Script {
             drawStatLine(c, innerX, innerWidth, paddingX, curY, "Crafting TTL", craftingTtl, textMuted.getRGB(), textLight.getRGB());
         }
 
+        // GP earned (only show if we have earned GP)
+        if (totalGpEarned > 0) {
+            curY += lineGap;
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "GP earned", intFmt.format(totalGpEarned), textMuted.getRGB(), accentGold.getRGB());
+
+            curY += lineGap;
+            long gpPerHour = Math.round(totalGpEarned / hours);
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "GP/hr", intFmt.format(gpPerHour), textMuted.getRGB(), accentGold.getRGB());
+        }
+
+        // Banked Crafting XP (potential XP from cutting mined gems)
+        if (bankedCraftingXp > 0) {
+            curY += lineGap;
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "Banked Craft XP", intFmt.format((long) bankedCraftingXp), textMuted.getRGB(), valueGreen.getRGB());
+        }
+
         // separator before footer (with extra padding before state)
         curY += lineGap - 4;
         c.fillRect(innerX + paddingX, curY, innerWidth - (paddingX * 2), 1, borderColor.getRGB(), 1);
@@ -366,6 +427,9 @@ public class TidalsGemMiner extends Script {
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, textMuted.getRGB(), textMuted.getRGB());
+
+        // DEBUG: draw markers on known rock positions (remove after mapping complete)
+        Mine.drawDebugRockMarkers(this, c);
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
@@ -451,14 +515,14 @@ public class TidalsGemMiner extends Script {
         }
     }
 
-    private void sendStats(int miningXp, int craftingXp, int gemsMined, int gemsCut, long runtimeSecs) {
+    private void sendStats(int miningXp, int craftingXp, int gemsMined, int gemsCut, long gpEarned, long runtimeSecs) {
         try {
             if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
                 return;
             }
 
             // skip if nothing to report
-            if (miningXp == 0 && craftingXp == 0 && gemsMined == 0 && gemsCut == 0 && runtimeSecs == 0) {
+            if (miningXp == 0 && craftingXp == 0 && gemsMined == 0 && gemsCut == 0 && gpEarned == 0 && runtimeSecs == 0) {
                 return;
             }
 
@@ -466,9 +530,10 @@ public class TidalsGemMiner extends Script {
             int totalXp = miningXp + craftingXp;
 
             String json = String.format(
-                "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"gemsMined\":%d,\"gemsCut\":%d,\"miningXp\":%d,\"craftingXp\":%d}",
+                "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":%d,\"xp\":%d,\"runtime\":%d,\"gemsMined\":%d,\"gemsCut\":%d,\"miningXp\":%d,\"craftingXp\":%d}",
                 SCRIPT_NAME,
                 SESSION_ID,
+                gpEarned,
                 totalXp,
                 runtimeSecs,
                 gemsMined,
@@ -493,7 +558,7 @@ public class TidalsGemMiner extends Script {
             int code = conn.getResponseCode();
             if (code == 200) {
                 log("STATS", "Stats sent: miningXp=" + miningXp + ", craftingXp=" + craftingXp +
-                    ", gems=" + gemsMined + "/" + gemsCut + ", runtime=" + runtimeSecs + "s");
+                    ", gems=" + gemsMined + "/" + gemsCut + ", gp=" + gpEarned + ", runtime=" + runtimeSecs + "s");
             } else {
                 log("STATS", "Failed to send stats, HTTP " + code);
             }
@@ -565,5 +630,72 @@ public class TidalsGemMiner extends Script {
 
         log("VERSION", "You are running the latest version (v" + scriptVersion + ").");
         return false;
+    }
+
+    /**
+     * Fetches gem prices from GE Tracker API in background thread.
+     * Prices are locked in at session start.
+     */
+    private void updateGemPrices() {
+        Thread priceThread = new Thread(() -> {
+            try {
+                log("PRICES", "Fetching prices for " + GEM_ITEM_IDS.size() + " gem types...");
+
+                for (Map.Entry<String, Integer> entry : GEM_ITEM_IDS.entrySet()) {
+                    int itemId = entry.getValue();
+                    try {
+                        URL url = new URL("https://www.ge-tracker.com/api/items/" + itemId);
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setConnectTimeout(5000);
+                        conn.setReadTimeout(5000);
+                        conn.setRequestProperty("User-Agent", "OSMB-Script");
+
+                        if (conn.getResponseCode() == 200) {
+                            BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(conn.getInputStream()));
+                            StringBuilder response = new StringBuilder();
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                response.append(line);
+                            }
+                            reader.close();
+
+                            // parse "selling" price from JSON
+                            String json = response.toString();
+                            int sellingIdx = json.indexOf("\"selling\":");
+                            if (sellingIdx != -1) {
+                                int start = sellingIdx + 10;
+                                int end = json.indexOf(",", start);
+                                if (end == -1) end = json.indexOf("}", start);
+                                if (end != -1) {
+                                    String priceStr = json.substring(start, end).trim();
+                                    int price = Integer.parseInt(priceStr);
+                                    gemPrices.put(itemId, price);
+                                }
+                            }
+                        }
+
+                        // small delay between requests
+                        Thread.sleep(100);
+                    } catch (Exception ignored) {}
+                }
+
+                pricesLoaded = true;
+                log("PRICES", "Loaded prices for " + gemPrices.size() + " gems");
+
+                // log prices for debugging
+                for (Map.Entry<String, Integer> entry : GEM_ITEM_IDS.entrySet()) {
+                    Integer price = gemPrices.get(entry.getValue());
+                    if (price != null) {
+                        log("PRICES", entry.getKey() + ": " + price + " gp");
+                    }
+                }
+            } catch (RuntimeException e) {
+                log("PRICES", "Failed to fetch prices: " + e.getMessage());
+            }
+        }, "GemPriceUpdater");
+        priceThread.setDaemon(true);
+        priceThread.start();
     }
 }

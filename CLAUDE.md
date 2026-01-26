@@ -20,6 +20,51 @@ ALWAYS MAKE A DISCORD_POST.MD (see examples/discord-post.md).
 ## Git Commits
 Do not add Co-Authored-By trailers to commit messages.
 
+## Changelog Management
+
+**Every script should have a `Changes/` directory** for tracking modifications.
+
+When making changes to a script:
+1. Check if `<ScriptName>/Changes/` directory exists - create it if not
+2. Check if today's changelog exists: `<ScriptName>-MM-DD-Changes.md`
+3. If it doesn't exist, create it with the header format below
+4. Append new changes to the existing file if it already exists
+
+**Changelog format:**
+```markdown
+# TidalsScriptName Changes - YYYY-MM-DD
+
+## Summary
+Brief 1-2 sentence overview of all changes made today.
+
+---
+
+## 1. Change Title
+
+**File:** `path/to/file.java` (lines XX-YY)
+
+**Problem:** What was broken or missing.
+
+**Fix:** What was changed and why.
+
+```java
+// relevant code snippet
+```
+
+---
+
+## 2. Next Change...
+```
+
+**Key points:**
+- Include file paths and line numbers for easy navigation
+- Explain the problem AND the fix
+- Add code snippets for complex changes
+- Number each change sequentially
+- End with version bump reminder if applicable
+
+See `TidalsChompyHunter/Changes/` or `TidalsGemMiner/Changes/` for examples.
+
 ---
 
 ## Script Architecture
@@ -29,6 +74,8 @@ Do not add Co-Authored-By trailers to commit messages.
 TidalsScriptName/
 ├── build.gradle
 ├── discord_post.md
+├── Changes/                          # daily changelogs
+│   └── ScriptName-MM-DD-Changes.md
 ├── src/main/java/
 │   ├── main/
 │   │   ├── TidalsScriptName.java    # main script, state, paint

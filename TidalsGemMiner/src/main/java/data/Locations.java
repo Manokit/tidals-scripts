@@ -18,7 +18,8 @@ public final class Locations {
     // upper mine: centered around (2823, 2999) - small area with few rocks
     private static final Area UPPER_MINING_AREA = new RectangleArea(2818, 2994, 12, 12, 0);
     // underground mine: larger area with many rocks
-    private static final Area UNDERGROUND_MINING_AREA = new RectangleArea(2828, 9377, 20, 20, 0);
+    // expanded to include all hardcoded rock positions (X: 2826-2849, Y: 9379-9399)
+    private static final Area UNDERGROUND_MINING_AREA = new RectangleArea(2825, 9377, 26, 24, 0);
 
     public record MiningLocation(
             String name,

@@ -14,6 +14,7 @@ import utils.Task;
 import utilities.RetryUtils;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -204,16 +205,28 @@ public class Bank extends Task {
     }
 
     private void depositGemsIndividually(DepositBox depositBox, int[] gemIds) {
+        Set<Integer> itemIdsToRecognise = new HashSet<>();
         for (int gemId : gemIds) {
-            // search for this gem in deposit box
-            ItemGroupResult items = depositBox.search(Set.of(gemId));
-            if (items == null || !items.contains(gemId)) {
+            itemIdsToRecognise.add(gemId);
+        }
+
+        ItemGroupResult items = depositBox.search(itemIdsToRecognise);
+        if (items == null) {
+            return;
+        }
+
+        for (int gemId : gemIds) {
+            if (!items.contains(gemId)) {
                 continue;
             }
 
             // get a random item of this type and deposit it (all of them)
             ItemSearchResult gem = items.getRandomItem(gemId);
             if (gem == null) {
+                items = depositBox.search(itemIdsToRecognise);
+                if (items == null) {
+                    return;
+                }
                 continue;
             }
 
@@ -221,6 +234,10 @@ public class Bank extends Task {
             boolean deposited = RetryUtils.inventoryInteract(script, gem, "Deposit-All", "deposit gem " + gemId);
             if (deposited) {
                 script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+                items = depositBox.search(itemIdsToRecognise);
+                if (items == null) {
+                    return;
+                }
             } else {
                 script.log(getClass(), "failed to deposit gem: " + gemId);
             }
