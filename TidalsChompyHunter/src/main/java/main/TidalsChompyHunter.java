@@ -5,8 +5,12 @@ import com.osmb.api.script.Script;
 import com.osmb.api.script.ScriptDefinition;
 import com.osmb.api.script.SkillCategory;
 import com.osmb.api.shape.Polygon;
+import com.osmb.api.item.ItemSearchResult;
 import com.osmb.api.ui.overlay.BuffOverlay;
+import com.osmb.api.ui.tabs.Tab;
+import com.osmb.api.utils.UIResult;
 import com.osmb.api.utils.UIResultList;
+import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
 import javafx.scene.Scene;
@@ -76,6 +80,19 @@ public class TidalsChompyHunter extends Script {
     public static int equippedArrowId = -1;  // set by Setup, used for BuffOverlay
     private BuffOverlay ammoOverlay = null;
     private long ammoOverlayMissingStart = 0;  // track when overlay went missing
+    private boolean overlayVerificationPending = false;  // true when we need to verify via equipment tab
+
+    // valid arrow item ids (for equipment tab verification)
+    private static final int[] VALID_ARROWS = {
+        2866,  // OGRE_ARROW
+        4773,  // BRONZE_BRUTAL
+        4778,  // IRON_BRUTAL
+        4783,  // STEEL_BRUTAL
+        4788,  // BLACK_BRUTAL
+        4793,  // MITHRIL_BRUTAL
+        4798,  // ADAMANT_BRUTAL
+        4803   // RUNE_BRUTAL
+    };
 
     // logical ground toad counter (tracks drops/kills instead of unreliable sprite detection)
     public static int groundToadCount = 0;
@@ -286,6 +303,16 @@ public class TidalsChompyHunter extends Script {
         // update ammo count via BuffOverlay (lightweight, no tab switching)
         if (setupComplete) {
             updateAmmoFromOverlay();
+        }
+
+        // verify ammo via equipment tab when overlay has been missing
+        // only verify during idle (no task running) to avoid interrupting other work
+        if (setupComplete && overlayVerificationPending && !taskRan) {
+            boolean confirmedEmpty = verifyAmmoFromEquipmentTab();
+            if (confirmedEmpty) {
+                outOfAmmo = true;
+                // will stop on next poll() iteration
+            }
         }
 
         // check for milestone when kills change
@@ -579,7 +606,7 @@ public class TidalsChompyHunter extends Script {
 
     /**
      * update ammo count from BuffOverlay (lightweight, no tab switching)
-     * also detects out of ammo when overlay is missing for 10+ seconds
+     * when overlay is missing for 10+ seconds, triggers equipment tab verification
      */
     private void updateAmmoFromOverlay() {
         // initialize overlay if we have arrow ID but no overlay yet
@@ -593,8 +620,9 @@ public class TidalsChompyHunter extends Script {
         }
 
         if (ammoOverlay.isVisible()) {
-            // reset missing timer
+            // reset missing timer and verification flag
             ammoOverlayMissingStart = 0;
+            overlayVerificationPending = false;
 
             // parse ammo count from overlay text
             String buffText = ammoOverlay.getBuffText();
@@ -621,13 +649,61 @@ public class TidalsChompyHunter extends Script {
                 ammoOverlayMissingStart = System.currentTimeMillis();
             }
 
-            // if missing for 10+ seconds, assume out of ammo
+            // if missing for 10+ seconds, flag for verification (don't assume out of ammo)
             long missingTime = System.currentTimeMillis() - ammoOverlayMissingStart;
-            if (missingTime > 10000) {
-                log(getClass(), "ammo overlay missing for 10+ seconds - out of ammo");
-                outOfAmmo = true;
+            if (missingTime > 10000 && !overlayVerificationPending) {
+                log(getClass(), "ammo overlay missing for 10+ seconds - will verify via equipment tab");
+                overlayVerificationPending = true;
             }
         }
+    }
+
+    /**
+     * verify ammo count by checking equipment tab directly
+     * called when overlay has been missing and we need to confirm actual arrow count
+     * returns true if verified (either has arrows or confirmed empty), false if check failed
+     */
+    private boolean verifyAmmoFromEquipmentTab() {
+        log(getClass(), "verifying ammo via equipment tab...");
+        task = "verifying ammo...";
+
+        // open equipment tab
+        getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
+        pollFramesUntil(() -> false, RandomUtils.weightedRandom(400, 600));
+
+        // check for any valid arrows
+        UIResult<ItemSearchResult> arrowCheck = getWidgetManager().getEquipment().findItem(VALID_ARROWS);
+        if (arrowCheck == null || !arrowCheck.isFound()) {
+            // no arrows found in equipment slot - confirmed out of ammo
+            log(getClass(), "VERIFIED: no arrows in equipment slot - out of ammo");
+            return true;  // verification complete, no arrows
+        }
+
+        ItemSearchResult arrowResult = arrowCheck.get();
+        if (arrowResult == null) {
+            log(getClass(), "arrow check returned null result - will retry");
+            return false;  // verification failed, retry later
+        }
+
+        int verifiedCount = arrowResult.getStackAmount();
+        log(getClass(), "VERIFIED: " + verifiedCount + " arrows in equipment (overlay was wrong)");
+
+        // update tracking with verified count
+        currentArrowCount = verifiedCount;
+
+        // reset overlay tracking since we just verified
+        ammoOverlayMissingStart = 0;
+        overlayVerificationPending = false;
+
+        // check if actually out of ammo (0 or very low)
+        if (verifiedCount <= 0) {
+            log(getClass(), "verified 0 arrows - out of ammo");
+            return true;  // verification complete, no arrows
+        }
+
+        // still have arrows - false positive from overlay
+        log(getClass(), "still have " + verifiedCount + " arrows - continuing");
+        return false;  // has arrows, keep running
     }
 
     @Override
