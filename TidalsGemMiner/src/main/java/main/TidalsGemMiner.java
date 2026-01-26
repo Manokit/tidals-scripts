@@ -38,10 +38,10 @@ import java.util.concurrent.ConcurrentHashMap;
         author = "Tidal",
         description = "Mines gems at Shilo Village with optional cutting",
         skillCategory = SkillCategory.MINING,
-        version = 1.3
+        version = 1.2
 )
 public class TidalsGemMiner extends Script {
-    public static final String scriptVersion = "1.3";
+    public static final String scriptVersion = "1.2";
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DEBUG MODE - set to true for verbose logging (use for debug builds)
