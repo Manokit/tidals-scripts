@@ -36,11 +36,11 @@ import java.util.function.Predicate;
         name = "TidalsGemCutter",
         description = "Cuts gems using a chisel",
         skillCategory = SkillCategory.CRAFTING,
-        version = 1.4,
+        version = 1.5,
         author = "Tidaleus"
 )
 public class TidalsGemCutter extends Script {
-    public static final String scriptVersion = "1.4";
+    public static final String scriptVersion = "1.5";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -92,11 +92,21 @@ public class TidalsGemCutter extends Script {
     private com.osmb.api.visual.image.Image logoImage = null;
 
     private static final Map<Integer, Integer> UNCUT_TO_CUT = Map.of(
+            ItemID.UNCUT_OPAL, ItemID.OPAL,
+            ItemID.UNCUT_JADE, ItemID.JADE,
+            ItemID.UNCUT_RED_TOPAZ, ItemID.RED_TOPAZ,
             ItemID.UNCUT_SAPPHIRE, ItemID.SAPPHIRE,
             ItemID.UNCUT_EMERALD, ItemID.EMERALD,
             ItemID.UNCUT_RUBY, ItemID.RUBY,
             ItemID.UNCUT_DIAMOND, ItemID.DIAMOND
     );
+
+    // semi-precious gems can crush when cut
+    public static final int CRUSHED_GEM_ID = ItemID.CRUSHED_GEM;
+    public static final Set<Integer> CRUSHABLE_GEMS = Set.of(
+            ItemID.UNCUT_OPAL, ItemID.UNCUT_JADE, ItemID.UNCUT_RED_TOPAZ
+    );
+    public static int crushedCount = 0;
 
     private static final Map<Integer, Integer> CUT_TO_BOLT_TIPS = Map.of(
             ItemID.SAPPHIRE, ItemID.SAPPHIRE_BOLT_TIPS,
@@ -394,7 +404,7 @@ public class TidalsGemCutter extends Script {
         ensureLogoLoaded();
         int logoHeight = (logoImage != null) ? logoImage.height + logoBottomGap : 0;
 
-        int totalLines = 11;
+        int totalLines = 11 + (crushedCount > 0 ? 1 : 0);  // extra line for crushed gems
         int separatorCount = 3;
         int separatorOverhead = separatorCount * 12;
         int bottomPadding = 1;
@@ -466,6 +476,13 @@ public class TidalsGemCutter extends Script {
         String itemsCraftedText = intFmt.format(craftCount) + " (" + intFmt.format(itemsPerHour) + "/hr)";
         String craftLabel = makeBoltTips ? "Tips made" : "Gems cut";
         drawStatLine(c, innerX, innerWidth, paddingX, curY, craftLabel, itemsCraftedText, textMuted.getRGB(), valueGreen.getRGB());
+
+        // show crushed count for semi-precious gems
+        if (crushedCount > 0) {
+            curY += lineGap;
+            final Color warningOrange = new Color(255, 165, 0);
+            drawStatLine(c, innerX, innerWidth, paddingX, curY, "Crushed", intFmt.format(crushedCount), textMuted.getRGB(), warningOrange.getRGB());
+        }
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Task", String.valueOf(task), textMuted.getRGB(), textLight.getRGB());

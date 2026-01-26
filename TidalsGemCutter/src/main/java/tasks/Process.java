@@ -164,7 +164,11 @@ public class Process extends Task {
         Timer timer = new Timer();
         int timeout = RandomUtils.gaussianRandom(70000, 80000, 74000, 2000);
 
+        // check if this gem can crush
+        boolean isCrushable = CRUSHABLE_GEMS.contains(consumedID);
+
         final int[] lastCount = {getItemCount(producedID)};
+        final int[] lastCrushed = {isCrushable ? getItemCount(CRUSHED_GEM_ID) : 0};
 
         BooleanSupplier condition = () -> {
             // level up
@@ -172,7 +176,7 @@ public class Process extends Task {
             if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
                 script.log(getClass(), "level up");
                 script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.pollFramesUntil(() -> true, RandomUtils.gaussianRandom(1000, 3500, 1500, 500));
+                script.pollFramesHuman(() -> true, RandomUtils.gaussianRandom(1000, 3500, 1500, 500));
                 return true;
             }
 
@@ -187,6 +191,17 @@ public class Process extends Task {
                 int crafted = currentCount - lastCount[0];
                 craftCount += crafted;
                 lastCount[0] = currentCount;
+            }
+
+            // track crushed gems for semi-precious
+            if (isCrushable) {
+                int currentCrushed = getItemCount(CRUSHED_GEM_ID);
+                if (currentCrushed > lastCrushed[0]) {
+                    int newCrushed = currentCrushed - lastCrushed[0];
+                    crushedCount += newCrushed;
+                    lastCrushed[0] = currentCrushed;
+                    script.log(getClass(), "gem crushed! total crushed: " + crushedCount);
+                }
             }
 
             // check if done

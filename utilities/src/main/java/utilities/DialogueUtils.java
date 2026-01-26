@@ -203,4 +203,46 @@ public class DialogueUtils {
 
         return false; // dialogue exists but can't dismiss it
     }
+
+    /**
+     * Dismiss a level up or continue dialogue with retry.
+     * Retries clicking continue if dialogue doesn't close.
+     *
+     * @param script the script instance
+     * @param maxAttempts max number of click attempts
+     * @param timeout max time to wait for dialogue to close after each click
+     * @return true if dialogue was dismissed or no dialogue was open
+     */
+    public static boolean dismissContinueDialogueWithRetry(Script script, int maxAttempts, int timeout) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
+
+            if (type == null) {
+                return true; // no dialogue, success
+            }
+
+            if (type != DialogueType.TAP_HERE_TO_CONTINUE) {
+                script.log(DialogueUtils.class, "dialogue type is " + type + ", not TAP_HERE_TO_CONTINUE");
+                return false; // can't dismiss this type
+            }
+
+            script.log(DialogueUtils.class, "dismiss dialogue attempt " + attempt + "/" + maxAttempts);
+            script.getWidgetManager().getDialogue().continueChatDialogue();
+
+            boolean dismissed = script.pollFramesUntil(() -> {
+                DialogueType current = script.getWidgetManager().getDialogue().getDialogueType();
+                return current == null || current != DialogueType.TAP_HERE_TO_CONTINUE;
+            }, timeout);
+
+            if (dismissed) {
+                return true;
+            }
+
+            // small delay before retry
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400));
+        }
+
+        script.log(DialogueUtils.class, "failed to dismiss dialogue after " + maxAttempts + " attempts");
+        return false;
+    }
 }

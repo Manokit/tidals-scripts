@@ -20,7 +20,9 @@ ALWAYS MAKE A DISCORD_POST.MD (see examples/discord-post.md).
 You have access to an MCP docs server with full chunks of the API you can call on if needed
 
 ## Git Commits
-Do not add Co-Authored-By trailers to commit messages.
+- **ONLY commit when explicitly asked.** Do not auto-commit after making changes.
+- Do not add Co-Authored-By trailers to commit messages.
+- Do not commit `Changes/` directories, `docs/plans/`, or other planning files - these are gitignored and local-only.
 
 ## Changelog Management
 

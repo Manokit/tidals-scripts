@@ -59,7 +59,7 @@ public class Bank extends Task {
             return false;
         }
 
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
 
         task = "Search bank";
 
@@ -103,7 +103,7 @@ public class Bank extends Task {
         // deposit all except chisel
         task = "Deposit";
         script.getWidgetManager().getBank().depositAll(Set.of(ItemID.CHISEL));
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1500, 0.002));
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 1500, 0.002));
 
         // refresh inv after deposit
         inv = script.getWidgetManager().getInventory().search(Collections.emptySet());
