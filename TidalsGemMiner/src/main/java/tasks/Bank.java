@@ -3,6 +3,7 @@ package tasks;
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
 import com.osmb.api.item.ItemSearchResult;
+import com.osmb.api.location.area.Area;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
@@ -118,15 +119,28 @@ public class Bank extends Task {
             return false;
         }
 
+        Area approachArea = selectedLocation.approachArea();
         WorldPosition bankPos = selectedLocation.bankPosition();
 
-        // check if we're close enough to bank
-        double distanceToBank = myPos.distanceTo(bankPos);
-        if (distanceToBank > 10) {
-            task = "Walking to bank";
-            script.log(getClass(), "walking to bank at " + bankPos);
-            script.getWalker().walkTo(bankPos, new WalkConfig.Builder().build());
-            return false;
+        if (approachArea != null) {
+            // underground mine: walk to approach area, not exact tile
+            if (!approachArea.contains(myPos)) {
+                task = "Walking to deposit area";
+                WorldPosition randomTarget = approachArea.getRandomPosition();
+                script.log(getClass(), "walking to approach area: " + randomTarget);
+                script.getWalker().walkTo(randomTarget, new WalkConfig.Builder().build());
+                return false;
+            }
+            // already in approach area - proceed to interact
+        } else {
+            // upper mine: use original distance-based logic
+            double distanceToBank = myPos.distanceTo(bankPos);
+            if (distanceToBank > 10) {
+                task = "Walking to bank";
+                script.log(getClass(), "walking to bank at " + bankPos);
+                script.getWalker().walkTo(bankPos, new WalkConfig.Builder().build());
+                return false;
+            }
         }
 
         // find deposit object based on location

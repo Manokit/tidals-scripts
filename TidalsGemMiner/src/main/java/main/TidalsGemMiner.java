@@ -427,9 +427,6 @@ public class TidalsGemMiner extends Script {
 
         curY += lineGap;
         drawStatLine(c, innerX, innerWidth, paddingX, curY, "Version", scriptVersion, textMuted.getRGB(), textMuted.getRGB());
-
-        // DEBUG: draw markers on known rock positions (remove after mapping complete)
-        Mine.drawDebugRockMarkers(this, c);
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,

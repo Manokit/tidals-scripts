@@ -30,7 +30,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static main.TidalsGemMiner.*;
 
@@ -64,7 +63,7 @@ public class Mine extends Task {
             new SingleThresholdComparator(TILE_COLOR_TOLERANCE),
             ColorModel.RGB
     );
-    private static final boolean VERBOSE_LOGGING = true;
+    private static final boolean VERBOSE_LOGGING = false;
 
     // hardcoded underground mine rock positions (plane 0, region 11410)
     private static final Set<WorldPosition> UNDERGROUND_ROCK_POSITIONS = Set.of(
@@ -92,7 +91,7 @@ public class Mine extends Task {
     private static final long SWING_PICK_TIMEOUT_MS = 2500; // exit early if no swing pick within 2.5s
 
     // cooldown tracking - prevents re-mining same rock
-    private static final long ROCK_COOLDOWN_MS = 10_000; // 10 seconds
+    private static final long ROCK_COOLDOWN_MS = 20_000; // 20 seconds
     private final Map<WorldPosition, Long> recentlyMinedRocks = new HashMap<>();
 
     // stuck detection
@@ -497,7 +496,6 @@ public class Mine extends Task {
         recentlyMinedRocks.entrySet().removeIf(e -> now - e.getValue() > ROCK_COOLDOWN_MS);
 
         logVerbose("tile target scan: known=" + rockPositions.size() + ", onCooldown=" + recentlyMinedRocks.size());
-        lastRockStates.clear();  // reset debug states each scan
         List<RockCandidate> candidates = new ArrayList<>();
         for (WorldPosition pos : rockPositions) {
             if (pos == null || pos.getPlane() != myPos.getPlane()) {
@@ -507,12 +505,10 @@ public class Mine extends Task {
             // skip rocks on cooldown (recently mined)
             if (recentlyMinedRocks.containsKey(pos)) {
                 logVerbose("tile target: skipping cooldown rock at " + pos);
-                updateDebugRockState(pos, "cooldown");
                 continue;
             }
 
             if (isUpperMine && isPositionMarkedEmpty(pos)) {
-                updateDebugRockState(pos, "cooldown");
                 continue;
             }
             if (selectedLocation.miningArea() != null && !selectedLocation.miningArea().contains(pos)) {
@@ -526,7 +522,6 @@ public class Mine extends Task {
             }
             if (!hasGemColorInCube(tileCube)) {
                 logVerbose("tile target: no gem color at " + pos);
-                updateDebugRockState(pos, "no_gem");
                 continue;
             }
 
@@ -540,11 +535,9 @@ public class Mine extends Task {
             );
             if (respawnCircle != null) {
                 logVerbose("tile target: respawn circle visible at " + pos + ", skipping");
-                updateDebugRockState(pos, "cooldown");
                 continue;
             }
 
-            updateDebugRockState(pos, "valid");
             candidates.add(new RockCandidate(pos, tileCube, pos.distanceTo(myPos)));
         }
 
@@ -566,7 +559,6 @@ public class Mine extends Task {
         logVerbose(sb.toString());
 
         RockCandidate selected = candidates.get(0);
-        setDebugSelectedRock(selected.position());
         script.log(getClass(), "selected rock: " + selected.position().getX() + "," + selected.position().getY()
                 + " dist=" + String.format("%.1f", selected.distance()));
         return selected;
@@ -1117,80 +1109,6 @@ public class Mine extends Task {
                 break; // only one gem per mine
             }
         }
-    }
-
-    // store last scan results for debug paint
-    private static final Map<WorldPosition, String> lastRockStates = new ConcurrentHashMap<>();
-    private static volatile WorldPosition lastSelectedRock = null;
-
-    /**
-     * DEBUG: draws markers on all known rock positions
-     * GREEN = valid candidate, CYAN = selected, RED = cooldown, ORANGE = no gem color
-     */
-    public static void drawDebugRockMarkers(Script script, com.osmb.api.visual.drawing.Canvas c) {
-        if (script == null || c == null) return;
-
-        WorldPosition myPos = script.getWorldPosition();
-        if (myPos == null) return;
-
-        // only draw for underground mine (plane 0)
-        if (myPos.getPlane() != 0) return;
-
-        int colorValid = new Color(0, 255, 0).getRGB();      // green = valid
-        int colorSelected = new Color(0, 255, 255).getRGB(); // cyan = selected
-        int colorCooldown = new Color(255, 0, 0).getRGB();   // red = cooldown
-        int colorNoGem = new Color(255, 165, 0).getRGB();    // orange = no gem color
-        int textColor = Color.WHITE.getRGB();
-
-        for (WorldPosition rockPos : UNDERGROUND_ROCK_POSITIONS) {
-            if (rockPos == null) continue;
-            if (rockPos.distanceTo(myPos) > 15) continue;
-
-            Polygon tileCube = script.getSceneProjector().getTileCube(rockPos, 50, true);
-            if (tileCube == null || tileCube.numVertices() == 0) continue;
-
-            // determine state and color
-            String state = lastRockStates.getOrDefault(rockPos, "unknown");
-            int markerColor;
-            if (rockPos.equals(lastSelectedRock)) {
-                markerColor = colorSelected;
-                state = "SEL";
-            } else if (state.equals("cooldown")) {
-                markerColor = colorCooldown;
-                state = "CD";
-            } else if (state.equals("no_gem")) {
-                markerColor = colorNoGem;
-                state = "NO";
-            } else if (state.equals("valid")) {
-                markerColor = colorValid;
-                state = "OK";
-            } else {
-                markerColor = new Color(128, 128, 128).getRGB(); // gray = unknown
-                state = "?";
-            }
-
-            c.fillPolygon(tileCube, markerColor, 0.4);
-
-            // draw distance and state
-            Rectangle bounds = tileCube.getBounds();
-            int centerX = bounds.x + bounds.width / 2;
-            int centerY = bounds.y + bounds.height / 2;
-            double dist = rockPos.distanceTo(myPos);
-            String label = String.format("%.1f %s", dist, state);
-            c.drawText(label, centerX - 20, centerY, textColor, new java.awt.Font("Arial", java.awt.Font.BOLD, 9));
-        }
-    }
-
-    /** call from findTileCubeTarget to update debug state */
-    private void updateDebugRockState(WorldPosition pos, String state) {
-        if (pos != null) {
-            lastRockStates.put(pos, state);
-        }
-    }
-
-    /** call when a rock is selected */
-    private void setDebugSelectedRock(WorldPosition pos) {
-        lastSelectedRock = pos;
     }
 
 }
