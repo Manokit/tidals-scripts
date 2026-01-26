@@ -401,7 +401,7 @@ public class LoadoutEditor extends BorderPane {
                         System.out.println("[LoadoutEditor] Pre-filled textarea from clipboard");
                     }
                 }
-            } catch (Exception clipEx) {
+            } catch (IllegalStateException clipEx) {
                 System.out.println("[LoadoutEditor] Error reading clipboard: " + clipEx.getMessage());
                 clipEx.printStackTrace();
             }
@@ -460,7 +460,7 @@ public class LoadoutEditor extends BorderPane {
             alert.setContentText("Imported loadout: " + imported.getName());
             alert.showAndWait();
 
-        } catch (Exception e) {
+        } catch (IllegalArgumentException | IllegalStateException e) {
             System.out.println("[LoadoutEditor] Import error: " + e.getClass().getName() + ": " + e.getMessage());
             e.printStackTrace();
             Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -547,7 +547,7 @@ public class LoadoutEditor extends BorderPane {
                 } else {
                     System.out.println("[LoadoutEditor] WARNING: Clipboard does not have string after set!");
                 }
-            } catch (Exception clipEx) {
+            } catch (IllegalStateException clipEx) {
                 System.out.println("[LoadoutEditor] Error setting clipboard: " + clipEx.getMessage());
                 clipEx.printStackTrace();
                 throw clipEx;
@@ -560,7 +560,7 @@ public class LoadoutEditor extends BorderPane {
             alert.setContentText("Loadout copied to clipboard!\n\nYou can now paste it into Discord, a text file, or share it directly.");
             alert.showAndWait();
 
-        } catch (Exception e) {
+        } catch (IllegalStateException e) {
             System.out.println("[LoadoutEditor] Export error: " + e.getClass().getName() + ": " + e.getMessage());
             e.printStackTrace();
             Alert alert = new Alert(Alert.AlertType.ERROR);

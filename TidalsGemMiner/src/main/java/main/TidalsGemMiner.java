@@ -675,7 +675,7 @@ public class TidalsGemMiner extends Script {
 
                         // small delay between requests
                         Thread.sleep(100);
-                    } catch (Exception ignored) {}
+                    } catch (IOException | NumberFormatException | InterruptedException ignored) {}
                 }
 
                 pricesLoaded = true;

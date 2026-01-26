@@ -3,6 +3,7 @@ package utilities.items;
 import com.osmb.api.script.Script;
 import com.osmb.api.visual.image.Image;
 
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
@@ -84,7 +85,7 @@ public final class SpriteCache {
         try {
             // use quantity 1, default zoom, transparent background (0)
             return script.getItemManager().getItemImage(itemId, 1, null, 0);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // item manager may throw on invalid IDs
             return null;
         }
@@ -114,7 +115,7 @@ public final class SpriteCache {
                     return null;
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             // network error, 404, or other issues - return null
         }
         return null;

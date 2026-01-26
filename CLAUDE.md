@@ -267,6 +267,20 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 
 ---
 
+## Examples Directory Warning
+
+The `examples/` directory contains older reference scripts from various authors. These may contain anti-patterns that should **NOT** be copied:
+
+- **Broad `catch (Exception e)` blocks** - Swallows OSMB control flow exceptions (`HaltScriptException`, `PriorityTaskException`). Use `catch (RuntimeException e)` and rethrow OSMB exceptions, or catch specific exceptions like `IOException`.
+- **`pollFramesHuman(() -> false, ...)`** for pure delays - When lambda returns `false`, OSMB adds the timeout to the humanization delay. For pure delays (no condition to check), return `true` for instant completion + human variance.
+- **Missing null checks on `ItemSearchResult`** before `.interact()` - `getItem()` and `getRandomItem()` can return null. Always check before calling methods.
+- **Manual `openTab()` before `search()` calls** - `ItemGroup::search()` automatically opens the required tab. Explicit `openTab()` is redundant.
+- **`Math.random()` or `script.random()`** - Produces uniform distribution (robotic). Use `RandomUtils.weightedRandom()` or `RandomUtils.gaussianRandom()` instead.
+
+**Always prefer patterns from production Tidals scripts** (TidalsChompyHunter, TidalsGemCutter, TidalsGemMiner, etc.) or the patterns documented above.
+
+---
+
 ## Resources
 
 - **API Docs**: https://doc.osmb.co.uk/documentation

@@ -30,8 +30,7 @@ public class TabUtils {
      * @return true if inventory tab opened and is accessible
      */
     public static boolean openAndVerifyInventory(Script script, int timeout) {
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-
+        // search() automatically opens the inventory tab, so explicit openTab() is redundant
         return script.pollFramesUntil(() ->
             script.getWidgetManager().getInventory().search(Set.of()) != null,
             timeout

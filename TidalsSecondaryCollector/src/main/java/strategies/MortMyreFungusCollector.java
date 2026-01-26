@@ -274,10 +274,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         script.log(getClass(), "prayer method: " + prayerMethodUsed);
 
-        // back to inventory
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 400));
-
         // 5. pre-trip prayer restore if not near mort myre log area and prayer not full
         // skip if we're already close to the collection area - just start the trip
         WorldPosition currentPos = script.getWorldPosition();

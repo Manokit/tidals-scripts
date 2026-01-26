@@ -8,6 +8,7 @@ import utilities.loadout.EquipmentSlot;
 import utilities.loadout.Loadout;
 import utilities.loadout.LoadoutItem;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.EnumMap;
 import java.util.Map;
@@ -91,7 +92,7 @@ public class EquipmentGrid extends Pane {
                     Image image = new Image(is);
                     placeholderImages.put(slotType, image);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 // placeholder not found, slot will show empty
             }
         }

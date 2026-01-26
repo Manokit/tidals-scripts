@@ -80,7 +80,7 @@ public class LoadoutPersistence {
             getPrefsNode().put(sanitizedKey, json);
             getPrefsNode().flush();
             return true;
-        } catch (Exception e) {
+        } catch (BackingStoreException | IllegalStateException e) {
             System.err.println("LoadoutPersistence.save failed for key '" + key + "': " + e.getMessage());
             return false;
         }
@@ -104,7 +104,7 @@ public class LoadoutPersistence {
                 return null;
             }
             return LoadoutImporter.fromJson(json);
-        } catch (Exception e) {
+        } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("LoadoutPersistence.load failed for key '" + key + "': " + e.getMessage());
             return null;
         }
@@ -126,7 +126,7 @@ public class LoadoutPersistence {
             getPrefsNode().remove(sanitizedKey);
             getPrefsNode().flush();
             return true;
-        } catch (Exception e) {
+        } catch (BackingStoreException | IllegalStateException e) {
             System.err.println("LoadoutPersistence.delete failed for key '" + key + "': " + e.getMessage());
             return false;
         }
@@ -170,7 +170,7 @@ public class LoadoutPersistence {
             String sanitizedKey = sanitizeKey(key);
             String json = getPrefsNode().get(sanitizedKey, null);
             return json != null && !json.isEmpty();
-        } catch (Exception e) {
+        } catch (IllegalStateException e) {
             System.err.println("LoadoutPersistence.exists failed for key '" + key + "': " + e.getMessage());
             return false;
         }
@@ -194,7 +194,7 @@ public class LoadoutPersistence {
             getPrefsNode().put(defaultKey, json);
             getPrefsNode().flush();
             return true;
-        } catch (Exception e) {
+        } catch (BackingStoreException | IllegalStateException e) {
             System.err.println("LoadoutPersistence.saveDefault failed for script '" + scriptName + "': " + e.getMessage());
             return false;
         }
@@ -218,7 +218,7 @@ public class LoadoutPersistence {
                 return null;
             }
             return LoadoutImporter.fromJson(json);
-        } catch (Exception e) {
+        } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("LoadoutPersistence.loadDefault failed for script '" + scriptName + "': " + e.getMessage());
             return null;
         }
@@ -239,7 +239,7 @@ public class LoadoutPersistence {
         try {
             String json = getPrefsNode().get(defaultKey, null);
             return json != null && !json.isEmpty();
-        } catch (Exception e) {
+        } catch (IllegalStateException e) {
             System.err.println("LoadoutPersistence.hasDefault failed for script '" + scriptName + "': " + e.getMessage());
             return false;
         }
@@ -261,7 +261,7 @@ public class LoadoutPersistence {
             getPrefsNode().remove(defaultKey);
             getPrefsNode().flush();
             return true;
-        } catch (Exception e) {
+        } catch (BackingStoreException | IllegalStateException e) {
             System.err.println("LoadoutPersistence.clearDefault failed for script '" + scriptName + "': " + e.getMessage());
             return false;
         }

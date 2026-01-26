@@ -60,7 +60,7 @@ public final class ItemResolver {
                     // note: multiple IDs may share a name; we keep the first
                     nameToId.putIfAbsent(name.toLowerCase(), id);
                 }
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 // skip invalid IDs
             }
         }

@@ -10,6 +10,7 @@ import com.osmb.api.visual.PixelCluster;
 import com.osmb.api.visual.SearchablePixel;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
+import com.osmb.api.utils.RandomUtils;
 import main.TidalsChompyHunter;
 import utils.DetectedPlayer;
 import utils.Task;
@@ -237,7 +238,7 @@ public class DetectPlayers extends Task {
                 // start persistent area tracking if not already
                 if (areaOccupiedSince == 0) {
                     areaOccupiedSince = System.currentTimeMillis();
-                    crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
+                    crashThresholdMs = RandomUtils.gaussianRandom((int) MIN_THRESHOLD_MS, (int) MAX_THRESHOLD_MS, (int) ((MIN_THRESHOLD_MS + MAX_THRESHOLD_MS) / 2), 1000);
                     script.log(getClass(), "AREA OCCUPIED - player at " + formatPos(singleDot) +
                                " dist=" + (int)distFromUs + " (threshold: " + crashThresholdMs + "ms)");
                 }
@@ -291,7 +292,7 @@ public class DetectPlayers extends Task {
                 // start persistent area tracking if not already
                 if (areaOccupiedSince == 0) {
                     areaOccupiedSince = System.currentTimeMillis();
-                    crashThresholdMs = MIN_THRESHOLD_MS + (long)(Math.random() * (MAX_THRESHOLD_MS - MIN_THRESHOLD_MS));
+                    crashThresholdMs = RandomUtils.gaussianRandom((int) MIN_THRESHOLD_MS, (int) MAX_THRESHOLD_MS, (int) ((MIN_THRESHOLD_MS + MAX_THRESHOLD_MS) / 2), 1000);
                     script.log(getClass(), "AREA OCCUPIED - player at " + formatPos(otherPlayer) + " (threshold: " + crashThresholdMs + "ms)");
                 }
 

@@ -206,7 +206,7 @@ public class ItemSearch extends VBox {
                         allItems.add(new ItemEntry(id, name));
                     }
                 }
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 // skip invalid IDs
             }
         }

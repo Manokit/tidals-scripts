@@ -113,12 +113,7 @@ public class Setup extends Task {
             script.stop();
             return false;
         }
-        
-        // back to inventory
-        task = "Open inventory";
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.003));
-        
+
         task = "Ready";
         script.log(getClass(), "setup done");
         setupDone = true;
