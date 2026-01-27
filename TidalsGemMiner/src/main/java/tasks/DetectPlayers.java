@@ -37,7 +37,8 @@ public class DetectPlayers extends Task {
     public static long crashThresholdMs = 12000;
 
     // self-detection filter - our own dot can appear offset from reported position
-    private static final int SELF_FILTER_DISTANCE = 3;
+    // reduced from 3 to 1.3 - was causing nearby players to be filtered as "us"
+    private static final double SELF_FILTER_DISTANCE = 1.3;
 
     // post-hop grace period - skip detection while OSMB stabilizes position
     private static final long POST_HOP_GRACE_MS = 10000;
