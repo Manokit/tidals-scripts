@@ -11,6 +11,8 @@ import data.Locations.MiningLocation;
 import javafx.scene.Scene;
 import tasks.Bank;
 import tasks.Cut;
+import tasks.DetectPlayers;
+import tasks.HopWorld;
 import tasks.Mine;
 import tasks.Setup;
 import utils.Task;
@@ -55,6 +57,7 @@ public class TidalsGemMiner extends Script {
     public static long startTime = 0;
     public static MiningLocation selectedLocation = Locations.UPPER;
     public static boolean cuttingEnabled = false;
+    public static boolean antiCrashEnabled = true;  // hop on player detection
     public static int gemsMined = 0;
     public static int gemsCut = 0;
 
@@ -112,6 +115,7 @@ public class TidalsGemMiner extends Script {
     // ui and tasks
     private ScriptUI scriptUI;
     private List<Task> tasks;
+    private DetectPlayers detectPlayers;
 
     // paint
     private Image logoImage = null;
@@ -153,12 +157,17 @@ public class TidalsGemMiner extends Script {
         log("INFO", "Location: " + selectedLocation.displayName());
         log("INFO", "Cutting: " + (cuttingEnabled ? "enabled" : "disabled"));
 
-        // initialize tasks (order matters: Setup -> Cut -> Bank -> Mine)
+        // initialize tasks (order matters: HopWorld -> Setup -> Cut -> Bank -> Mine)
+        // HopWorld is highest priority to handle crash detection immediately
         tasks = new ArrayList<>();
+        tasks.add(new HopWorld(this));  // highest priority - handles world hops
         tasks.add(new Setup(this));
         tasks.add(new Cut(this));
         tasks.add(new Bank(this));
         tasks.add(new Mine(this));
+
+        // initialize player detection (not a task - runs every poll cycle)
+        detectPlayers = new DetectPlayers(this);
 
         log("INFO", "Tasks initialized: " + tasks.size());
 
@@ -189,6 +198,11 @@ public class TidalsGemMiner extends Script {
         if (xpTracking != null) {
             miningXpGained = (int) xpTracking.getMiningXpGained();
             craftingXpGained = (int) xpTracking.getCraftingXpGained();
+        }
+
+        // run player detection when setup complete and anti-crash enabled
+        if (setupDone && antiCrashEnabled && detectPlayers != null) {
+            detectPlayers.runDetection();
         }
 
         // stats reporting
