@@ -118,7 +118,11 @@ public class Mine extends Task {
     private long lastChatMatchMs = 0;
     private int lastChatSnapshotHash = 0;
 
+    // optimization: skip idle check after successful mine (player just stopped animating)
+    private boolean justMinedSuccessfully = false;
+
     private record RockCandidate(WorldPosition position, Polygon tileCube, double distance) {}
+    private record PositionDistance(WorldPosition position, double distance) {}
     private record MiningResult(boolean mined, boolean noOre, boolean respawnSeen, boolean swingPickSeen) {}
     private record ChatSignal(boolean mined, boolean noOre, boolean swingPick, boolean clueScroll, String line) {}
 
@@ -173,7 +177,10 @@ public class Mine extends Task {
         if (tileTarget != null) {
             task = "Mining";
             logVerbose("tile target: pos=" + tileTarget.position() + ", dist=" + String.format("%.2f", tileTarget.distance()));
-            if (!waitForPlayerIdle()) {
+            if (justMinedSuccessfully) {
+                logVerbose("skipping idle wait - just mined successfully");
+                justMinedSuccessfully = false;
+            } else if (!waitForPlayerIdle()) {
                 logVerbose("idle wait failed before tile target");
                 return false;
             }
@@ -280,10 +287,13 @@ public class Mine extends Task {
                 script.log(getClass(), "mined gem rock, total: " + gemsMined);
 
                 // humanized delay before clicking next rock
-                // gaussian distribution: mean=350ms, stdDev=200ms, range 80-1200ms
-                // wider stdDev gives occasional longer pauses for more human-like behavior
-                int delay = RandomUtils.gaussianRandom(80, 1200, 350, 200);
+                // weighted random skews toward faster delays (weight 0.3) for better gems/hr
+                // still has occasional longer pauses for human-like behavior
+                int delay = RandomUtils.weightedRandom(80, 1200, 0.3);
                 script.pollFramesUntil(() -> false, delay);
+
+                // flag to skip redundant idle check on next iteration (player just stopped animating)
+                justMinedSuccessfully = true;
             }
 
             return false;
@@ -382,7 +392,10 @@ public class Mine extends Task {
         }
 
         // wait for player to be idle before interacting
-        if (!waitForPlayerIdle()) {
+        if (justMinedSuccessfully) {
+            logVerbose("skipping idle wait (ObjectManager) - just mined successfully");
+            justMinedSuccessfully = false;
+        } else if (!waitForPlayerIdle()) {
             return false;
         }
 
@@ -411,6 +424,10 @@ public class Mine extends Task {
                 + ", respawnSeen=" + miningResult.respawnSeen() + ", swingPickSeen=" + miningResult.swingPickSeen());
 
         if (miningResult.noOre()) {
+            // always mark on cooldown so we don't retry the same rock
+            if (rockPos != null) {
+                markRockAsMined(rockPos);
+            }
             if (isUpperMine) {
                 script.log(getClass(), "rock was empty (no ore message), marking position: " + rockPos);
                 if (rockPos != null) {
@@ -418,7 +435,7 @@ public class Mine extends Task {
                     script.log(getClass(), "empty positions now: " + emptyRockPositions.size());
                 }
             } else {
-                script.log(getClass(), "rock was empty (no ore message), trying another rock");
+                script.log(getClass(), "rock was empty, on cooldown for " + (ROCK_COOLDOWN_MS / 1000) + "s");
             }
             consecutiveNoOreCount++;
             script.log(getClass(), "consecutive no ore count: " + consecutiveNoOreCount);
@@ -485,6 +502,9 @@ public class Mine extends Task {
                 TidalsGemMiner.xpTracking.addMiningXp(65.0);
             }
             script.log(getClass(), "mined gem rock, total: " + gemsMined);
+
+            // flag to skip redundant idle check on next iteration (player just stopped animating)
+            justMinedSuccessfully = true;
         }
 
         return false; // re-evaluate state
@@ -545,7 +565,6 @@ public class Mine extends Task {
             return null;
         }
 
-        // use hardcoded positions for underground, dynamic for upper
         Set<WorldPosition> rockPositions = isUpperMine ? knownRockPositions : UNDERGROUND_ROCK_POSITIONS;
         if (rockPositions.isEmpty()) {
             logVerbose("tile target: no known positions");
@@ -560,25 +579,20 @@ public class Mine extends Task {
                 + " known=" + rockPositions.size() + ", onCooldown=" + recentlyMinedRocks.size()
                 + " emptyMarked=" + emptyRockPositions.size());
 
-        List<RockCandidate> candidates = new ArrayList<>();
+        // PHASE 1: Cheap filtering - collect positions with distances
+        List<PositionDistance> cheapFiltered = new ArrayList<>();
         int skippedPlane = 0, skippedCooldown = 0, skippedEmpty = 0, skippedArea = 0;
-        int skippedNotVisible = 0, skippedNoColor = 0, skippedRespawn = 0;
 
         for (WorldPosition pos : rockPositions) {
             if (pos == null || pos.getPlane() != myPos.getPlane()) {
                 skippedPlane++;
                 continue;
             }
-
-            // skip rocks on cooldown (recently mined)
             if (recentlyMinedRocks.containsKey(pos)) {
-                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": on cooldown");
                 skippedCooldown++;
                 continue;
             }
-
             if (isUpperMine && isPositionMarkedEmpty(pos)) {
-                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": marked empty");
                 skippedEmpty++;
                 continue;
             }
@@ -586,67 +600,73 @@ public class Mine extends Task {
                 skippedArea++;
                 continue;
             }
+            cheapFiltered.add(new PositionDistance(pos, pos.distanceTo(myPos)));
+        }
+
+        logVerbose("cheap filter: passed=" + cheapFiltered.size()
+                + " skipped[plane=" + skippedPlane + " cooldown=" + skippedCooldown
+                + " empty=" + skippedEmpty + " area=" + skippedArea + "]");
+
+        if (cheapFiltered.isEmpty()) {
+            return null;
+        }
+
+        // PHASE 2: Sort by distance
+        cheapFiltered.sort(Comparator.comparingDouble(PositionDistance::distance));
+
+        // PHASE 3: Check rocks in batches - start with 2, expand if all fail
+        int initialBatch = Math.min(2, cheapFiltered.size());
+        int maxExpanded = Math.min(6, cheapFiltered.size());  // expand up to 6 total if needed
+        int skippedNotVisible = 0, skippedNoColor = 0, skippedRespawn = 0;
+
+        logVerbose("checking closest " + initialBatch + " rocks for color/respawn (can expand to " + maxExpanded + ")");
+
+        for (int i = 0; i < maxExpanded; i++) {
+            // log when we expand beyond initial batch
+            if (i == initialBatch && i > 0) {
+                logVerbose("expanding search - first " + initialBatch + " failed, checking up to " + maxExpanded);
+            }
+
+            PositionDistance pd = cheapFiltered.get(i);
+            WorldPosition pos = pd.position();
 
             Polygon tileCube = script.getSceneProjector().getTileCube(pos, TILE_CUBE_HEIGHT, true);
             if (tileCube == null || tileCube.numVertices() == 0) {
-                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": not visible on screen");
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": not visible");
                 skippedNotVisible++;
                 continue;
             }
 
             int colorMatches = countGemColorPixels(tileCube);
             if (colorMatches == 0) {
-                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": no gem color (0 pixels)");
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": no gem color");
                 skippedNoColor++;
                 continue;
             }
 
-            // check for visible respawn circle (rock is depleted but color check passed)
             RectangleArea respawnCheckArea = new RectangleArea(pos.getX(), pos.getY(), 1, 1, pos.getPlane());
             PixelAnalyzer.RespawnCircle respawnCircle = script.getPixelAnalyzer().getRespawnCircle(
                     respawnCheckArea,
                     PixelAnalyzer.RespawnCircleDrawType.TOP_CENTER,
-                    20,
-                    6
+                    20, 6
             );
             if (respawnCircle != null) {
-                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": respawn circle visible");
+                logVerbose("  skip " + pos.getX() + "," + pos.getY() + ": respawn circle");
                 skippedRespawn++;
                 continue;
             }
 
-            double dist = pos.distanceTo(myPos);
-            logVerbose("  valid " + pos.getX() + "," + pos.getY() + ": dist=" + String.format("%.1f", dist)
+            // Found valid rock
+            logVerbose("  valid " + pos.getX() + "," + pos.getY() + ": dist=" + String.format("%.1f", pd.distance())
                     + " colorPixels=" + colorMatches);
-            candidates.add(new RockCandidate(pos, tileCube, dist));
+            script.log(getClass(), "selected rock: " + pos.getX() + "," + pos.getY()
+                    + " dist=" + String.format("%.1f", pd.distance()));
+            return new RockCandidate(pos, tileCube, pd.distance());
         }
 
-        logVerbose("tile target scan summary: valid=" + candidates.size()
-                + " skipped[cooldown=" + skippedCooldown + " empty=" + skippedEmpty
-                + " notVisible=" + skippedNotVisible + " noColor=" + skippedNoColor
-                + " respawn=" + skippedRespawn + " area=" + skippedArea + "]");
-
-        if (candidates.isEmpty()) {
-            logVerbose("tile target scan: no candidates after color check");
-            return null;
-        }
-
-        candidates.sort(Comparator.comparingDouble(RockCandidate::distance));
-
-        // log top 3 candidates with distances for debugging
-        StringBuilder sb = new StringBuilder("tile target scan: candidates=" + candidates.size() + " [");
-        for (int i = 0; i < Math.min(3, candidates.size()); i++) {
-            RockCandidate c = candidates.get(i);
-            sb.append(String.format("(%d,%d dist=%.1f)", c.position().getX(), c.position().getY(), c.distance()));
-            if (i < Math.min(3, candidates.size()) - 1) sb.append(", ");
-        }
-        sb.append("]");
-        logVerbose(sb.toString());
-
-        RockCandidate selected = candidates.get(0);
-        script.log(getClass(), "selected rock: " + selected.position().getX() + "," + selected.position().getY()
-                + " dist=" + String.format("%.1f", selected.distance()));
-        return selected;
+        logVerbose("all " + maxExpanded + " checked failed [notVisible=" + skippedNotVisible
+                + " noColor=" + skippedNoColor + " respawn=" + skippedRespawn + "]");
+        return null;  // fall back to ObjectManager
     }
 
     private boolean hasGemColorInCube(Polygon tileCube) {

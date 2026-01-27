@@ -50,8 +50,9 @@ public class HopWorld extends Task {
         // set guard flag immediately
         isHopping = true;
 
-        // clear crash flag immediately to prevent re-entry
-        DetectPlayers.crashDetected = false;
+        // CRITICAL: reset tracking state IMMEDIATELY before hop
+        // this clears the timer so it doesn't persist to the new world
+        DetectPlayers.resetTrackingState();
 
         // set hop timestamp for grace period
         DetectPlayers.lastHopTimestamp = System.currentTimeMillis();
