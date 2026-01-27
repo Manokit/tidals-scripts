@@ -28,13 +28,13 @@ public class DetectPlayers extends Task {
     private static final RectangleArea MINING_AREA = new RectangleArea(2825, 9377, 26, 24, 0);
 
     // zone timeout thresholds
-    private static final long EXIT_ZONE_MIN_MS = 10000;   // 10s min for ladder/deposit zones
-    private static final long EXIT_ZONE_MAX_MS = 15000;   // 15s max for ladder/deposit zones
-    private static final long MINING_ZONE_MIN_MS = 6000;  // 6s min for mining area
-    private static final long MINING_ZONE_MAX_MS = 10000; // 10s max for mining area
+    private static final long EXIT_ZONE_MIN_MS = 15000;   // 15s min for ladder/deposit zones
+    private static final long EXIT_ZONE_MAX_MS = 25000;   // 25s max for ladder/deposit zones
+    private static final long MINING_ZONE_MIN_MS = 10000; // 10s min for mining area
+    private static final long MINING_ZONE_MAX_MS = 16000; // 16s max for mining area
 
     // current crash threshold (randomized per detection start)
-    public static long crashThresholdMs = 8000;
+    public static long crashThresholdMs = 12000;
 
     // self-detection filter - our own dot can appear offset from reported position
     private static final int SELF_FILTER_DISTANCE = 3;

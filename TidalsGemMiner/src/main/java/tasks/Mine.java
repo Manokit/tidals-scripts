@@ -308,6 +308,8 @@ public class Mine extends Task {
                 obj.getName().equalsIgnoreCase(TARGET_OBJECT_NAME) &&
                 obj.getActions() != null &&
                 Arrays.asList(obj.getActions()).contains("Mine") &&
+                // respect cooldown map - prevents re-selecting recently mined/depleted rocks
+                !recentlyMinedRocks.containsKey(obj.getWorldPosition()) &&
                 // for upper mine, also filter out rocks we know are empty (distance-based check)
                 (!isUpperMine || !isPositionMarkedEmpty(obj.getWorldPosition()))
         );
@@ -318,7 +320,7 @@ public class Mine extends Task {
             if (!respawnCirclePositions.isEmpty()) {
                 gemRocks.removeIf(obj -> respawnCirclePositions.contains(obj.getWorldPosition()));
             }
-            logVerbose("object manager rocks=" + gemRocks.size() + ", respawnFiltered=" + respawnCirclePositions.size());
+            logVerbose("object manager rocks=" + gemRocks.size() + ", respawnFiltered=" + respawnCirclePositions.size() + ", cooldown=" + recentlyMinedRocks.size());
         }
 
         // if no rocks from ObjectManager, try color detection as fallback
@@ -616,8 +618,14 @@ public class Mine extends Task {
 
         // PHASE 3: Check rocks in batches - start with 2, expand if all fail
         int initialBatch = Math.min(2, cheapFiltered.size());
-        int maxExpanded = Math.min(6, cheapFiltered.size());  // expand up to 6 total if needed
+        // when stuck (3+ consecutive no-ore), expand search to check more distant rocks
+        int baseMax = consecutiveNoOreCount >= 3 ? 12 : 6;
+        int maxExpanded = Math.min(baseMax, cheapFiltered.size());
         int skippedNotVisible = 0, skippedNoColor = 0, skippedRespawn = 0;
+
+        if (consecutiveNoOreCount >= 3) {
+            logVerbose("expanded search active (consecutive no-ore: " + consecutiveNoOreCount + ")");
+        }
 
         logVerbose("checking closest " + initialBatch + " rocks for color/respawn (can expand to " + maxExpanded + ")");
 

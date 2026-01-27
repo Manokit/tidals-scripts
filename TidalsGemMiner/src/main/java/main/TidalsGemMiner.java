@@ -48,7 +48,7 @@ public class TidalsGemMiner extends Script {
     // ═══════════════════════════════════════════════════════════════════════════
     // DEBUG MODE - set to true for verbose logging (use for debug builds)
     // ═══════════════════════════════════════════════════════════════════════════
-    public static final boolean VERBOSE_LOGGING = false;
+    public static final boolean VERBOSE_LOGGING = true;
     // ═══════════════════════════════════════════════════════════════════════════
 
     // state fields
