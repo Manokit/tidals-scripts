@@ -60,6 +60,23 @@ public class InflateToads extends Task {
         super(script);
     }
 
+    /**
+     * check if verbose logging is enabled
+     */
+    private boolean isVerbose() {
+        return TidalsChompyHunter.VERBOSE_LOGGING;
+    }
+
+    /**
+     * log only when verbose mode is enabled - use for detailed debug output
+     */
+    private void logVerbose(String message) {
+        if (!isVerbose()) {
+            return;
+        }
+        script.log(getClass(), "[DEBUG] " + message);
+    }
+
     @Override
     public boolean activate() {
         // CRITICAL: don't activate if crash detected - let HopWorld handle it
@@ -217,15 +234,27 @@ public class InflateToads extends Task {
                 return false;
             }
 
+            // DEBUG: log all candidate click points
+            if (isVerbose()) {
+                WorldPosition playerPos = script.getWorldPosition();
+                logVerbose("player(" + (playerPos != null ? playerPos.getX() + "," + playerPos.getY() : "null") +
+                        ") " + clickPoints.size() + " candidates: " + clickPoints);
+            }
+
             // target first/nearest toad from fresh detection
             Point clickPoint = clickPoints.get(0);
-            script.log(getClass(), "inflate attempt " + attempt + "/" + maxTotalAttempts + " at " + clickPoint);
+            script.log(getClass(),"inflate attempt " + attempt + "/" + maxTotalAttempts + " at " + clickPoint);
 
             // tap "Inflate" on fresh toad position (exact point for small sprites)
             boolean success = script.getFinger().tap(clickPoint, "Inflate");
 
+            // DEBUG: log tap result
+            if (isVerbose()) {
+                logVerbose("tap " + (success ? "OK" : "FAIL") + " at " + clickPoint);
+            }
+
             if (success) {
-                script.log(getClass(), "inflate action started at " + clickPoint);
+                script.log(getClass(),"inflate action started at " + clickPoint);
 
                 // wait for toad to appear in inventory (handles walking + inflate animation)
                 boolean gotToad = script.pollFramesUntil(() -> {
@@ -290,7 +319,7 @@ public class InflateToads extends Task {
             return clickPoints;
         }
 
-        script.log(getClass(), "found " + clusters.size() + " swamp toad sprites, " + sortedNpcs.size() + " NPCs nearby");
+        script.log(getClass(),"found " + clusters.size() + " swamp toad sprites, " + sortedNpcs.size() + " NPCs nearby");
 
         // match NPCs to clusters by screen proximity (closest NPCs first)
         for (WorldPosition npcPos : sortedNpcs) {

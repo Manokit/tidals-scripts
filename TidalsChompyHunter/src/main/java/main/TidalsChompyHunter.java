@@ -48,13 +48,19 @@ import java.util.UUID;
         name = "TidalsChompyHunter",
         description = "Hunts chompy birds for Western Provinces Diary",
         skillCategory = SkillCategory.COMBAT,
-        version = 1.4,
+        version = 1.5,
         author = "Tidaleus"
 )
 public class TidalsChompyHunter extends Script {
-    public static final String SCRIPT_VERSION = "1.4";
+    public static final String SCRIPT_VERSION = "1.5";
     private static final String SCRIPT_NAME = "ChompyHunter";
     private static final String SESSION_ID = UUID.randomUUID().toString();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DEBUG MODE - set to true for verbose logging (use for debug builds)
+    // ═══════════════════════════════════════════════════════════════════════════
+    public static final boolean VERBOSE_LOGGING = true;
+    // ═══════════════════════════════════════════════════════════════════════════
 
     // stats reporting
     private static long lastStatsSent = 0;
@@ -93,6 +99,7 @@ public class TidalsChompyHunter extends Script {
         4798,  // ADAMANT_BRUTAL
         4803   // RUNE_BRUTAL
     };
+
 
     // logical ground toad counter (tracks drops/kills instead of unreliable sprite detection)
     public static int groundToadCount = 0;
@@ -514,6 +521,13 @@ public class TidalsChompyHunter extends Script {
         List<String> currentLines = chatResult.asList();
         List<String> newLines = getNewLines(currentLines, previousChatLines);
 
+        // DEBUG: log ALL new chat lines
+        if (VERBOSE_LOGGING && !newLines.isEmpty()) {
+            for (String line : newLines) {
+                log(getClass(), "[DEBUG] chat: \"" + line + "\"");
+            }
+        }
+
         for (String line : newLines) {
             if (line.contains("scratch a notch")) {
                 log(getClass(), "kill detected via game message");
@@ -610,6 +624,7 @@ public class TidalsChompyHunter extends Script {
      */
     private void updateAmmoFromOverlay() {
         // initialize overlay if we have arrow ID but no overlay yet
+        // each arrow type has its own buff overlay ID matching its item ID
         if (ammoOverlay == null && equippedArrowId > 0) {
             ammoOverlay = new BuffOverlay(this, equippedArrowId);
             log(getClass(), "ammo overlay initialized for item ID: " + equippedArrowId);
@@ -647,6 +662,7 @@ public class TidalsChompyHunter extends Script {
             // overlay not visible - start tracking missing time
             if (ammoOverlayMissingStart == 0) {
                 ammoOverlayMissingStart = System.currentTimeMillis();
+                log(getClass(), "[debug] overlay not visible for equipped ID: " + equippedArrowId);
             }
 
             // if missing for 10+ seconds, flag for verification (don't assume out of ammo)

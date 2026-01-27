@@ -61,6 +61,23 @@ public class DropToads extends Task {
         super(script);
     }
 
+    /**
+     * check if verbose logging is enabled
+     */
+    private boolean isVerbose() {
+        return TidalsChompyHunter.VERBOSE_LOGGING;
+    }
+
+    /**
+     * log only when verbose mode is enabled - use for detailed debug output
+     */
+    private void logVerbose(String message) {
+        if (!isVerbose()) {
+            return;
+        }
+        script.log(getClass(), "[DEBUG] " + message);
+    }
+
     @Override
     public boolean activate() {
         // CRITICAL: don't activate if crash detected - let HopWorld handle it
@@ -122,6 +139,15 @@ public class DropToads extends Task {
         int toDrop = Math.min(inventoryToads, Math.max(0, TARGET_GROUND_TOADS - groundToads));
 
         script.log(getClass(), "ground: " + groundToads + ", inventory: " + inventoryToads + ", dropping: " + toDrop);
+
+        // DEBUG: dump current toad tracking state
+        if (isVerbose()) {
+            StringBuilder sb = new StringBuilder("tracked toads: ");
+            for (WorldPosition pos : TidalsChompyHunter.droppedToadPositions.keySet()) {
+                sb.append(pos.getX()).append(",").append(pos.getY()).append(" ");
+            }
+            logVerbose(sb.toString().trim());
+        }
 
         // drop all toads needed, handling collisions
         int dropped = 0;
@@ -216,7 +242,7 @@ public class DropToads extends Task {
             return false;
         }
 
-        script.log(getClass(), "current position: " + playerPos.getX() + "," + playerPos.getY());
+        script.log(getClass(),"current position: " + playerPos.getX() + "," + playerPos.getY());
 
         // check if already in drop area
         if (TOAD_DROP_AREA.contains(playerPos)) {
@@ -243,7 +269,7 @@ public class DropToads extends Task {
 
         // log final position
         WorldPosition finalPos = script.getWorldPosition();
-        script.log(getClass(), "walk complete, final position: " +
+        script.log(getClass(),"walk complete, final position: " +
                 (finalPos != null ? finalPos.getX() + "," + finalPos.getY() : "null") +
                 " (target was " + target.getX() + "," + target.getY() + ")");
 
@@ -310,7 +336,7 @@ public class DropToads extends Task {
 
         // log final position
         WorldPosition finalPos = script.getWorldPosition();
-        script.log(getClass(), "step complete, now at: " +
+        script.log(getClass(),"step complete, now at: " +
                 (finalPos != null ? finalPos.getX() + "," + finalPos.getY() : "null"));
     }
 
@@ -341,13 +367,13 @@ public class DropToads extends Task {
             script.log(getClass(), "PRE-DROP position null - aborting");
             return false;
         }
-        script.log(getClass(), "PRE-DROP position (toad will land here): " + preDropPos.getX() + "," + preDropPos.getY());
+        script.log(getClass(),"PRE-DROP position (toad will land here): " + preDropPos.getX() + "," + preDropPos.getY());
 
         boolean dropped = item.interact("Drop");
         if (dropped) {
             // toad position is WHERE WE WERE when we dropped - capture it now before any movement
             lastDropPosition = new WorldPosition(preDropPos.getX(), preDropPos.getY(), 0);
-            script.log(getClass(), "TRACKED position (pre-drop capture): " + lastDropPosition.getX() + "," + lastDropPosition.getY());
+            script.log(getClass(),"TRACKED position (pre-drop capture): " + lastDropPosition.getX() + "," + lastDropPosition.getY());
 
             // wait for drop animation + auto-walk to complete before returning
             // this ensures player has moved away so toad is visible for verification
@@ -357,7 +383,7 @@ public class DropToads extends Task {
             waitForPlayerToStop(5, 3000);
 
             WorldPosition postDropPos = script.getWorldPosition();
-            script.log(getClass(), "POST-DROP position (player moved to): " + (postDropPos != null ? postDropPos.getX() + "," + postDropPos.getY() : "null"));
+            script.log(getClass(),"POST-DROP position (player moved to): " + (postDropPos != null ? postDropPos.getX() + "," + postDropPos.getY() : "null"));
 
             return true;
         }
@@ -425,7 +451,7 @@ public class DropToads extends Task {
             return null;
         }
 
-        script.log(getClass(), "searching for toad around " + searchCenter.getX() + "," + searchCenter.getY());
+        script.log(getClass(),"searching for toad around " + searchCenter.getX() + "," + searchCenter.getY());
 
         // search a 5x5 area centered on drop position
         List<WorldPosition> tilesToCheck = new ArrayList<>();
@@ -457,7 +483,7 @@ public class DropToads extends Task {
 
             PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(tilePoly, query);
             if (result != null && !result.getClusters().isEmpty()) {
-                script.log(getClass(), "found untracked toad at " + tile.getX() + "," + tile.getY() +
+                script.log(getClass(),"found untracked toad at " + tile.getX() + "," + tile.getY() +
                         " (cluster size: " + result.getClusters().get(0).getPoints().size() + ")");
                 return tile;
             }

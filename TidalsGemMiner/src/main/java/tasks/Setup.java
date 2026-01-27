@@ -55,53 +55,60 @@ public class Setup extends Task {
             script.log(getClass(), "world clear - continuing setup");
         }
 
-        // get mining level and initialize XP tracker
-        SkillsTabComponent.SkillLevel miningSkillLevel = script.getWidgetManager()
-                .getSkillTab()
-                .getSkillLevel(SkillType.MINING);
-
-        if (miningSkillLevel == null) {
-            script.log(getClass(), "Failed to get Mining skill level");
-            return false;
-        }
-
-        int miningLevel = miningSkillLevel.getLevel();
-        startMiningLevel = miningLevel;
-        currentMiningLevel = miningLevel;
-        script.log(getClass(), "Mining level: " + miningLevel);
-
-        // initialize mining tracker
-        int actualMiningXp = XPTracking.tryGetActualXp(script, SkillType.MINING);
-        if (actualMiningXp > 0) {
-            xpTracking.initMiningTracker(miningLevel, actualMiningXp);
-        } else {
-            xpTracking.initMiningTracker(miningLevel);
-        }
-
-        if (cuttingEnabled) {
-            // get crafting level and initialize XP tracker
-            SkillsTabComponent.SkillLevel craftingSkillLevel = script.getWidgetManager()
+        // only initialize XP trackers once per session (preserve XP across world hops)
+        if (!xpTracking.isInitialized()) {
+            // get mining level and initialize XP tracker
+            SkillsTabComponent.SkillLevel miningSkillLevel = script.getWidgetManager()
                     .getSkillTab()
-                    .getSkillLevel(SkillType.CRAFTING);
+                    .getSkillLevel(SkillType.MINING);
 
-            if (craftingSkillLevel == null) {
-                script.log(getClass(), "Failed to get Crafting skill level");
+            if (miningSkillLevel == null) {
+                script.log(getClass(), "Failed to get Mining skill level");
                 return false;
             }
 
-            int craftingLevel = craftingSkillLevel.getLevel();
-            startCraftingLevel = craftingLevel;
-            currentCraftingLevel = craftingLevel;
-            script.log(getClass(), "Crafting level: " + craftingLevel);
+            int miningLevel = miningSkillLevel.getLevel();
+            startMiningLevel = miningLevel;
+            currentMiningLevel = miningLevel;
+            script.log(getClass(), "Mining level: " + miningLevel);
 
-            // initialize crafting tracker
-            int actualCraftingXp = XPTracking.tryGetActualXp(script, SkillType.CRAFTING);
-            if (actualCraftingXp > 0) {
-                xpTracking.initCraftingTracker(craftingLevel, actualCraftingXp);
+            // initialize mining tracker
+            int actualMiningXp = XPTracking.tryGetActualXp(script, SkillType.MINING);
+            if (actualMiningXp > 0) {
+                xpTracking.initMiningTracker(miningLevel, actualMiningXp);
             } else {
-                xpTracking.initCraftingTracker(craftingLevel);
+                xpTracking.initMiningTracker(miningLevel);
             }
 
+            if (cuttingEnabled) {
+                // get crafting level and initialize XP tracker
+                SkillsTabComponent.SkillLevel craftingSkillLevel = script.getWidgetManager()
+                        .getSkillTab()
+                        .getSkillLevel(SkillType.CRAFTING);
+
+                if (craftingSkillLevel == null) {
+                    script.log(getClass(), "Failed to get Crafting skill level");
+                    return false;
+                }
+
+                int craftingLevel = craftingSkillLevel.getLevel();
+                startCraftingLevel = craftingLevel;
+                currentCraftingLevel = craftingLevel;
+                script.log(getClass(), "Crafting level: " + craftingLevel);
+
+                // initialize crafting tracker
+                int actualCraftingXp = XPTracking.tryGetActualXp(script, SkillType.CRAFTING);
+                if (actualCraftingXp > 0) {
+                    xpTracking.initCraftingTracker(craftingLevel, actualCraftingXp);
+                } else {
+                    xpTracking.initCraftingTracker(craftingLevel);
+                }
+            }
+        } else {
+            script.log(getClass(), "XP trackers already initialized - preserving session XP");
+        }
+
+        if (cuttingEnabled) {
             // open inventory tab to check for chisel
             boolean inventoryOpen = TabUtils.openAndVerifyInventory(script, 3000);
             if (!inventoryOpen) {
