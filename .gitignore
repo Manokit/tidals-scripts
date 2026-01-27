@@ -39,3 +39,7 @@ build.gradle.planning/
 TidalsLocalCoordTest_PRD.md
 
 /TidalsDelayTester/*
+
+# ProGuard build artifacts
+**/proguard-usage.txt
+**/*-fat.jar

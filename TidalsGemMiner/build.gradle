@@ -27,7 +27,6 @@ compileJava {
 }
 
 jar {
-    archiveFileName = "${project.name}.jar"
     destinationDirectory = file("${projectDir}/jar")
 
     // prevent duplicate file errors when bundling resources
