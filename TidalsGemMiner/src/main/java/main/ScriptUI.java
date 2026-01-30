@@ -212,7 +212,7 @@ public class ScriptUI {
         layout.setPadding(new Insets(15));
         layout.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
-        Scene scene = new Scene(layout, 340, 440);
+        Scene scene = new Scene(layout, 340, 520);
         scene.setFill(Color.web(BG_COLOR));
         return scene;
     }
