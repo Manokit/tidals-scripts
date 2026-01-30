@@ -83,7 +83,7 @@ public class SwitchToCannonballStall extends Task {
             return false;
         }
 
-        boolean tapped = script.getFinger().tap(stallPoly);
+        boolean tapped = script.getFinger().tapGameScreen(stallPoly);
         if (tapped) {
             script.log("SWITCH", "Left-clicked Cannonball stall!");
             return true;

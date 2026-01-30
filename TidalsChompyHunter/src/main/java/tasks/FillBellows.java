@@ -16,11 +16,16 @@ import java.util.Set;
 
 public class FillBellows extends Task {
 
+    // state machine for poll-based execution
+    private enum State {
+        FIND_BUBBLE,
+        WALK_TO_BUBBLE,
+        INTERACT_WITH_BUBBLE,
+        WAIT_FOR_FILL,
+        RETURN_TO_AREA
+    }
+
     // swamp bubble locations with their accessible stand positions
-    // bubble at 2393, 3049 - can stand at x+1 or x-1
-    // bubble at 2395, 3046 - can stand at x-1
-    // bubble at 2396, 3047 - can stand at y+1
-    // bubble at 2392, 3053 - can stand at x-1
     private static final List<BubbleLocation> BUBBLES = List.of(
         new BubbleLocation(new WorldPosition(2393, 3049, 0), new WorldPosition(2394, 3049, 0)),  // x+1
         new BubbleLocation(new WorldPosition(2393, 3049, 0), new WorldPosition(2392, 3049, 0)),  // x-1
@@ -29,15 +34,11 @@ public class FillBellows extends Task {
         new BubbleLocation(new WorldPosition(2392, 3053, 0), new WorldPosition(2391, 3053, 0))   // x-1
     );
 
-    // bellows item id - empty state only (we wait until none of these remain)
     private static final int OGRE_BELLOWS_EMPTY = 2871;
-
-    // charged bellows ids (for activation check)
     private static final int OGRE_BELLOWS_3 = 2872;
     private static final int OGRE_BELLOWS_2 = 2873;
     private static final int OGRE_BELLOWS_1 = 2874;
 
-    // toad drop area - return here after filling bellows
     private static final PolyArea TOAD_DROP_AREA = new PolyArea(List.of(
         new WorldPosition(2391, 3044, 0),
         new WorldPosition(2389, 3043, 0),
@@ -60,14 +61,30 @@ public class FillBellows extends Task {
 
     private static final int TILE_CUBE_HEIGHT = 40;
 
+    // state tracking across polls
+    private State state = State.FIND_BUBBLE;
+    private List<BubbleLocation> sortedBubbles;
+    private int bubbleIndex = 0;
+
+    // keeps FillBellows active across multiple suck cycles until all bellows are full
+    private boolean fillingInProgress = false;
+
     public FillBellows(Script script) {
         super(script);
     }
 
+    private void resetState() {
+        state = State.FIND_BUBBLE;
+        sortedBubbles = null;
+        bubbleIndex = 0;
+        fillingInProgress = false;
+        fillWaitPolls = 0;
+    }
+
     @Override
     public boolean activate() {
-        // CRITICAL: don't activate if crash detected - let HopWorld handle it
         if (DetectPlayers.crashDetected) {
+            resetState();
             return false;
         }
 
@@ -76,149 +93,192 @@ public class FillBellows extends Task {
         }
 
         if (AttackChompy.inCombat) {
+            // don't activate during combat, but keep fillingInProgress
+            // so we resume filling after the chompy is dealt with
             return false;
         }
 
-        // trigger if bellows empty detected via chat message
+        // stay active while mid-fill cycle (multiple sucks needed)
+        if (fillingInProgress) {
+            return true;
+        }
+
         if (TidalsChompyHunter.bellowsEmpty) {
             return true;
         }
 
-        // check if all bellows are empty
         return allBellowsEmpty();
     }
 
     @Override
     public boolean execute() {
-        // CRITICAL: abort immediately if crash detected
         if (DetectPlayers.crashDetected) {
             script.log(getClass(), "ABORTING - crash detected, yielding to HopWorld");
+            resetState();
             return false;
         }
 
         TidalsChompyHunter.task = "filling bellows";
-        script.log(getClass(), "bellows empty, finding swamp bubble...");
 
-        // get bubbles sorted by distance (nearest first)
-        List<BubbleLocation> sortedBubbles = getBubblesByDistance();
-
-        // try each bubble location until one works
-        for (int i = 0; i < sortedBubbles.size(); i++) {
-            // CRITICAL: abort if crash detected
-            if (DetectPlayers.crashDetected) {
-                script.log(getClass(), "crash detected - stopping bellows fill, yielding to HopWorld");
+        switch (state) {
+            case FIND_BUBBLE:
+                return handleFindBubble();
+            case WALK_TO_BUBBLE:
+                return handleWalkToBubble();
+            case INTERACT_WITH_BUBBLE:
+                return handleInteract();
+            case WAIT_FOR_FILL:
+                return handleWaitForFill();
+            case RETURN_TO_AREA:
+                return handleReturnToArea();
+            default:
+                resetState();
                 return false;
-            }
-            BubbleLocation bubble = sortedBubbles.get(i);
-
-            script.log(getClass(), "trying bubble " + (i + 1) + "/" + sortedBubbles.size() +
-                " at " + bubble.bubblePos.getX() + "," + bubble.bubblePos.getY());
-
-            // walk to stand position
-            if (!walkToStandPosition(bubble.standPos)) {
-                script.log(getClass(), "failed to reach stand position, trying next bubble");
-                continue;
-            }
-
-            // check crash AFTER walk (walk can take time)
-            if (DetectPlayers.crashDetected) {
-                script.log(getClass(), "crash detected after walk - yielding to HopWorld");
-                return false;
-            }
-
-            // try to suck bubble with RetryUtils (10 attempts, with crash break condition)
-            Polygon tilePoly = script.getSceneProjector().getTileCube(bubble.bubblePos, TILE_CUBE_HEIGHT);
-            if (tilePoly == null) {
-                script.log(getClass(), "bubble tile not visible, trying next bubble");
-                continue;
-            }
-
-            // use break condition to abort retry loop immediately if crash detected
-            boolean sucked = RetryUtils.tap(script, tilePoly, "Suck", "suck swamp bubble",
-                    () -> DetectPlayers.crashDetected);
-
-            // check crash after RetryUtils returns (in case it triggered the break)
-            if (DetectPlayers.crashDetected) {
-                script.log(getClass(), "crash detected - yielding to HopWorld");
-                return false;
-            }
-
-            if (!sucked) {
-                script.log(getClass(), "failed to suck bubble, trying next location");
-                continue;
-            }
-
-            // wait for player to walk to bubble and start animation
-            script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1200, 1800, 1500, 150));
-
-            // success - wait for bellows to fill
-            return waitForBellowsToFill();
         }
-
-        // all bubbles failed
-        script.log(getClass(), "all bubble locations failed");
-        return false;
     }
 
-    /**
-     * walk to stand position for bubble interaction
-     */
-    private boolean walkToStandPosition(WorldPosition standPos) {
+    private boolean handleFindBubble() {
+        script.log(getClass(), "bellows empty, finding swamp bubble...");
+        fillingInProgress = true;
+        sortedBubbles = getBubblesByDistance();
+        bubbleIndex = 0;
+        state = State.WALK_TO_BUBBLE;
+        return true;
+    }
+
+    private boolean handleWalkToBubble() {
+        if (bubbleIndex >= sortedBubbles.size()) {
+            script.log(getClass(), "all bubble locations failed");
+            resetState();
+            return false;
+        }
+
+        BubbleLocation bubble = sortedBubbles.get(bubbleIndex);
+        script.log(getClass(), "trying bubble " + (bubbleIndex + 1) + "/" + sortedBubbles.size() +
+            " at " + bubble.bubblePos.getX() + "," + bubble.bubblePos.getY());
+
         WorldPosition playerPos = script.getWorldPosition();
-        if (playerPos != null && playerPos.distanceTo(standPos) <= 1) {
-            return true; // already close enough
+        if (playerPos != null && playerPos.distanceTo(bubble.standPos) <= 1) {
+            // already close enough, move to interact
+            state = State.INTERACT_WITH_BUBBLE;
+            return true;
         }
 
         WalkConfig config = new WalkConfig.Builder()
                 .setWalkMethods(false, true)
                 .breakDistance(0)
-                .timeout(10000)
+                .timeout(RandomUtils.weightedRandom(8000, 12000, 0.002))
                 .build();
 
-        return script.getWalker().walkTo(standPos, config);
-    }
-
-    /**
-     * wait for all bellows to fill after clicking bubble
-     */
-    private boolean waitForBellowsToFill() {
-        script.log(getClass(), "waiting for bellows to fill...");
-
-        boolean allFilled = script.pollFramesUntil(() -> {
-            // interrupt for chompy spawn
-            if (AttackChompy.hasLiveChompy(script)) {
-                script.log(getClass(), "chompy detected - aborting fill");
-                return true;
-            }
-            return countEmptyBellows() == 0;
-        }, 30000);
-
-        // check if interrupted by chompy
-        if (countEmptyBellows() > 0) {
-            script.log(getClass(), "interrupted - will resume later");
+        boolean walked = script.getWalker().walkTo(bubble.standPos, config);
+        if (!walked) {
+            script.log(getClass(), "failed to reach stand position, trying next bubble");
+            bubbleIndex++;
+            // stay in WALK_TO_BUBBLE to try next
             return true;
         }
 
-        if (!allFilled) {
-            script.log(getClass(), "timeout waiting for bellows to fill");
-            return false;
-        }
-
-        script.log(getClass(), "all bellows filled");
-        TidalsChompyHunter.bellowsEmpty = false;
-
-        // wait for fill animation to complete before walking
-        script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1800, 2400, 2100, 150));
-
-        // return to drop area
-        walkToDropArea();
-
+        state = State.INTERACT_WITH_BUBBLE;
         return true;
     }
 
-    /**
-     * get bubbles sorted by distance from player (nearest first)
-     */
+    private boolean handleInteract() {
+        if (DetectPlayers.crashDetected) {
+            resetState();
+            return false;
+        }
+
+        BubbleLocation bubble = sortedBubbles.get(bubbleIndex);
+        Polygon tilePoly = script.getSceneProjector().getTileCube(bubble.bubblePos, TILE_CUBE_HEIGHT);
+        if (tilePoly == null) {
+            script.log(getClass(), "bubble tile not visible, trying next bubble");
+            bubbleIndex++;
+            state = State.WALK_TO_BUBBLE;
+            return true;
+        }
+
+        boolean sucked = RetryUtils.tapGameScreen(script, tilePoly, "Suck", "suck swamp bubble",
+                () -> DetectPlayers.crashDetected);
+
+        if (DetectPlayers.crashDetected) {
+            resetState();
+            return false;
+        }
+
+        if (!sucked) {
+            script.log(getClass(), "failed to suck bubble, trying next location");
+            bubbleIndex++;
+            state = State.WALK_TO_BUBBLE;
+            return true;
+        }
+
+        state = State.WAIT_FOR_FILL;
+        return true;
+    }
+
+    private static final int MAX_FILL_WAIT_POLLS = 15; // safety limit to avoid infinite wait
+    private int fillWaitPolls = 0;
+
+    private boolean handleWaitForFill() {
+        // wait each poll for the game to auto-fill bellows (one suck fills all, just takes time)
+        script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1500, 2500, 2000, 200));
+        fillWaitPolls++;
+
+        // check for chompy interrupt
+        if (AttackChompy.hasLiveChompy(script)) {
+            script.log(getClass(), "chompy detected - pausing fill cycle");
+            // keep fillingInProgress so we resume after combat
+            state = State.FIND_BUBBLE;
+            fillWaitPolls = 0;
+            return true;
+        }
+
+        int remaining = countEmptyBellows();
+        if (remaining > 0) {
+            if (fillWaitPolls >= MAX_FILL_WAIT_POLLS) {
+                script.log(getClass(), "timeout waiting for bellows to fill (" + remaining + " still empty)");
+                fillWaitPolls = 0;
+                resetState();
+                return false;
+            }
+            // still filling - stay in WAIT_FOR_FILL, don't re-suck
+            script.log(getClass(), remaining + " empty bellows remaining - waiting... (" + fillWaitPolls + "/" + MAX_FILL_WAIT_POLLS + ")");
+            return true;
+        }
+
+        fillWaitPolls = 0;
+
+        script.log(getClass(), "all bellows filled");
+        TidalsChompyHunter.bellowsEmpty = false;
+        state = State.RETURN_TO_AREA;
+        return true;
+    }
+
+    private boolean handleReturnToArea() {
+        WorldPosition playerPos = script.getWorldPosition();
+        if (playerPos != null && TOAD_DROP_AREA.contains(playerPos)) {
+            script.log(getClass(), "already in drop area");
+            resetState();
+            return true;
+        }
+
+        // brief post-fill delay before walking
+        script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1800, 2400, 2100, 150));
+
+        WorldPosition target = TOAD_DROP_AREA.getRandomPosition();
+        script.log(getClass(), "returning to drop area");
+
+        WalkConfig config = new WalkConfig.Builder()
+                .setWalkMethods(false, true)
+                .breakDistance(0)
+                .timeout(RandomUtils.weightedRandom(8000, 12000, 0.002))
+                .build();
+
+        script.getWalker().walkTo(target, config);
+        resetState();
+        return true;
+    }
+
     private List<BubbleLocation> getBubblesByDistance() {
         WorldPosition playerPos = script.getWorldPosition();
         if (playerPos == null) {
@@ -234,9 +294,6 @@ public class FillBellows extends Task {
             .toList();
     }
 
-    /**
-     * check if all bellows in inventory are empty
-     */
     private boolean allBellowsEmpty() {
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(
                 Set.of(OGRE_BELLOWS_EMPTY, OGRE_BELLOWS_3, OGRE_BELLOWS_2, OGRE_BELLOWS_1)
@@ -246,7 +303,6 @@ public class FillBellows extends Task {
             return false;
         }
 
-        // if any have charges, don't need to fill
         int chargedCount = inv.getAmount(OGRE_BELLOWS_3)
                 + inv.getAmount(OGRE_BELLOWS_2)
                 + inv.getAmount(OGRE_BELLOWS_1);
@@ -255,13 +311,9 @@ public class FillBellows extends Task {
             return false;
         }
 
-        // need at least one empty bellows
         return inv.getAmount(OGRE_BELLOWS_EMPTY) > 0;
     }
 
-    /**
-     * count empty bellows in inventory
-     */
     private int countEmptyBellows() {
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(OGRE_BELLOWS_EMPTY));
         if (inv == null) {
@@ -270,33 +322,6 @@ public class FillBellows extends Task {
         return inv.getAmount(OGRE_BELLOWS_EMPTY);
     }
 
-    /**
-     * walk back to the toad drop area
-     */
-    private void walkToDropArea() {
-        WorldPosition playerPos = script.getWorldPosition();
-        if (playerPos == null) return;
-
-        if (TOAD_DROP_AREA.contains(playerPos)) {
-            script.log(getClass(), "already in drop area");
-            return;
-        }
-
-        WorldPosition target = TOAD_DROP_AREA.getRandomPosition();
-        script.log(getClass(), "returning to drop area");
-
-        WalkConfig config = new WalkConfig.Builder()
-                .setWalkMethods(false, true)
-                .breakDistance(0)
-                .timeout(10000)
-                .build();
-
-        script.getWalker().walkTo(target, config);
-    }
-
-    /**
-     * simple holder for bubble + stand position pair
-     */
     private static class BubbleLocation {
         final WorldPosition bubblePos;
         final WorldPosition standPos;

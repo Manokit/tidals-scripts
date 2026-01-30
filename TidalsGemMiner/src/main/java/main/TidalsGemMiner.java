@@ -45,11 +45,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TidalsGemMiner extends Script {
     public static final String scriptVersion = "1.2";
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DEBUG MODE - set to true for verbose logging (use for debug builds)
-    // ═══════════════════════════════════════════════════════════════════════════
-    public static final boolean VERBOSE_LOGGING = true;
-    // ═══════════════════════════════════════════════════════════════════════════
+    // debug mode - toggled via ScriptUI Debug tab
+    public static volatile boolean verboseLogging = false;
 
     // state fields
     public static boolean setupDone = false;

@@ -24,6 +24,16 @@ import main.TidalsGemMiner;
 
 public class Cut extends Task {
 
+    // cutting states - one action per poll
+    private enum CutState {
+        IDLE,              // need to find gem to cut
+        USING_ITEMS,       // using chisel on gem
+        WAIT_DIALOGUE,     // waiting for item dialogue
+        SELECT_GEM,        // selecting gem in dialogue
+        CUTTING,           // actively cutting
+        DROP_CRUSHED       // dropping crushed gems
+    }
+
     // uncut gem IDs with crafting level requirements
     private static final Map<Integer, Integer> GEM_LEVEL_REQUIREMENTS = Map.of(
             ItemID.UNCUT_OPAL, 1,
@@ -75,6 +85,12 @@ public class Cut extends Task {
     private static final int CRUSHED_GEM_ID = 1633;
     private static final int CHISEL_ID = ItemID.CHISEL;
 
+    // state tracking
+    private CutState currentState = CutState.IDLE;
+    private int currentGemId = -1;
+    private int lastGemCount = 0;
+    private Timer cuttingTimer;
+
     public Cut(Script script) {
         super(script);
     }
@@ -119,53 +135,208 @@ public class Cut extends Task {
             return false;
         }
 
+        // state machine - one action per poll
+        switch (currentState) {
+            case IDLE:
+                return handleIdle();
+            case USING_ITEMS:
+                return handleUsingItems();
+            case WAIT_DIALOGUE:
+                return handleWaitDialogue();
+            case SELECT_GEM:
+                return handleSelectGem();
+            case CUTTING:
+                return handleCutting();
+            case DROP_CRUSHED:
+                return handleDropCrushed();
+            default:
+                currentState = CutState.IDLE;
+                return false;
+        }
+    }
+
+    private boolean handleIdle() {
         int craftingLevel = getCraftingLevel();
-        script.log(getClass(), "crafting level: " + craftingLevel);
+        int targetGemId = findBestUncutGem(craftingLevel);
 
-        // cut ALL gem types, not just one
-        boolean cutAnyGems = false;
-        while (true) {
-            int targetGemId = findBestUncutGem(craftingLevel);
-            if (targetGemId == -1) {
-                script.log(getClass(), "no more cuttable uncut gems");
-                break;
+        if (targetGemId == -1) {
+            // no uncut gems - check for crushed gems to drop
+            if (hasCrushedGems()) {
+                currentState = CutState.DROP_CRUSHED;
+                return false;
             }
-
-            // unselect any selected item first
-            if (!script.getWidgetManager().getInventory().unSelectItemIfSelected()) {
-                break;
-            }
-
-            // interact with items (chisel and gem)
-            boolean interacted = interactWithItems(targetGemId);
-            if (!interacted) {
-                script.log(getClass(), "interact failed");
-                break;
-            }
-
-            task = "Select gem";
-            DialogueType dialogueType = script.getWidgetManager().getDialogue().getDialogueType();
-            if (dialogueType == DialogueType.ITEM_OPTION) {
-                // CRITICAL: select the UNCUT gem ID in dialogue (not the cut gem)
-                boolean selected = script.getWidgetManager().getDialogue().selectItem(targetGemId);
-                if (!selected) {
-                    script.log(getClass(), "failed to select gem in dialogue");
-                    break;
-                }
-
-                script.log(getClass(), "cutting gems of type: " + targetGemId);
-                waitUntilFinishedCrafting(targetGemId);
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(400, 1600, 0.002));
-                cutAnyGems = true;
-            }
+            // nothing to do - task will deactivate
+            return false;
         }
 
-        // only drop crushed gems after ALL cutting is done
-        if (cutAnyGems) {
-            dropCrushedGems();
+        // unselect any selected item first
+        if (!script.getWidgetManager().getInventory().unSelectItemIfSelected()) {
+            return false;
         }
 
-        return false; // re-evaluate state - Bank task will handle depositing
+        currentGemId = targetGemId;
+        currentState = CutState.USING_ITEMS;
+        script.log(getClass(), "[idle] found gem to cut: " + currentGemId);
+        return false;
+    }
+
+    private boolean handleUsingItems() {
+        task = "Using chisel";
+
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(currentGemId, CHISEL_ID));
+        if (inv == null) {
+            script.log(getClass(), "[using_items] inventory null");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        // randomize which item to click first (chisel or gem)
+        boolean firstIsGem = RandomUtils.uniformRandom(0, 1) == 0;
+        int firstID = firstIsGem ? currentGemId : CHISEL_ID;
+        int secondID = firstIsGem ? CHISEL_ID : currentGemId;
+
+        ItemSearchResult firstItem = inv.getRandomItem(firstID);
+        if (firstItem == null) {
+            script.log(getClass(), "[using_items] first item not found");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        if (!RetryUtils.inventoryInteract(script, firstItem, "Use", "use first item")) {
+            script.log(getClass(), "[using_items] first item interaction failed");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(150, 600, 0.002));
+
+        ItemSearchResult secondItem = inv.getRandomItem(secondID);
+        if (secondItem == null) {
+            script.log(getClass(), "[using_items] second item not found");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        if (!RetryUtils.inventoryInteract(script, secondItem, "Use", "use second item")) {
+            script.log(getClass(), "[using_items] second item interaction failed");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        currentState = CutState.WAIT_DIALOGUE;
+        return false;
+    }
+
+    private boolean handleWaitDialogue() {
+        task = "Waiting for dialogue";
+
+        BooleanSupplier condition = () -> {
+            DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
+            return type == DialogueType.ITEM_OPTION;
+        };
+
+        boolean dialogueOpened = script.pollFramesUntil(condition, RandomUtils.weightedRandom(3000, 6000, 0.002));
+
+        if (dialogueOpened) {
+            currentState = CutState.SELECT_GEM;
+        } else {
+            script.log(getClass(), "[wait_dialogue] dialogue didn't open, retrying");
+            currentState = CutState.IDLE;
+        }
+        return false;
+    }
+
+    private boolean handleSelectGem() {
+        task = "Selecting gem";
+
+        DialogueType dialogueType = script.getWidgetManager().getDialogue().getDialogueType();
+        if (dialogueType != DialogueType.ITEM_OPTION) {
+            script.log(getClass(), "[select_gem] dialogue not visible, resetting");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        // CRITICAL: select the UNCUT gem ID in dialogue (not the cut gem)
+        boolean selected = script.getWidgetManager().getDialogue().selectItem(currentGemId);
+        if (!selected) {
+            script.log(getClass(), "[select_gem] failed to select gem in dialogue");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        script.log(getClass(), "[select_gem] started cutting gems of type: " + currentGemId);
+        lastGemCount = countGemsInInventory(currentGemId);
+        cuttingTimer = new Timer();
+        currentState = CutState.CUTTING;
+        return false;
+    }
+
+    private boolean handleCutting() {
+        task = "Cutting";
+
+        // handle level up dialogue
+        DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
+        if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
+            script.log(getClass(), "[cutting] level up detected");
+            script.getWidgetManager().getDialogue().continueChatDialogue();
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(1000, 3000, 0.002));
+            return false;
+        }
+
+        // track crafted items and XP
+        int currentCount = countGemsInInventory(currentGemId);
+        if (currentCount < lastGemCount) {
+            int crafted = lastGemCount - currentCount;
+            gemsCut += crafted;
+            if (TidalsGemMiner.xpTracking != null) {
+                double xpPerGem = GEM_CRAFTING_XP.getOrDefault(currentGemId, 50.0);
+                TidalsGemMiner.xpTracking.addCraftingXp(xpPerGem * crafted);
+            }
+            lastGemCount = currentCount;
+        }
+
+        // check if done cutting this gem type
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(currentGemId));
+        boolean noMoreGems = inv == null || !inv.contains(currentGemId);
+
+        // timeout check
+        boolean timedOut = cuttingTimer != null && cuttingTimer.timeElapsed() > RandomUtils.gaussianRandom(70000, 78000, 74000, 2000);
+
+        if (noMoreGems || timedOut) {
+            script.log(getClass(), "[cutting] finished cutting gem type: " + currentGemId);
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(400, 1600, 0.002));
+            currentState = CutState.IDLE; // check for more gem types
+            return false;
+        }
+
+        // still cutting - wait a bit then re-check
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(600, 1200, 0.002));
+        return false;
+    }
+
+    private boolean handleDropCrushed() {
+        task = "Dropping crushed gem";
+
+        ItemGroupResult inventory = script.getWidgetManager().getInventory().search(Set.of(CRUSHED_GEM_ID));
+        if (inventory == null || !inventory.contains(CRUSHED_GEM_ID)) {
+            script.log(getClass(), "[drop_crushed] no more crushed gems");
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        ItemSearchResult crushedGem = inventory.getRandomItem(CRUSHED_GEM_ID);
+        if (crushedGem == null) {
+            currentState = CutState.IDLE;
+            return false;
+        }
+
+        boolean dropped = RetryUtils.inventoryInteract(script, crushedGem, "Drop", "drop crushed gem");
+        if (dropped) {
+            script.log(getClass(), "[drop_crushed] dropped one crushed gem");
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(100, 400, 0.002));
+        }
+        // stay in DROP_CRUSHED state to drop more, or handleDropCrushed will transition to IDLE
+        return false;
     }
 
     private int getCraftingLevel() {
@@ -202,96 +373,6 @@ public class Cut extends Task {
         return -1;
     }
 
-    private boolean interactWithItems(int gemID) {
-        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(gemID, CHISEL_ID));
-        if (inv == null) {
-            return false;
-        }
-
-        // randomize which item to click first (chisel or gem)
-        boolean firstIsGem = RandomUtils.uniformRandom(0, 1) == 0;
-
-        int firstID = firstIsGem ? gemID : CHISEL_ID;
-        int secondID = firstIsGem ? CHISEL_ID : gemID;
-
-        task = "Use item 1";
-        ItemSearchResult firstItem = inv.getRandomItem(firstID);
-        if (firstItem == null) {
-            script.log(getClass(), "first item not found");
-            return false;
-        }
-
-        if (!RetryUtils.inventoryInteract(script, firstItem, "Use", "use first item")) {
-            script.log(getClass(), "first item failed");
-            return false;
-        }
-
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 600, 0.002));
-
-        task = "Use item 2";
-        ItemSearchResult secondItem = inv.getRandomItem(secondID);
-        if (secondItem == null) {
-            script.log(getClass(), "second item not found");
-            return false;
-        }
-
-        if (!RetryUtils.inventoryInteract(script, secondItem, "Use", "use second item")) {
-            script.log(getClass(), "second item failed");
-            return false;
-        }
-
-        BooleanSupplier condition = () -> {
-            DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
-            return type == DialogueType.ITEM_OPTION;
-        };
-
-        task = "Wait dialogue";
-        return script.pollFramesUntil(condition, RandomUtils.weightedRandom(3000, 10000, 0.002));
-    }
-
-    private void waitUntilFinishedCrafting(int consumedID) {
-        task = "Cutting";
-        Timer timer = new Timer();
-
-        final int[] lastCount = {countGemsInInventory(consumedID)};
-
-        BooleanSupplier condition = () -> {
-            // level up handling
-            DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
-            if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
-                script.log(getClass(), "level up");
-                script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(1000, 6000, 0.002));
-                return true;
-            }
-
-            // timeout
-            if (timer.timeElapsed() > RandomUtils.uniformRandom(70000, 78000)) {
-                return true;
-            }
-
-            // track crafted items and XP
-            int currentCount = countGemsInInventory(consumedID);
-            if (currentCount < lastCount[0]) {
-                int crafted = lastCount[0] - currentCount;
-                gemsCut += crafted;
-                // add crafting XP for each gem cut
-                if (TidalsGemMiner.xpTracking != null) {
-                    double xpPerGem = GEM_CRAFTING_XP.getOrDefault(consumedID, 50.0);
-                    TidalsGemMiner.xpTracking.addCraftingXp(xpPerGem * crafted);
-                }
-                lastCount[0] = currentCount;
-            }
-
-            // check if done (no more uncut gems of this type)
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(consumedID));
-            return inv == null || !inv.contains(consumedID);
-        };
-
-        script.log(getClass(), "waiting for cutting to finish");
-        script.pollFramesUntil(condition, RandomUtils.weightedRandom(70000, 156000, 0.002));
-    }
-
     private int countGemsInInventory(int gemId) {
         ItemGroupResult inventory = script.getWidgetManager().getInventory().search(Set.of(gemId));
         if (inventory == null) {
@@ -300,37 +381,8 @@ public class Cut extends Task {
         return inventory.getAmount(gemId);
     }
 
-    private void dropCrushedGems() {
+    private boolean hasCrushedGems() {
         ItemGroupResult inventory = script.getWidgetManager().getInventory().search(Set.of(CRUSHED_GEM_ID));
-        if (inventory == null || !inventory.contains(CRUSHED_GEM_ID)) {
-            return;
-        }
-
-        task = "Dropping crushed gems";
-        script.log(getClass(), "dropping crushed gems");
-
-        // drop all crushed gems
-        while (true) {
-            inventory = script.getWidgetManager().getInventory().search(Set.of(CRUSHED_GEM_ID));
-            if (inventory == null || !inventory.contains(CRUSHED_GEM_ID)) {
-                break;
-            }
-
-            ItemSearchResult crushedGem = inventory.getRandomItem(CRUSHED_GEM_ID);
-            if (crushedGem == null) {
-                script.log(getClass(), "crushed gem not found");
-                break;
-            }
-
-            boolean dropped = RetryUtils.inventoryInteract(script, crushedGem, "Drop", "drop crushed gem");
-            if (dropped) {
-                script.log(getClass(), "dropped crushed gem");
-                // brief wait between drops
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(100, 400, 0.002));
-            } else {
-                script.log(getClass(), "failed to drop crushed gem");
-                break;
-            }
-        }
+        return inventory != null && inventory.contains(CRUSHED_GEM_ID);
     }
 }

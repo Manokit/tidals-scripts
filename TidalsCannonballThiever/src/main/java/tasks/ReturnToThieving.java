@@ -24,23 +24,25 @@ public class ReturnToThieving extends Task {
         return twoStallMode ? THIEVING_AREA_TWO_STALL : THIEVING_AREA_SINGLE;
     }
 
-    // cached configs with timeouts
-    private final WalkConfig exactTileConfig;
-    private final WalkConfig nearbyConfig;
-
     public ReturnToThieving(Script script) {
         super(script);
-        this.exactTileConfig = new WalkConfig.Builder()
+    }
+
+    private WalkConfig buildExactTileConfig() {
+        return new WalkConfig.Builder()
                 .disableWalkScreen(true)
                 .breakDistance(0)
                 .tileRandomisationRadius(0)
-                .timeout(15000)
+                .timeout(RandomUtils.weightedRandom(12000, 18000, 0.002))
                 .build();
-        this.nearbyConfig = new WalkConfig.Builder()
+    }
+
+    private WalkConfig buildNearbyConfig() {
+        return new WalkConfig.Builder()
                 .disableWalkScreen(true)
                 .breakDistance(2)
                 .tileRandomisationRadius(0)
-                .timeout(10000)
+                .timeout(RandomUtils.weightedRandom(8000, 12000, 0.002))
                 .build();
     }
 
@@ -74,13 +76,13 @@ public class ReturnToThieving extends Task {
         }
 
         WorldPosition target = getThievingTile();
-        WalkConfig config = twoStallMode ? exactTileConfig : nearbyConfig;
+        WalkConfig config = twoStallMode ? buildExactTileConfig() : buildNearbyConfig();
 
         if (isAtAnySafetyTile()) {
             script.log("RETURN", "Moving from safety tile to stall position...");
             // try direct tile tap first for short distance
             if (tapOnTile(target)) {
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(400, 1200, 0.002));
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(400, 1200, 0.002));
                 if (isAtThievingTile()) {
                     script.log("RETURN", "Arrived via tile tap");
                     return true;
@@ -96,7 +98,7 @@ public class ReturnToThieving extends Task {
             boolean walked = script.getWalker().walkTo(target, config);
 
             // brief settle time after walk
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1000, 0.002));
 
             if (walked || isAtThievingTile()) {
                 script.log("RETURN", "Arrived at stall position");
@@ -115,7 +117,7 @@ public class ReturnToThieving extends Task {
     private boolean tapOnTile(WorldPosition tile) {
         Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
         if (tilePoly == null) return false;
-        return script.getFinger().tap(tilePoly);
+        return script.getFinger().tapGameScreen(tilePoly);
     }
 
     private boolean isInThievingArea() {

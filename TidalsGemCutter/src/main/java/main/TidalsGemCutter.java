@@ -51,6 +51,9 @@ public class TidalsGemCutter extends Script {
     private static int lastSentCraftCount = 0;
     private static long lastSentRuntime = 0;
 
+    // debug mode - toggled via ScriptUI Debug tab
+    public static volatile boolean verboseLogging = false;
+
     public static boolean setupDone = false;
     public static boolean hasReqs;
     public static int selectedUncutGemID;  // Set from UI

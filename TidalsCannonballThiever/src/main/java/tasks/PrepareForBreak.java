@@ -9,24 +9,47 @@ import utils.Task;
 import static main.TidalsCannonballThiever.*;
 
 public class PrepareForBreak extends Task {
-    
+
     private static final WorldPosition SAFETY_TILE = new WorldPosition(1867, 3294, 0);
     private static long lastCheckTime = 0;
-    private static final long MIN_TIME_BETWEEN_CHECKS_MS = 2000;
+    // randomized per-check to avoid detectable patterns
+    private static long currentMinTimeBetweenChecks = randomizeCheckInterval();
     
+    // poll-based state machine
+    private enum State {
+        WALKING,
+        WAITING,
+        TRIGGERING,
+        CLEANUP
+    }
+
+    private State state = State.WALKING;
     private boolean activatedForWhiteDot = false;
     private boolean activatedForBreak = false;
     private boolean activatedForHop = false;
     private boolean activatedForAFK = false;
-    
+
     private static final int MAX_PLAYERS_BEFORE_HOP = 1;
-    
+
     public PrepareForBreak(Script script) {
         super(script);
     }
+
+    private void resetInternalState() {
+        state = State.WALKING;
+    }
     
+    private static long randomizeCheckInterval() {
+        return RandomUtils.gaussianRandom(1500, 2500, 2000, 250);
+    }
+
+    private static long randomizeXpThreshold() {
+        return RandomUtils.gaussianRandom(1200, 1800, 1500, 150);
+    }
+
     public static void resetState() {
         lastCheckTime = 0;
+        currentMinTimeBetweenChecks = randomizeCheckInterval();
     }
     
     private int getNearbyPlayerCount() {
@@ -46,11 +69,12 @@ public class PrepareForBreak extends Task {
     @Override
     public boolean activate() {
         if (!setupDone) return false;
-        if (currentlyThieving && lastXpGain.timeElapsed() < 1500) return false;
-        
+        if (currentlyThieving && lastXpGain.timeElapsed() < randomizeXpThreshold()) return false;
+
         long now = System.currentTimeMillis();
-        if (now - lastCheckTime < MIN_TIME_BETWEEN_CHECKS_MS) return false;
+        if (now - lastCheckTime < currentMinTimeBetweenChecks) return false;
         lastCheckTime = now;
+        currentMinTimeBetweenChecks = randomizeCheckInterval(); // re-randomize for next check
         
         activatedForWhiteDot = false;
         activatedForBreak = false;
@@ -90,26 +114,59 @@ public class PrepareForBreak extends Task {
                        activatedForBreak ? "scheduled break" :
                        activatedForHop ? "scheduled hop" :
                        activatedForAFK ? "scheduled AFK" : "unknown";
-        
+
         task = "Preparing for " + reason + "...";
-        script.log("BREAK", "Moving to safety tile for " + reason);
-        
         currentlyThieving = false;
-        
+
+        switch (state) {
+            case WALKING:
+                return handleWalking(reason);
+            case WAITING:
+                return handleWaiting(reason);
+            case TRIGGERING:
+                return handleTriggering(reason);
+            case CLEANUP:
+                return handleCleanup();
+            default:
+                resetInternalState();
+                return true;
+        }
+    }
+
+    private boolean handleWalking(String reason) {
+        script.log("BREAK", "Moving to safety tile for " + reason);
+
+        if (isAtSafetyTile()) {
+            state = State.TRIGGERING;
+            return true;
+        }
+
         if (!tapOnTile(SAFETY_TILE)) {
             script.log("BREAK", "Failed to tap on safety tile, using walker fallback...");
             script.getWalker().walkTo(SAFETY_TILE);
         }
-        
-        script.pollFramesUntil(() -> isAtSafetyTile(), 3000);
-        
+
+        state = State.WAITING;
+        return true;
+    }
+
+    private boolean handleWaiting(String reason) {
+        script.pollFramesUntil(() -> isAtSafetyTile(), RandomUtils.weightedRandom(2500, 4000, 0.002));
+
         if (!isAtSafetyTile()) {
             script.log("BREAK", "Failed to reach safety tile");
+            // retry walking next poll
+            state = State.WALKING;
             return true;
         }
-        
+
+        state = State.TRIGGERING;
+        return true;
+    }
+
+    private boolean handleTriggering(String reason) {
         script.log("BREAK", "At safety tile - triggering " + reason);
-        
+
         if (activatedForWhiteDot) {
             script.getProfileManager().forceHop();
             script.log("BREAK", "Forced white dot hop!");
@@ -124,15 +181,20 @@ public class PrepareForBreak extends Task {
             script.log("BREAK", "Forced AFK pause");
         }
 
+        state = State.CLEANUP;
+        return true;
+    }
+
+    private boolean handleCleanup() {
         StartThieving.resetAfterBreak();
 
-        // reset guard tracking and xp cycle for clean restart
         if (guardTracker != null) {
             guardTracker.resetCbCycle();
             guardTracker.resetGuardTracking();
-            guardTracker.enableGuardSync(); // wait to see guard leave before starting
+            guardTracker.enableGuardSync();
         }
-        
+
+        resetInternalState();
         return true;
     }
     
@@ -141,7 +203,7 @@ public class PrepareForBreak extends Task {
         if (tilePoly == null) {
             return false;
         }
-        return script.getFinger().tap(tilePoly);
+        return script.getFinger().tapGameScreen(tilePoly);
     }
     
     private boolean isAtSafetyTile() {

@@ -8,49 +8,41 @@ import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
-import com.osmb.api.utils.UIResultList;
 import com.osmb.api.walker.WalkConfig;
 import utilities.RetryUtils;
 import utilities.TabUtils;
 import utils.Task;
 
-import java.util.Arrays;
-import java.util.List;
-
 import static main.TidalsCannonballThiever.*;
 
+/**
+ * Poll-based jail escape task.
+ *
+ * States are derived from position:
+ * - IN_CELL: pick lock or teleport
+ * - WALKING_BACK: walk to stall
+ * - AT_STALL: reset and complete
+ */
 public class EscapeJail extends Task {
     public static final RectangleArea JAIL_CELL = new RectangleArea(1883, 3272, 2, 2, 0);
 
     // sailor's amulet for fast escape via teleport
     private static final int SAILORS_AMULET = 32399;
-    // teleport lands around (1889, 3291) - near the market, not the actual dock
+    // teleport lands around (1889, 3291) - near the market
     private static final RectangleArea PORT_ROBERTS_TELEPORT = new RectangleArea(1885, 3288, 1895, 3295, 0);
 
-    // waypoint path from jail back to stalls (tight path for better minimap visibility)
-    private static final WorldPosition[] JAIL_PATH = {
-            new WorldPosition(1886, 3273, 0),
-            new WorldPosition(1889, 3276, 0),
-            new WorldPosition(1892, 3277, 0),
-            new WorldPosition(1892, 3280, 0),
-            new WorldPosition(1892, 3284, 0),
-            new WorldPosition(1888, 3286, 0),
-            new WorldPosition(1888, 3290, 0),
-            new WorldPosition(1884, 3292, 0),
-            new WorldPosition(1877, 3293, 0),
-            new WorldPosition(1873, 3293, 0),
-            new WorldPosition(1869, 3295, 0)
-    };
+    // thieving tiles
     private static final WorldPosition THIEVING_TILE_SINGLE = new WorldPosition(1867, 3298, 0);
     private static final WorldPosition THIEVING_TILE_TWO_STALL = new WorldPosition(1867, 3295, 0);
 
-    private WorldPosition getThievingTile() {
-        return twoStallMode ? THIEVING_TILE_TWO_STALL : THIEVING_TILE_SINGLE;
-    }
-
-    private boolean isEscaping = false;
+    // escape state tracking
+    private boolean escapeInProgress = false;
     private int escapeAttempts = 0;
     private static final int MAX_ESCAPE_ATTEMPTS = 5;
+
+    // teleport state - track if we're waiting for teleport
+    private boolean waitingForTeleport = false;
+    private long teleportStartTime = 0;
 
     public EscapeJail(Script script) {
         super(script);
@@ -60,91 +52,140 @@ public class EscapeJail extends Task {
         // called on script restart if needed
     }
 
+    private WorldPosition getThievingTile() {
+        return twoStallMode ? THIEVING_TILE_TWO_STALL : THIEVING_TILE_SINGLE;
+    }
+
     @Override
     public boolean activate() {
-        if (isEscaping)
-            return false;
+        // if actively escaping, stay active until done
+        if (escapeInProgress) {
+            return true;
+        }
+        // start escape if in jail cell
         return isInJail();
     }
 
     @Override
     public boolean execute() {
-        task = "Escaping jail!";
-        isEscaping = true;
-        currentlyThieving = false;
+        WorldPosition myPos = script.getWorldPosition();
+        if (myPos == null) return false;
+
+        // initialize escape if just started
+        if (!escapeInProgress) {
+            startEscape();
+        }
+
+        // state: at thieving tile? we're done
+        if (isAtThievingTile()) {
+            return finishEscape();
+        }
+
+        // state: still in jail cell? get out
+        if (JAIL_CELL.contains(myPos)) {
+            return handleInCell();
+        }
+
+        // state: out of cell, walk to stall
+        return handleWalkingBack(myPos);
+    }
+
+    /**
+     * Initialize escape attempt - called once when escape begins
+     */
+    private void startEscape() {
+        escapeInProgress = true;
         escapeAttempts++;
+        waitingForTeleport = false;
+        currentlyThieving = false;
+        task = "Escaping jail!";
         script.log("JAIL", "Caught! Escape attempt " + escapeAttempts + "/" + MAX_ESCAPE_ATTEMPTS);
 
-        try {
-            if (escapeAttempts > MAX_ESCAPE_ATTEMPTS) {
-                script.log("JAIL", "ERROR: Max escape attempts reached, stopping script");
-                script.stop();
-                return false;
-            }
-
-            // check for sailor's amulet - fast escape via teleport
-            if (hasSailorsAmulet()) {
-                script.log("JAIL", "Sailor's Amulet detected - teleporting to Port Roberts");
-                if (teleportWithAmulet()) {
-                    escapeAttempts = 0;
-                    return walkFromDockToStall();
-                }
-                script.log("JAIL", "Amulet teleport failed, falling back to lock pick...");
-            }
-
-            // standard lock pick escape
-            if (isOutOfCell()) {
-                script.log("JAIL", "Already outside cell, skipping door pick");
-            } else {
-                if (!pickCellDoor()) {
-                    script.log("JAIL", "Failed to pick door, retrying...");
-                    return false;
-                }
-
-                script.log("JAIL", "Picking lock, waiting for success...");
-                boolean success = script.pollFramesUntil(() -> chatContainsSuccess() || isOutOfCell(), 15000);
-
-                if (!success && !isOutOfCell()) {
-                    script.log("JAIL", "Lock pick failed or timed out, retrying...");
-                    return false;
-                }
-
-                script.log("JAIL", "Lock picked successfully! Escaping...");
-            }
-
-            // reset escape attempts now that we're out of the cell
-            // pathing back to stall is a separate concern
-            escapeAttempts = 0;
-
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 2000, 0.002));
-            boolean pathed = pathBackToStall();
-
-            if (pathed) {
-                script.log("JAIL", "Escaped and back at stall!");
-
-                // reset thieving cycle state so first drop assumption works again
-                StartThieving.resetForNewCycle();
-                if (guardTracker != null) {
-                    guardTracker.resetCbCycle();
-                    guardTracker.resetGuardTracking();
-                    guardTracker.enableGuardSync(); // wait to see guard leave before starting
-                }
-
-                return true;
-            }
-
-            script.log("JAIL", "Path back to stall failed, will retry");
-            return false;
-
-        } finally {
-            isEscaping = false;
+        if (escapeAttempts > MAX_ESCAPE_ATTEMPTS) {
+            script.log("JAIL", "ERROR: Max escape attempts reached, stopping script");
+            script.stop();
         }
     }
 
-    private boolean pickCellDoor() {
+    /**
+     * Handle being in jail cell - try amulet teleport or pick lock
+     */
+    private boolean handleInCell() {
+        task = "In jail cell";
+
+        // if waiting for teleport, check if it completed
+        if (waitingForTeleport) {
+            return checkTeleportProgress();
+        }
+
+        // try amulet teleport first if available
+        if (hasSailorsAmulet()) {
+            return attemptAmuletTeleport();
+        }
+
+        // standard lock pick
+        return attemptLockPick();
+    }
+
+    /**
+     * Attempt teleport with sailor's amulet
+     */
+    private boolean attemptAmuletTeleport() {
+        task = "Teleporting out";
+        script.log("JAIL", "Sailor's Amulet detected - attempting teleport");
+
+        boolean interacted = RetryUtils.equipmentInteract(
+                script, SAILORS_AMULET, "Port Roberts", "sailor's amulet teleport", 5
+        );
+
+        if (!interacted) {
+            script.log("JAIL", "Failed to interact with amulet, will try lock pick");
+            return false; // next poll will try lock pick
+        }
+
+        // mark that we're waiting for teleport
+        waitingForTeleport = true;
+        teleportStartTime = System.currentTimeMillis();
+        return false; // re-evaluate next poll
+    }
+
+    /**
+     * Check if teleport completed or timed out
+     */
+    private boolean checkTeleportProgress() {
         WorldPosition myPos = script.getWorldPosition();
-        if (myPos == null)
-            return false;
+        if (myPos == null) return false;
+
+        // teleport successful if we're out of jail cell
+        if (!JAIL_CELL.contains(myPos)) {
+            script.log("JAIL", "Teleport successful! Now at " +
+                    (int) myPos.getX() + ", " + (int) myPos.getY());
+            waitingForTeleport = false;
+            // add small delay after teleport
+            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(400, 800, 0.002));
+            return false; // next poll will handle walking
+        }
+
+        // check for timeout (5 seconds)
+        if (System.currentTimeMillis() - teleportStartTime > 5000) {
+            script.log("JAIL", "Teleport timed out, falling back to lock pick");
+            waitingForTeleport = false;
+            return false; // next poll will try lock pick
+        }
+
+        // still waiting - add small delay
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 400, 0.002));
+        return false;
+    }
+
+    /**
+     * Attempt to pick the cell door lock
+     */
+    private boolean attemptLockPick() {
+        task = "Picking lock";
+
+        WorldPosition myPos = script.getWorldPosition();
+        if (myPos == null) return false;
 
         RSObject door = script.getObjectManager().getClosestObject(myPos, "Cell door");
         if (door == null) {
@@ -159,21 +200,101 @@ public class EscapeJail extends Task {
         }
 
         script.log("JAIL", "Attempting Picklock on cell door...");
-        boolean tapped = script.getFinger().tap(doorPoly, "Picklock");
+        boolean tapped = script.getFinger().tapGameScreen(doorPoly, "Picklock");
 
-        if (tapped) {
-            script.log("JAIL", "Picklock action sent!");
-            return true;
+        if (!tapped) {
+            script.log("JAIL", "Failed to send Picklock action");
+            return false;
         }
 
-        script.log("JAIL", "Failed to send Picklock action");
-        return false;
+        // wait for lock pick result
+        script.log("JAIL", "Picklock action sent, waiting for result...");
+        boolean success = script.pollFramesUntil(() -> {
+            // success if: chat says "succeed" OR we're out of cell
+            return chatContainsSuccess() || isOutOfCell();
+        }, RandomUtils.weightedRandom(10000, 15000, 0.002));
+
+        if (success || isOutOfCell()) {
+            script.log("JAIL", "Lock picked successfully!");
+            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(400, 1000, 0.002));
+        } else {
+            script.log("JAIL", "Lock pick failed or timed out, will retry");
+        }
+
+        return false; // re-evaluate next poll
     }
 
+    /**
+     * Handle walking back to stall from outside jail cell
+     */
+    private boolean handleWalkingBack(WorldPosition myPos) {
+        WorldPosition thievingTile = getThievingTile();
+        double distance = myPos.distanceTo(thievingTile);
+
+        // close to stall? use screen walk for precision
+        if (distance < 12) {
+            task = "Final approach";
+            script.log("JAIL", "Close to stall, screen walking to exact tile");
+
+            WalkConfig config = new WalkConfig.Builder()
+                    .setWalkMethods(true, false) // screen only
+                    .breakDistance(0)
+                    .tileRandomisationRadius(0)
+                    .timeout(RandomUtils.weightedRandom(8000, 12000, 0.002))
+                    .build();
+
+            script.getWalker().walkTo(thievingTile, config);
+            return false; // re-evaluate next poll
+        }
+
+        // farther away - use minimap walk
+        task = "Walking to stall";
+        script.log("JAIL", "Walking to stall (distance: " + (int) distance + ")");
+
+        WalkConfig config = new WalkConfig.Builder()
+                .setWalkMethods(false, true) // minimap only
+                .breakDistance(10) // stop when close enough for screen walk
+                .tileRandomisationRadius(2)
+                .timeout(RandomUtils.weightedRandom(15000, 25000, 0.002))
+                .breakCondition(() -> {
+                    WorldPosition pos = script.getWorldPosition();
+                    if (pos == null) return false;
+                    return pos.distanceTo(thievingTile) < 12;
+                })
+                .build();
+
+        script.getWalker().walkTo(thievingTile, config);
+        return false; // re-evaluate next poll
+    }
+
+    /**
+     * Finish escape - reset state and prepare for thieving
+     */
+    private boolean finishEscape() {
+        script.log("JAIL", "Escaped and back at stall!");
+        task = "Escape complete";
+
+        // reset escape tracking
+        escapeInProgress = false;
+        escapeAttempts = 0;
+        waitingForTeleport = false;
+
+        // reset thieving cycle state so first drop assumption works again
+        StartThieving.resetForNewCycle();
+        if (guardTracker != null) {
+            guardTracker.resetCbCycle();
+            guardTracker.resetGuardTracking();
+            guardTracker.enableGuardSync(); // wait to see guard leave before starting
+        }
+
+        return false; // task will deactivate since we're at stall
+    }
+
+    // --- Helper methods ---
+
     private boolean chatContainsSuccess() {
-        UIResultList<String> chatText = script.getWidgetManager().getChatbox().getText();
-        if (chatText == null)
-            return false;
+        var chatText = script.getWidgetManager().getChatbox().getText();
+        if (chatText == null) return false;
 
         for (String line : chatText.asList()) {
             if (line != null && line.contains("succeed")) {
@@ -183,210 +304,29 @@ public class EscapeJail extends Task {
         return false;
     }
 
-    private boolean pathBackToStall() {
-        script.log("JAIL", "Walking back to stall...");
-
-        // screen walk to first waypoint (step out of cell area)
-        script.log("JAIL", "Stepping out of cell");
-        WalkConfig exitConfig = new WalkConfig.Builder()
-                .setWalkMethods(true, false)
-                .breakDistance(1)
-                .tileRandomisationRadius(0)
-                .timeout(10000)
-                .build();
-
-        if (!script.getWalker().walkTo(JAIL_PATH[0], exitConfig)) {
-            script.log("JAIL", "Failed to step out of cell");
-            return false;
-        }
-
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
-
-        // minimap walk the rest of the path (clicking ahead while moving)
-        List<WorldPosition> minimapPath = Arrays.asList(JAIL_PATH).subList(1, JAIL_PATH.length);
-        if (!walkMinimapPath(minimapPath)) {
-            script.log("JAIL", "Failed minimap path");
-            return false;
-        }
-
-        // final approach: screen walk to exact thieving tile
-        script.log("JAIL", "Screen walking to thieving tile");
-        WalkConfig screenConfig = new WalkConfig.Builder()
-                .setWalkMethods(true, false)
-                .breakDistance(0)
-                .tileRandomisationRadius(0)
-                .timeout(10000)
-                .build();
-
-        script.getWalker().walkTo(getThievingTile(), screenConfig);
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
-
-        return isAtThievingTile();
-    }
-
-    // click ahead on minimap while moving - don't wait for arrival at each waypoint
-    private boolean walkMinimapPath(List<WorldPosition> waypoints) {
-        if (waypoints.isEmpty()) return true;
-
-        int currentIndex = 0;
-        long lastClickTime = 0;
-        long startTime = System.currentTimeMillis();
-        long timeout = 30000;
-
-        // click first waypoint to start moving
-        script.log("JAIL", "Clicking waypoint 1/" + waypoints.size());
-        clickMinimap(waypoints.get(0));
-        lastClickTime = System.currentTimeMillis();
-
-        while (currentIndex < waypoints.size()) {
-            if (System.currentTimeMillis() - startTime > timeout) {
-                script.log("JAIL", "Minimap path timed out");
-                return false;
-            }
-
-            WorldPosition myPos = script.getWorldPosition();
-            if (myPos == null) {
-                script.pollFramesUntil(() -> true, 100);
-                continue;
-            }
-
-            WorldPosition currentTarget = waypoints.get(currentIndex);
-            int distToCurrentTarget = (int) myPos.distanceTo(currentTarget);
-
-            // when close to current waypoint, advance and click next
-            if (distToCurrentTarget <= 5) {
-                currentIndex++;
-                if (currentIndex < waypoints.size()) {
-                    script.log("JAIL", "Clicking waypoint " + (currentIndex + 1) + "/" + waypoints.size());
-                    clickMinimap(waypoints.get(currentIndex));
-                    lastClickTime = System.currentTimeMillis();
-                }
-            } else {
-                // re-click current target periodically to keep momentum
-                long now = System.currentTimeMillis();
-                if (now - lastClickTime > RandomUtils.uniformRandom(800, 1200)) {
-                    clickMinimap(currentTarget);
-                    lastClickTime = now;
-                }
-            }
-
-            // close containers while walking
-            script.getWidgetManager().getTabManager().closeContainer();
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(80, 300, 0.002));
-        }
-
-        // wait a moment after last waypoint
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
-        return true;
-    }
-
-    private void clickMinimap(WorldPosition pos) {
-        WalkConfig config = new WalkConfig.Builder()
-                .setWalkMethods(false, true)
-                .tileRandomisationRadius(0)
-                .timeout(500) // short timeout - just click and return
-                .allowInterrupt(true)
-                .build();
-
-        script.getWalker().walkTo(pos, config);
-    }
-
     private boolean isInJail() {
         WorldPosition pos = script.getWorldPosition();
-        if (pos == null)
-            return false;
+        if (pos == null) return false;
         return JAIL_CELL.contains(pos);
     }
 
     private boolean isOutOfCell() {
         WorldPosition pos = script.getWorldPosition();
-        if (pos == null)
-            return false;
+        if (pos == null) return false;
         return !JAIL_CELL.contains(pos);
     }
 
     private boolean isAtThievingTile() {
         WorldPosition pos = script.getWorldPosition();
-        if (pos == null)
-            return false;
+        if (pos == null) return false;
         WorldPosition target = getThievingTile();
-        int x = (int) pos.getX();
-        int y = (int) pos.getY();
-        return x == (int) target.getX() && y == (int) target.getY();
+        return (int) pos.getX() == (int) target.getX() &&
+               (int) pos.getY() == (int) target.getY();
     }
 
     private boolean hasSailorsAmulet() {
         TabUtils.openAndWaitEquipment(script);
         UIResult<ItemSearchResult> amulet = script.getWidgetManager().getEquipment().findItem(SAILORS_AMULET);
         return amulet != null && amulet.isFound();
-    }
-
-    private boolean teleportWithAmulet() {
-        script.log("JAIL", "Attempting Sailor's Amulet teleport...");
-
-        // save current position to detect teleport
-        WorldPosition startPos = script.getWorldPosition();
-        if (startPos == null) return false;
-
-        boolean success = RetryUtils.equipmentInteract(script, SAILORS_AMULET, "Port Roberts", "sailor's amulet teleport", 5);
-        if (!success) {
-            script.log("JAIL", "Failed to interact with amulet");
-            return false;
-        }
-
-        // wait for teleport - check we're out of jail and near teleport area
-        boolean teleported = script.pollFramesUntil(() -> {
-            WorldPosition pos = script.getWorldPosition();
-            if (pos == null) return false;
-            // out of jail cell and either in teleport area or moved significantly
-            return !JAIL_CELL.contains(pos) &&
-                   (PORT_ROBERTS_TELEPORT.contains(pos) || pos.distanceTo(startPos) > 10);
-        }, 5000);
-
-        if (teleported) {
-            WorldPosition newPos = script.getWorldPosition();
-            script.log("JAIL", "Teleport successful! Now at " + (newPos != null ?
-                (int)newPos.getX() + ", " + (int)newPos.getY() : "unknown"));
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(600, 2000, 0.002));
-            return true;
-        }
-
-        script.log("JAIL", "Teleport did not complete");
-        return false;
-    }
-
-    private boolean walkFromDockToStall() {
-        script.log("JAIL", "Walking from dock to stall...");
-
-        try {
-            WalkConfig config = new WalkConfig.Builder()
-                    .breakDistance(2)
-                    .tileRandomisationRadius(1)
-                    .timeout(30000)
-                    .build();
-
-            boolean walked = script.getWalker().walkTo(getThievingTile(), config);
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
-
-            if (walked || isAtThievingTile()) {
-                script.log("JAIL", "Arrived at stall from dock!");
-
-                // reset thieving cycle state
-                StartThieving.resetForNewCycle();
-                if (guardTracker != null) {
-                    guardTracker.resetCbCycle();
-                    guardTracker.resetGuardTracking();
-                    guardTracker.enableGuardSync();
-                }
-
-                return true;
-            }
-        } catch (NullPointerException e) {
-            script.log("JAIL", "Walker NPE during dock walk, retrying...");
-            return false;
-        }
-
-        script.log("JAIL", "Failed to walk from dock to stall");
-        return false;
     }
 }

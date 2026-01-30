@@ -3,7 +3,6 @@ package tasks;
 import com.osmb.api.item.ItemGroupResult;
 import com.osmb.api.item.ItemID;
 import com.osmb.api.item.ItemSearchResult;
-import com.osmb.api.location.area.Area;
 import com.osmb.api.location.position.types.WorldPosition;
 import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
@@ -114,49 +113,54 @@ public class Bank extends Task {
     public boolean execute() {
         task = "Banking";
 
+        // check if deposit box UI is already open - skip all walking logic
+        DepositBox depositBox = script.getWidgetManager().getDepositBox();
+        if (depositBox.isVisible()) {
+            script.log(getClass(), "[debug] deposit box UI already open, skipping to deposit");
+            return handleDepositing(depositBox);
+        }
+
         WorldPosition myPos = script.getWorldPosition();
         if (myPos == null) {
             return false;
         }
 
-        Area approachArea = selectedLocation.approachArea();
         WorldPosition bankPos = selectedLocation.bankPosition();
 
-        if (approachArea != null) {
-            // underground mine: walk to approach area, not exact tile
-            if (!approachArea.contains(myPos)) {
-                task = "Walking to deposit area";
-                WorldPosition randomTarget = approachArea.getRandomPosition();
-                script.log(getClass(), "walking to approach area: " + randomTarget);
-                script.getWalker().walkTo(randomTarget, new WalkConfig.Builder().build());
-                return false;
-            }
-            // already in approach area - proceed to interact
-        } else {
-            // upper mine: use original distance-based logic
-            double distanceToBank = myPos.distanceTo(bankPos);
-            if (distanceToBank > 10) {
-                task = "Walking to bank";
-                script.log(getClass(), "walking to bank at " + bankPos);
-                script.getWalker().walkTo(bankPos, new WalkConfig.Builder().build());
-                return false;
-            }
-        }
-
-        // find deposit object based on location
+        // get deposit object name for visibility check and breakCondition
         String depositObjectName = selectedLocation.depositObjectName();
-        String depositAction = selectedLocation.depositAction();
 
-        DepositBox depositBox = script.getWidgetManager().getDepositBox();
+        // check if deposit object is loaded in scene (close enough to interact)
+        // if so, skip walking entirely and proceed to interact
+        boolean depositInScene = isDepositObjectInScene(depositObjectName);
+        script.log(getClass(), "[debug] pos=" + myPos + " depositInScene=" + depositInScene);
 
-        if (!depositBox.isVisible()) {
-            task = "Opening deposit box";
-            openDepositObject(depositObjectName, depositAction);
+        if (!depositInScene) {
+            // need to walk closer - use bank position as target, breakCondition will stop early
+            task = "Walking to deposit area";
+            script.log(getClass(), "walking to bank at " + bankPos);
+            script.getWalker().walkTo(bankPos, buildWalkConfig(depositObjectName));
             return false;
         }
 
+        // deposit object is in scene - proceed to interact
+        script.log(getClass(), "[debug] deposit in scene, proceeding to interact");
+
+        // get deposit action for interaction
+        String depositAction = selectedLocation.depositAction();
+
+        task = "Opening deposit box";
+        openDepositObject(depositObjectName, depositAction);
+        return false;
+    }
+
+    /**
+     * handles depositing items once deposit box UI is open
+     */
+    private boolean handleDepositing(DepositBox depositBox) {
+
         // wait for deposit box to load
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.002));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1000, 0.002));
 
         task = "Depositing";
         if (cuttingEnabled) {
@@ -170,7 +174,7 @@ public class Bank extends Task {
         }
 
         // wait for deposit to complete
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1200, 0.002));
 
         // close deposit box
         task = "Closing deposit box";
@@ -202,6 +206,8 @@ public class Bank extends Task {
         // wait for deposit box to open with movement tracking
         AtomicReference<Timer> posTimer = new AtomicReference<>(new Timer());
         AtomicReference<WorldPosition> prevPos = new AtomicReference<>(null);
+        // randomize idle timeout each execution to avoid detectable patterns
+        final long idleTimeout = RandomUtils.gaussianRandom(1800, 2500, 2150, 175);
 
         script.pollFramesUntil(() -> {
             WorldPosition current = script.getWorldPosition();
@@ -212,9 +218,9 @@ public class Bank extends Task {
                 prevPos.set(current);
             }
 
-            // done when deposit box visible or idle for 2+ seconds
+            // done when deposit box visible or idle for randomized timeout
             return script.getWidgetManager().getDepositBox().isVisible() ||
-                    posTimer.get().timeElapsed() > 2000;
+                    posTimer.get().timeElapsed() > idleTimeout;
         }, RandomUtils.weightedRandom(15000, 30000, 0.002));
     }
 
@@ -247,7 +253,7 @@ public class Bank extends Task {
             script.log(getClass(), "depositing gem: " + gemId);
             boolean deposited = RetryUtils.inventoryInteract(script, gem, "Deposit-All", "deposit gem " + gemId);
             if (deposited) {
-                script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 800, 0.002));
                 items = depositBox.search(itemIdsToRecognise);
                 if (items == null) {
                     return;
@@ -256,5 +262,33 @@ public class Bank extends Task {
                 script.log(getClass(), "failed to deposit gem: " + gemId);
             }
         }
+    }
+
+    /**
+     * checks if deposit object is loaded in scene (close enough to interact)
+     * per OSMB: just check non-null, let RSObject::interact handle the rest
+     */
+    private boolean isDepositObjectInScene(String depositObjectName) {
+        RSObject depositObject = script.getObjectManager().getClosestObject(
+                script.getWorldPosition(), depositObjectName
+        );
+        return depositObject != null;
+    }
+
+    /**
+     * builds walkconfig with breakCondition that stops when deposit object is found in scene
+     */
+    private WalkConfig buildWalkConfig(String depositObjectName) {
+        WalkConfig.Builder walkConfig = new WalkConfig.Builder();
+        walkConfig.breakCondition(() -> {
+            RSObject depositObject = script.getObjectManager().getClosestObject(
+                    script.getWorldPosition(), depositObjectName
+            );
+            if (depositObject != null) {
+                script.log(getClass(), "[breakCondition] deposit object found in scene, stopping");
+            }
+            return depositObject != null;
+        });
+        return walkConfig.build();
     }
 }

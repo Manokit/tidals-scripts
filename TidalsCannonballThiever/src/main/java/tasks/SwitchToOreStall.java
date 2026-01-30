@@ -90,7 +90,7 @@ public class SwitchToOreStall extends Task {
             return false;
         }
 
-        boolean tapped = script.getFinger().tap(stallPoly);
+        boolean tapped = script.getFinger().tapGameScreen(stallPoly);
         if (tapped) {
             script.log("SWITCH", "Left-clicked Ore stall!");
             return true;

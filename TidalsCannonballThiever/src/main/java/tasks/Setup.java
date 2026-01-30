@@ -91,7 +91,7 @@ public class Setup extends Task {
             return;
         }
 
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 800, 0.002));
         UIResult<Integer> zoomResult = script.getWidgetManager().getSettings().getZoomLevel();
         if (zoomResult != null && zoomResult.isFound()) {
             int currentZoom = zoomResult.get();
@@ -114,6 +114,6 @@ public class Setup extends Task {
         }
 
         script.getWidgetManager().getSettings().close();
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(200, 800, 0.002));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 800, 0.002));
     }
 }

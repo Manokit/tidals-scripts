@@ -12,6 +12,7 @@ repositories {
 dependencies {
     // osmb api jar dependency
     compileOnly files('../API/API.jar')
+    implementation files('../utilities/jar/TidalsUtilities.jar')
 }
 
 java {

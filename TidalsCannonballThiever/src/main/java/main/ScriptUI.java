@@ -18,6 +18,7 @@ import java.util.prefs.Preferences;
 public class ScriptUI {
     private final Preferences prefs = Preferences.userRoot().node("tidals_cannonball_thiever");
     private static final String PREF_TWO_STALL_MODE = "two_stall_mode";
+    private static final String PREF_DEBUG_ENABLED = "debug_enabled";
 
     // colors matching the paint overlay
     private static final String BG_COLOR = "#163134";
@@ -28,32 +29,37 @@ public class ScriptUI {
 
     private final Script script;
     private CheckBox twoStallModeCheckBox;
+    private CheckBox debugCheckBox;
 
     public ScriptUI(Script script) {
         this.script = script;
     }
 
     public Scene buildScene(Script script) {
-        VBox root = new VBox(16);
-        root.setPadding(new Insets(20, 24, 20, 24));
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setStyle("-fx-background-color: " + BG_COLOR + ";");
+        TabPane tabPane = new TabPane();
+        tabPane.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        // === Main Tab ===
+        VBox mainBox = new VBox(16);
+        mainBox.setPadding(new Insets(20, 24, 20, 24));
+        mainBox.setAlignment(Pos.TOP_CENTER);
+        mainBox.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
         // logo
         ImageView logoView = loadLogo();
         if (logoView != null) {
-            root.getChildren().add(logoView);
+            mainBox.getChildren().add(logoView);
         }
 
         // version label
         Label versionLabel = new Label("v" + TidalsCannonballThiever.scriptVersion);
         versionLabel.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
-        root.getChildren().add(versionLabel);
+        mainBox.getChildren().add(versionLabel);
 
         // spacer
         Region spacer = new Region();
         spacer.setPrefHeight(8);
-        root.getChildren().add(spacer);
+        mainBox.getChildren().add(spacer);
 
         // checkbox with custom styling
         twoStallModeCheckBox = new CheckBox("Two Stall Mode");
@@ -95,7 +101,27 @@ public class ScriptUI {
         );
         optionBox.getChildren().addAll(twoStallModeCheckBox, modeDesc, warningLabel);
 
-        root.getChildren().add(optionBox);
+        mainBox.getChildren().add(optionBox);
+
+        Tab mainTab = new Tab("Main", mainBox);
+        mainTab.setClosable(false);
+
+        // === Debug Tab ===
+        VBox debugBox = new VBox(12);
+        debugBox.setPadding(new Insets(20, 24, 20, 24));
+        debugBox.setAlignment(Pos.TOP_CENTER);
+        debugBox.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        VBox debugSection = createSection("Debug");
+        debugCheckBox = createCheckbox("Enable verbose logging", prefs.getBoolean(PREF_DEBUG_ENABLED, false));
+        Label debugDesc = createDesc("Logs detailed task activate/execute info for troubleshooting.");
+        debugSection.getChildren().addAll(debugCheckBox, debugDesc);
+        debugBox.getChildren().add(debugSection);
+
+        Tab debugTab = new Tab("Debug", debugBox);
+        debugTab.setClosable(false);
+
+        tabPane.getTabs().addAll(mainTab, debugTab);
 
         // start button
         Button startButton = new Button("Start");
@@ -137,11 +163,13 @@ public class ScriptUI {
             ((Stage) startButton.getScene().getWindow()).close();
         });
 
-        root.getChildren().add(startButton);
+        VBox layout = new VBox(tabPane, startButton);
+        layout.setSpacing(15);
+        layout.setPadding(new Insets(15));
+        layout.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
-        Scene scene = new Scene(root);
+        Scene scene = new Scene(layout, 340, 380);
         scene.setFill(Color.web(BG_COLOR));
-        scene.getRoot().autosize();
 
         return scene;
     }
@@ -167,9 +195,48 @@ public class ScriptUI {
         }
     }
 
+    private VBox createSection(String title) {
+        VBox box = new VBox(6);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(10));
+        box.setStyle(
+            "-fx-background-color: derive(" + BG_COLOR + ", -15%); " +
+            "-fx-border-color: " + BORDER_COLOR + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 4; " +
+            "-fx-background-radius: 4;"
+        );
+
+        Label header = new Label(title);
+        header.setStyle("-fx-text-fill: " + GOLD + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+        box.getChildren().add(header);
+
+        return box;
+    }
+
+    private CheckBox createCheckbox(String text, boolean selected) {
+        CheckBox cb = new CheckBox(text);
+        cb.setSelected(selected);
+        cb.setStyle("-fx-text-fill: " + TEXT_LIGHT + "; -fx-font-size: 13px; -fx-cursor: hand;");
+        return cb;
+    }
+
+    private Label createDesc(String text) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        label.setMaxWidth(280);
+        label.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
+        return label;
+    }
+
     private void saveSettings() {
         prefs.putBoolean(PREF_TWO_STALL_MODE, isTwoStallMode());
-        script.log("SETTINGS", "Mode saved: " + (isTwoStallMode() ? "Two Stall" : "Single Stall"));
+        prefs.putBoolean(PREF_DEBUG_ENABLED, debugCheckBox.isSelected());
+
+        TidalsCannonballThiever.verboseLogging = debugCheckBox.isSelected();
+
+        script.log("SETTINGS", "Mode saved: " + (isTwoStallMode() ? "Two Stall" : "Single Stall") +
+                   ", debug: " + debugCheckBox.isSelected());
     }
 
     public boolean isTwoStallMode() {

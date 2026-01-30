@@ -54,77 +54,66 @@ public class Bank extends Task {
     @Override
     public boolean execute() {
         task = "Banking";
+
+        // state: bank not visible? open it
         if (!script.getWidgetManager().getBank().isVisible()) {
             openBank();
             return false;
         }
 
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 1200, 0.002));
+        // determine what items we're working with
+        int itemToWithdraw = (useBankedGems && makeBoltTips) ? selectedCutGemID : selectedUncutGemID;
+        String itemName = script.getItemManager().getItemName(itemToWithdraw);
 
-        task = "Search bank";
-
-        // determine what to withdraw
-        int itemToWithdraw;
-        String itemName;
-
-        if (useBankedGems && makeBoltTips) {
-            itemToWithdraw = selectedCutGemID;
-            itemName = script.getItemManager().getItemName(selectedCutGemID);
-        } else {
-            itemToWithdraw = selectedUncutGemID;
-            itemName = script.getItemManager().getItemName(selectedUncutGemID);
-        }
-
-        script.log(getClass(), "looking for " + itemName);
-
-        ItemGroupResult bank = script.getWidgetManager().getBank().search(Set.of(itemToWithdraw));
+        // state: have items to deposit? deposit them (keep chisel)
         ItemGroupResult inv = script.getWidgetManager().getInventory().search(Collections.emptySet());
-
         if (inv == null) {
             script.log(getClass(), "inventory not visible");
             return false;
         }
-        if (bank == null) {
+
+        // check if we have anything besides chisel to deposit
+        boolean hasItemsToDeposit = inv.getFreeSlots() < 27; // 27 = full minus chisel
+        if (hasItemsToDeposit) {
+            task = "Deposit";
+            script.getWidgetManager().getBank().depositAll(Set.of(ItemID.CHISEL));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 800, 0.002));
+            return false;
+        }
+
+        // state: check if bank has items we need
+        task = "Check bank";
+        ItemGroupResult bankResult = script.getWidgetManager().getBank().search(Set.of(itemToWithdraw));
+        if (bankResult == null) {
             script.log(getClass(), "bank not ready");
             return false;
         }
 
-        task = "Check bank";
-
-        if (bank.contains(itemToWithdraw)) {
-            int count = bank.getAmount(itemToWithdraw);
-            script.log(getClass(), count + " " + itemName + " in bank");
-        } else {
+        if (!bankResult.contains(itemToWithdraw)) {
             script.log(getClass(), "out of " + itemName + ", stopping");
             script.stop();
             return false;
         }
 
-        // deposit all except chisel
-        task = "Deposit";
-        script.getWidgetManager().getBank().depositAll(Set.of(ItemID.CHISEL));
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 1500, 0.002));
+        int bankCount = bankResult.getAmount(itemToWithdraw);
+        script.log(getClass(), bankCount + " " + itemName + " in bank");
 
-        // refresh inv after deposit
-        inv = script.getWidgetManager().getInventory().search(Collections.emptySet());
-        if (inv == null) {
-            script.log(getClass(), "inventory gone after deposit");
-            return false;
-        }
-
+        // state: need to withdraw? withdraw items
         int slots = inv.getFreeSlots();
-        script.log(getClass(), slots + " empty slots");
-
-        // withdraw
-        task = "Withdraw";
-        if (!script.getWidgetManager().getBank().withdraw(itemToWithdraw, slots)) {
-            script.log(getClass(), "withdraw failed");
+        if (slots > 0) {
+            task = "Withdraw";
+            if (!script.getWidgetManager().getBank().withdraw(itemToWithdraw, slots)) {
+                script.log(getClass(), "withdraw failed");
+                return false;
+            }
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 600, 0.002));
             return false;
         }
 
+        // state: done banking, close and let other tasks take over
         task = "Close bank";
         script.getWidgetManager().getBank().close();
-        script.pollFramesHuman(() -> !script.getWidgetManager().getBank().isVisible(), 5000);
+        script.pollFramesUntil(() -> !script.getWidgetManager().getBank().isVisible(), RandomUtils.weightedRandom(2500, 4000, 0.002));
         return false;
     }
 
@@ -156,7 +145,7 @@ public class Bank extends Task {
                 prevPos.set(current);
             }
 
-            return script.getWidgetManager().getBank().isVisible() || posTimer.get().timeElapsed() > 2000;
-        }, 15000);
+            return script.getWidgetManager().getBank().isVisible() || posTimer.get().timeElapsed() > RandomUtils.weightedRandom(1500, 2500, 0.002);
+        }, RandomUtils.weightedRandom(12000, 18000, 0.002));
     }
 }

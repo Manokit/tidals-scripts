@@ -23,6 +23,7 @@ public class ScriptUI {
     private static final String PREF_WEBHOOK_URL = "tgemcutter_webhook_url";
     private static final String PREF_WEBHOOK_INTERVAL = "tgemcutter_webhook_interval";
     private static final String PREF_WEBHOOK_INCLUDE_USER = "tgemcutter_webhook_include_user";
+    private static final String PREF_DEBUG_ENABLED = "tgemcutter_debug_enabled";
 
     private final Script script;
     private ComboBox<Integer> gemComboBox;
@@ -33,6 +34,7 @@ public class ScriptUI {
     private TextField webhookUrlField;
     private ComboBox<Integer> webhookIntervalComboBox;
     private CheckBox includeUsernameCheckBox;
+    private CheckBox debugCheckBox;
 
     // Uncut gem options (semi-precious first, then precious)
     private static final Integer[] GEM_OPTIONS = {
@@ -171,7 +173,25 @@ public class ScriptUI {
         Tab webhookTab = new Tab("Webhooks", webhookBox);
         webhookTab.setClosable(false);
 
-        tabPane.getTabs().addAll(mainTab, webhookTab);
+        // === Debug Tab ===
+        VBox debugBox = new VBox(12);
+        debugBox.setStyle("-fx-background: linear-gradient(to bottom, #18547A, #0F3460); -fx-padding: 20; -fx-alignment: center");
+
+        debugCheckBox = new CheckBox("Enable verbose logging");
+        debugCheckBox.setStyle("-fx-text-fill: #40E0D0; -fx-font-size: 13px;");
+        debugCheckBox.setSelected(prefs.getBoolean(PREF_DEBUG_ENABLED, false));
+
+        Label debugDesc = new Label("Logs detailed task activate/execute info for troubleshooting.");
+        debugDesc.setWrapText(true);
+        debugDesc.setMaxWidth(260);
+        debugDesc.setStyle("-fx-text-fill: #98FB98; -fx-font-size: 11px;");
+
+        debugBox.getChildren().addAll(debugCheckBox, debugDesc);
+
+        Tab debugTab = new Tab("Debug", debugBox);
+        debugTab.setClosable(false);
+
+        tabPane.getTabs().addAll(mainTab, webhookTab, debugTab);
 
         // Confirm Button (Ocean themed)
         Button confirmButton = new Button("Start Cutting Gems");
@@ -245,6 +265,9 @@ public class ScriptUI {
         prefs.put(PREF_WEBHOOK_URL, getWebhookUrl());
         prefs.putInt(PREF_WEBHOOK_INTERVAL, getWebhookInterval());
         prefs.putBoolean(PREF_WEBHOOK_INCLUDE_USER, isUsernameIncluded());
+        prefs.putBoolean(PREF_DEBUG_ENABLED, debugCheckBox.isSelected());
+
+        TidalsGemCutter.verboseLogging = debugCheckBox.isSelected();
 
         ((Stage) gemComboBox.getScene().getWindow()).close();
     }
