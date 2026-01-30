@@ -43,6 +43,7 @@ public class EscapeJail extends Task {
     // teleport state - track if we're waiting for teleport
     private boolean waitingForTeleport = false;
     private long teleportStartTime = 0;
+    private long teleportTimeout = 0;
 
     public EscapeJail(Script script) {
         super(script);
@@ -146,6 +147,7 @@ public class EscapeJail extends Task {
         // mark that we're waiting for teleport
         waitingForTeleport = true;
         teleportStartTime = System.currentTimeMillis();
+        teleportTimeout = RandomUtils.weightedRandom(4500, 6000, 0.002);
         return false; // re-evaluate next poll
     }
 
@@ -167,7 +169,7 @@ public class EscapeJail extends Task {
         }
 
         // check for timeout (5 seconds)
-        if (System.currentTimeMillis() - teleportStartTime > 5000) {
+        if (System.currentTimeMillis() - teleportStartTime > teleportTimeout) {
             script.log("JAIL", "Teleport timed out, falling back to lock pick");
             waitingForTeleport = false;
             return false; // next poll will try lock pick

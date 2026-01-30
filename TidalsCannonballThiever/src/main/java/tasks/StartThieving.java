@@ -23,11 +23,15 @@ public class StartThieving extends Task {
     private static boolean initialPositionDone = false;
     private static boolean firstDropAssumed = false;
     private static boolean justCompletedGuardSync = false; // skip delays after sync
+    private static boolean delayPending = false; // pre-theft delay queued for next poll
+    private static boolean delayRolled = false;  // already rolled the delay dice this cycle
 
     public static void resetStaticState() {
         initialPositionDone = false;
         firstDropAssumed = false;
         justCompletedGuardSync = false;
+        delayPending = false;
+        delayRolled = false;
     }
 
     public static void resetAfterBreak() {
@@ -35,6 +39,8 @@ public class StartThieving extends Task {
         initialPositionDone = false;
         firstDropAssumed = false;
         justCompletedGuardSync = false;
+        delayPending = false;
+        delayRolled = false;
     }
 
     // reset for new thieving cycle (after deposit, jail, etc.)
@@ -42,6 +48,8 @@ public class StartThieving extends Task {
         initialPositionDone = false;
         firstDropAssumed = false;
         justCompletedGuardSync = false;
+        delayPending = false;
+        delayRolled = false;
     }
 
     private WorldPosition getThievingTile() {
@@ -135,14 +143,24 @@ public class StartThieving extends Task {
             return false;
         }
 
-        // state: optional pre-theft delay (single-stall mode, 25% chance)
-        if (!twoStallMode && RandomUtils.uniformRandom(1, 100) <= 25) {
+        // state: executing pre-theft delay (set on previous poll)
+        if (delayPending) {
+            delayPending = false;
             script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(80, 400, 0.002));
             if (guardTracker.isAnyGuardInDangerZone()) {
                 script.log("THIEVE", "ABORT - Guard moved in during delay!");
                 return false;
             }
+            // delay done, fall through to steal
         }
+
+        // state: optional pre-theft delay (single-stall mode, 25% chance)
+        if (!twoStallMode && !delayRolled && RandomUtils.uniformRandom(1, 100) <= 25) {
+            delayPending = true;
+            delayRolled = true;
+            return true; // re-poll to execute delay next frame
+        }
+        delayRolled = false;
 
         // state: validate position
         WorldPosition myPos = script.getWorldPosition();

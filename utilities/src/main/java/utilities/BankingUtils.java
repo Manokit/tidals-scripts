@@ -117,7 +117,8 @@ public class BankingUtils {
             return false;
         }
 
-        // wait with movement tracking - stops waiting 2s after player stops moving
+        // wait with movement tracking - stops waiting after player stops moving
+        long movementStallMs = RandomUtils.uniformRandom(1500, 2500);
         AtomicReference<Timer> posTimer = new AtomicReference<>(new Timer());
         AtomicReference<WorldPosition> prevPos = new AtomicReference<>(null);
 
@@ -130,8 +131,8 @@ public class BankingUtils {
                 prevPos.set(current);
             }
 
-            // bank visible or stopped moving for 2s
-            return script.getWidgetManager().getBank().isVisible() || posTimer.get().timeElapsed() > 2000;
+            // bank visible or stopped moving
+            return script.getWidgetManager().getBank().isVisible() || posTimer.get().timeElapsed() > movementStallMs;
         }, timeout);
 
         return script.getWidgetManager().getBank().isVisible();

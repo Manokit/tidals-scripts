@@ -16,12 +16,27 @@ import static main.TidalsGemCutter.*;
 
 public class Process extends Task {
 
+    private enum ProcessState { IDLE, CRAFTING }
+    private ProcessState state = ProcessState.IDLE;
+
+    // crafting tracking state
+    private int craftingConsumedID;
+    private int craftingProducedID;
+    private boolean craftingIsCrushable;
+    private Timer craftingTimer;
+    private int craftingTimeout;
+    private int lastProducedCount;
+    private int lastCrushedCount;
+
     public Process(Script script) {
         super(script);
     }
 
     @Override
     public boolean activate() {
+        // stay active while crafting
+        if (state == ProcessState.CRAFTING) return true;
+
         ItemGroupResult inv;
 
         // banked cut gems mode - need cut gems
@@ -46,6 +61,12 @@ public class Process extends Task {
 
     @Override
     public boolean execute() {
+        // state: crafting in progress - check each poll
+        if (state == ProcessState.CRAFTING) {
+            return pollCrafting();
+        }
+
+        // state: IDLE - start a new crafting batch
         if (script.getWidgetManager().getBank().isVisible()) {
             script.log(getClass(), "closing bank");
             return script.getWidgetManager().getBank().close();
@@ -63,70 +84,102 @@ public class Process extends Task {
         boolean hasCut = inv.contains(selectedCutGemID);
 
         if (makeBoltTips && hasCut) {
-            return makeBoltTipsFromCutGems(inv);
+            return startCrafting(inv, selectedCutGemID, selectedBoltTipID, "making bolt tips");
         } else if (hasUncut) {
-            return cutUncutGems(inv);
+            return startCrafting(inv, selectedUncutGemID, selectedCutGemID, "cutting");
         }
 
         return false;
     }
 
-    private boolean cutUncutGems(ItemGroupResult inv) {
+    private boolean startCrafting(ItemGroupResult inv, int consumedID, int producedID, String logMsg) {
         if (!script.getWidgetManager().getInventory().unSelectItemIfSelected()) {
             return false;
         }
 
-        boolean interacted = interactWithItems(inv, selectedUncutGemID);
+        boolean interacted = interactWithItems(inv, consumedID == selectedCutGemID ? selectedCutGemID : consumedID);
 
         if (!interacted) {
             script.log(getClass(), "interact failed");
             return false;
         }
 
-        task = "Select gem";
+        task = "Select item";
         DialogueType dialogueType = script.getWidgetManager().getDialogue().getDialogueType();
         if (dialogueType == DialogueType.ITEM_OPTION) {
-            boolean selected = script.getWidgetManager().getDialogue().selectItem(selectedUncutGemID);
+            int selectID = (consumedID == selectedCutGemID && makeBoltTips) ? selectedBoltTipID : consumedID;
+            boolean selected = script.getWidgetManager().getDialogue().selectItem(selectID);
             if (!selected) {
                 script.log(getClass(), "selection failed");
                 return false;
             }
 
-            script.log(getClass(), "cutting");
-            waitUntilFinishedCrafting(selectedUncutGemID, selectedCutGemID);
-            // waitUntilFinishedCrafting already has built-in delay, no extra needed
+            // transition to crafting state
+            script.log(getClass(), logMsg);
+            craftingConsumedID = consumedID;
+            craftingProducedID = producedID;
+            craftingIsCrushable = CRUSHABLE_GEMS.contains(consumedID);
+            craftingTimer = new Timer();
+            craftingTimeout = RandomUtils.gaussianRandom(70000, 80000, 74000, 2000);
+            lastProducedCount = getItemCount(producedID);
+            lastCrushedCount = craftingIsCrushable ? getItemCount(CRUSHED_GEM_ID) : 0;
+            state = ProcessState.CRAFTING;
+            task = "Processing";
+            return true; // yield - check crafting progress next poll
         }
 
         return false;
     }
 
-    private boolean makeBoltTipsFromCutGems(ItemGroupResult inv) {
-        if (!script.getWidgetManager().getInventory().unSelectItemIfSelected()) {
+    // called each poll while crafting - one check per frame, then yield
+    private boolean pollCrafting() {
+        task = "Processing";
+
+        // level up interrupts crafting
+        DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
+        if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
+            script.log(getClass(), "level up");
+            script.getWidgetManager().getDialogue().continueChatDialogue();
+            state = ProcessState.IDLE;
+            return true; // re-poll to restart crafting
+        }
+
+        // timeout
+        if (craftingTimer.timeElapsed() > craftingTimeout) {
+            script.log(getClass(), "crafting timeout");
+            state = ProcessState.IDLE;
             return false;
         }
 
-        boolean interacted = interactWithItems(inv, selectedCutGemID);
-
-        if (!interacted) {
-            script.log(getClass(), "interact failed");
-            return false;
+        // track crafted items
+        int currentCount = getItemCount(craftingProducedID);
+        if (currentCount > lastProducedCount) {
+            int crafted = currentCount - lastProducedCount;
+            craftCount += crafted;
+            lastProducedCount = currentCount;
         }
 
-        task = "Select bolt tips";
-        DialogueType dialogueType = script.getWidgetManager().getDialogue().getDialogueType();
-        if (dialogueType == DialogueType.ITEM_OPTION) {
-            boolean selected = script.getWidgetManager().getDialogue().selectItem(selectedBoltTipID);
-            if (!selected) {
-                script.log(getClass(), "selection failed");
-                return false;
+        // track crushed gems
+        if (craftingIsCrushable) {
+            int currentCrushed = getItemCount(CRUSHED_GEM_ID);
+            if (currentCrushed > lastCrushedCount) {
+                int newCrushed = currentCrushed - lastCrushedCount;
+                crushedCount += newCrushed;
+                lastCrushedCount = currentCrushed;
+                script.log(getClass(), "gem crushed! total crushed: " + crushedCount);
             }
-
-            script.log(getClass(), "making bolt tips");
-            waitUntilFinishedCrafting(selectedCutGemID, selectedBoltTipID);
-            // waitUntilFinishedCrafting already has built-in delay, no extra needed
         }
 
-        return false;
+        // check if done - no more consumable items
+        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(craftingConsumedID));
+        if (inv == null || !inv.contains(craftingConsumedID)) {
+            script.log(getClass(), "crafting complete");
+            state = ProcessState.IDLE;
+            return false; // done, let executor re-evaluate (probably bank next)
+        }
+
+        // still crafting - yield back to executor
+        return true;
     }
 
     private boolean interactWithItems(ItemGroupResult inv, int gemID) {
@@ -157,62 +210,6 @@ public class Process extends Task {
 
         task = "Wait dialogue";
         return script.pollFramesHuman(condition, RandomUtils.gaussianRandom(3000, 6000, 4000, 800));
-    }
-
-    private void waitUntilFinishedCrafting(int consumedID, int producedID) {
-        task = "Processing";
-        Timer timer = new Timer();
-        int timeout = RandomUtils.gaussianRandom(70000, 80000, 74000, 2000);
-
-        // check if this gem can crush
-        boolean isCrushable = CRUSHABLE_GEMS.contains(consumedID);
-
-        final int[] lastCount = {getItemCount(producedID)};
-        final int[] lastCrushed = {isCrushable ? getItemCount(CRUSHED_GEM_ID) : 0};
-
-        BooleanSupplier condition = () -> {
-            // level up
-            DialogueType type = script.getWidgetManager().getDialogue().getDialogueType();
-            if (type == DialogueType.TAP_HERE_TO_CONTINUE) {
-                script.log(getClass(), "level up");
-                script.getWidgetManager().getDialogue().continueChatDialogue();
-                script.pollFramesHuman(() -> true, RandomUtils.gaussianRandom(1000, 3500, 1500, 500));
-                return true;
-            }
-
-            // timeout
-            if (timer.timeElapsed() > timeout) {
-                return true;
-            }
-
-            // track crafted items
-            int currentCount = getItemCount(producedID);
-            if (currentCount > lastCount[0]) {
-                int crafted = currentCount - lastCount[0];
-                craftCount += crafted;
-                lastCount[0] = currentCount;
-            }
-
-            // track crushed gems for semi-precious
-            if (isCrushable) {
-                int currentCrushed = getItemCount(CRUSHED_GEM_ID);
-                if (currentCrushed > lastCrushed[0]) {
-                    int newCrushed = currentCrushed - lastCrushed[0];
-                    crushedCount += newCrushed;
-                    lastCrushed[0] = currentCrushed;
-                    script.log(getClass(), "gem crushed! total crushed: " + crushedCount);
-                }
-            }
-
-            // check if done
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of(consumedID));
-            if (inv == null) return false;
-
-            return !inv.contains(consumedID);
-        };
-
-        script.log(getClass(), "waiting for crafting");
-        script.pollFramesHuman(condition, timeout);
     }
 
     private int getItemCount(int itemID) {

@@ -65,6 +65,9 @@ public class ReturnToThieving extends Task {
         return !isAtAnySafetyTile() && !isAtThievingTile() && guardTracker.isSafeToReturn();
     }
 
+    private enum ReturnState { IDLE, TAPPED_TILE, WALKING }
+    private ReturnState returnState = ReturnState.IDLE;
+
     @Override
     public boolean execute() {
         task = "Walking to stall";
@@ -75,43 +78,60 @@ public class ReturnToThieving extends Task {
             return false;
         }
 
-        WorldPosition target = getThievingTile();
-        WalkConfig config = twoStallMode ? buildExactTileConfig() : buildNearbyConfig();
+        // state: arrived at destination
+        if (isAtThievingTile()) {
+            script.log("RETURN", "Arrived at stall position");
+            returnState = ReturnState.IDLE;
+            return true;
+        }
 
+        WorldPosition target = getThievingTile();
+
+        // state: waiting for tile tap movement to complete
+        if (returnState == ReturnState.TAPPED_TILE) {
+            // tile tap didn't get us there, fall back to walker
+            script.log("RETURN", "Tile tap insufficient, using walker...");
+            returnState = ReturnState.WALKING;
+            return true;
+        }
+
+        // state: walker in progress - check if we arrived
+        if (returnState == ReturnState.WALKING) {
+            // not yet arrived, walk again
+            WalkConfig config = twoStallMode ? buildExactTileConfig() : buildNearbyConfig();
+            try {
+                script.getWalker().walkTo(target, config);
+            } catch (NullPointerException e) {
+                script.log("RETURN", "Walker NPE - position became null mid-walk, retrying...");
+                returnState = ReturnState.IDLE;
+                return false;
+            }
+            return true;
+        }
+
+        // state: IDLE - initiate movement
         if (isAtAnySafetyTile()) {
             script.log("RETURN", "Moving from safety tile to stall position...");
-            // try direct tile tap first for short distance
             if (tapOnTile(target)) {
-                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(400, 1200, 0.002));
-                if (isAtThievingTile()) {
-                    script.log("RETURN", "Arrived via tile tap");
-                    return true;
-                }
+                returnState = ReturnState.TAPPED_TILE;
+                return true;
             }
-            // fall back to walker
-            script.log("RETURN", "Tile tap insufficient, using walker...");
+            // tap failed, go straight to walker
+            script.log("RETURN", "Tile tap failed, using walker...");
         } else {
             script.log("RETURN", "Walking to thieving tile...");
         }
 
+        // start walking
+        WalkConfig config = twoStallMode ? buildExactTileConfig() : buildNearbyConfig();
         try {
-            boolean walked = script.getWalker().walkTo(target, config);
-
-            // brief settle time after walk
-            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1000, 0.002));
-
-            if (walked || isAtThievingTile()) {
-                script.log("RETURN", "Arrived at stall position");
-                return true;
-            }
+            script.getWalker().walkTo(target, config);
+            returnState = ReturnState.WALKING;
         } catch (NullPointerException e) {
-            // position can become null mid-walk (loading screens, game state changes)
             script.log("RETURN", "Walker NPE - position became null mid-walk, retrying...");
             return false;
         }
-
-        script.log("RETURN", "Did not reach stall position, will retry");
-        return false;
+        return true;
     }
     
     private boolean tapOnTile(WorldPosition tile) {

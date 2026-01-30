@@ -447,7 +447,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             // simple walk with no expensive breakCondition, just reach the tile
             WalkConfig config = new WalkConfig.Builder()
                     .breakDistance(0)
-                    .timeout(5000)
+                    .timeout(RandomUtils.weightedRandom(4500, 6000, 0.002))
                     .build();
             script.getWalker().walkTo(FOUR_LOG_TILE, config);
             // short wait after walking to let position settle
@@ -523,10 +523,18 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 continue;
             }
 
+            // visibility check before tapping ground item
+            double visibility = script.getWidgetManager().insideGameScreenFactor(tilePoly, List.of());
+            if (visibility < 0.05) {
+                script.log(getClass(), "tile not visible on screen, skipping");
+                continue;
+            }
+
             // tap the tile with Pick action (retry up to 3 times)
+            // tapGameScreen for 3D world objects to avoid clicking through UI overlays
             boolean tapped = false;
             for (int attempt = 1; attempt <= 3 && !tapped; attempt++) {
-                tapped = script.getFinger().tap(tilePoly, "Pick");
+                tapped = script.getFinger().tapGameScreen(tilePoly, "Pick");
                 if (!tapped) {
                     script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 300), true);
                 }
@@ -1034,7 +1042,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         boolean restored = script.pollFramesUntil(() -> {
             Integer prayer = script.getWidgetManager().getMinimapOrbs().getPrayerPoints();
             return prayer != null && prayer >= 30;
-        }, 3000);
+        }, RandomUtils.gaussianRandom(2500, 3500, 3000, 250));
 
         if (restored) {
             script.log(getClass(), "prayer restored");
