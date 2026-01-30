@@ -51,3 +51,8 @@ examples/
 # Feedback/review notes
 osmb-feedback-todo.md
 osmb_code_review_feedback.md
+
+# Webwalker (private utility)
+TidalsDaxWalkerPOC/
+utilities/src/main/java/utilities/webwalker/
+Webwalker_POC_PRD.md
