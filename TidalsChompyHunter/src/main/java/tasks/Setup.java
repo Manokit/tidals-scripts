@@ -186,10 +186,20 @@ public class Setup extends Task {
             script.log(getClass(), "stabilization complete - checking for players");
         }
 
-        // check for ANY players on minimap BEFORE starting (immediate hop if occupied)
-        // use large radius (50 tiles) to scan entire visible minimap, not just crash radius
+        // check for players on minimap BEFORE starting - scan multiple times to catch
+        // nearby players whose dot might overlap with ours on a single frame
         task = "checking for players...";
-        if (DetectPlayers.hasPlayersOnMinimap(script, 50)) {
+        boolean playerDetected = false;
+        for (int scan = 0; scan < 3; scan++) {
+            if (DetectPlayers.hasPlayersOnMinimap(script, 50)) {
+                playerDetected = true;
+                break;
+            }
+            if (scan < 2) {
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(400, 700));
+            }
+        }
+        if (playerDetected) {
             script.log(getClass(), "=== WORLD OCCUPIED ===");
             script.log(getClass(), "player detected on minimap - triggering hop");
             DetectPlayers.crashDetected = true;

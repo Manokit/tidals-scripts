@@ -32,7 +32,8 @@ public class DetectPlayers extends Task {
     public static int detectionRadius = 9;
 
     // self-detection filter - our own dot can appear offset from reported position
-    private static final int SELF_FILTER_DISTANCE = 3;
+    // keep tight (1 tile) to avoid filtering out a nearby player as "us"
+    private static final double SELF_FILTER_DISTANCE = 1.5;
 
     // post-hop grace period - skip occupied check while OSMB stabilizes position
     private static final long POST_HOP_GRACE_MS = 10000;
