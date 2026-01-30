@@ -383,6 +383,308 @@ script.pollFramesUntil(() -> {
 
 ---
 
+### 16. Using tap() Instead of tapGameScreen() for 3D Objects
+
+**CRITICAL**: `tap()` clicks at ANY point on screen, even if covered by UI elements. For 3D world objects (rocks, trees, NPCs, bank booths), always use `tapGameScreen()`.
+
+```java
+// WRONG - Can click UI elements overlapping the game world
+RSObject rock = script.getObjectManager().getClosestObject(myPos, "Rocks");
+Polygon hull = rock.getConvexHull();
+script.getFinger().tap(hull, "Mine");  // BUG: Might click chatbox!
+
+// CORRECT - Only clicks visible game area
+script.getFinger().tapGameScreen(hull, "Mine");
+```
+
+**When to use each:**
+| Method | Use Case |
+|--------|----------|
+| `tap(shape, "Action")` | UI elements (inventory items, bank interface, dialogue) |
+| `tapGameScreen(shape, "Action")` | 3D world objects (rocks, trees, NPCs, bank booths) |
+
+**Rule**: For anything rendered in the 3D game world, use `tapGameScreen()`. Reserve `tap()` for UI-only interactions.
+
+---
+
+### 17. Monolithic Execute Methods (Linear Execution)
+
+**CRITICAL**: OSMB uses a polling model. Each `execute()` call should perform ONE logical action, then return. Don't write "monolithic" execute methods that chain multiple steps assuming all succeed.
+
+**The anti-pattern** (also called "linear execution" or "procedural scripting"):
+```java
+// WRONG - Monolithic method blocks the framework
+@Override
+public boolean execute() {
+    // Dismiss dialogue
+    if (hasDialogue()) {
+        dismissDialogue();
+        Thread.sleep(500);  // BUG: blocking!
+    }
+
+    // Walk to deposit box
+    walkToDepositBox();
+    while (!atDepositBox()) { Thread.sleep(100); }  // BUG: blocking loop!
+
+    // Open deposit box
+    openDepositBox();
+    while (!isOpen()) { Thread.sleep(100); }  // BUG: blocking loop!
+
+    // Deposit and walk back
+    depositAll();
+    walkBack();  // assumes everything succeeded!
+    return false;
+}
+```
+
+**The correct pattern** (from production DepositOres.java):
+```java
+// CORRECT - State machine with one action per poll
+@Override
+public boolean execute() {
+    // state 1: dismiss dialogue if present
+    if (hasInventoryFullDialogue()) {
+        script.log("DEPOSIT", "Dismissing dialogue...");
+        script.getWidgetManager().getDialogue().continueChatDialogue();
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1000));
+        return true;  // re-poll to check next state
+    }
+
+    // state 2: deposit interface open, has items → click deposit
+    if (isDepositInterfaceOpen() && !isDepositBoxEmpty()) {
+        script.log("DEPOSIT", "Clicking deposit all...");
+        depositAll();
+        script.pollFramesUntil(() -> isDepositBoxEmpty(), 3000);
+        return true;  // re-poll to verify
+    }
+
+    // state 3: interface open, items deposited → close
+    if (isDepositInterfaceOpen() && isDepositBoxEmpty()) {
+        closeDepositInterface();
+        return true;
+    }
+
+    // state 4: need to walk to deposit box
+    if (!isNearDepositBox()) {
+        script.log("DEPOSIT", "Walking to deposit box...");
+        script.getWalker().walkTo(DEPOSIT_BOX_TILE);
+        return true;  // re-poll when arrived
+    }
+
+    // state 5: at box, need to open it
+    if (!isInventoryEmpty()) {
+        openDepositBoxWithMenu();
+        script.pollFramesUntil(() -> isDepositInterfaceOpen(), 5000);
+        return true;
+    }
+
+    // state 6: done
+    finishDepositRun();
+    return true;
+}
+```
+
+**Why monolithic methods fail:**
+1. **Blocks the framework** - While loops prevent OSMB from processing events
+2. **No crash recovery** - Disconnect mid-sequence = script hangs forever
+3. **Misses priority tasks** - Random events, level-ups, world hops ignored
+4. **Unresponsive UI** - Paint freezes, stop button doesn't work
+5. **No debugging** - When it breaks, no logging to know where
+6. **Assumes success** - Each step assumes the previous succeeded
+
+**Key characteristics of good poll-based code:**
+- Each state is an if-block that does ONE action and returns
+- Uses `pollFramesUntil` for waits, NOT while loops or Thread.sleep
+- Logs state transitions for debugging
+- Returns after every action to let framework re-evaluate
+- Uses flags (like `doingDepositRun`) to resume interrupted operations
+
+**Rule**: Think in states, not sequences. Each poll answers "what's my current state?" and performs ONE appropriate action.
+
+**See `docs/poll-based-architecture.md`** for complete guide with state flow diagrams and production examples.
+
+---
+
+### 18. Static Timeout Values
+
+Using fixed timeout values looks robotic. Always add randomization to wait times.
+
+```java
+// WRONG - Robotic, always exactly 5000ms
+script.pollFramesUntil(() -> bank.isVisible(), 5000);
+script.pollFramesUntil(() -> false, 2000);  // exactly 2 seconds
+
+// CORRECT - Randomized timeouts
+script.pollFramesUntil(() -> bank.isVisible(), RandomUtils.gaussianRandom(4500, 5500, 5000, 250));
+script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1800, 2200, 2000, 100));
+
+// CORRECT - For short delays, use weightedRandom
+script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
+```
+
+**Timeout guidelines:**
+| Scenario | Pattern |
+|----------|---------|
+| Action timeout (bank open, dialogue) | `gaussianRandom(min, max, target, stddev)` |
+| Animation wait | `pollFramesUntil(() -> false, gaussianRandom(...))` |
+| Short reaction delay | `pollFramesHuman(() -> true, weightedRandom(...))` |
+| Stall detection | `MovementChecker` with random 800-2000ms |
+
+**Rule**: Every timeout should have variance. Use `gaussianRandom` for longer waits, `weightedRandom` for short delays.
+
+---
+
+### 19. Unnecessary Null Checks on Dialogue and UIResult
+
+**Per OSMB**: Certain API objects are **guaranteed non-null**. Adding unnecessary null checks is verbose and misleading.
+
+```java
+// WRONG - Dialogue object is never null
+Dialogue dialogue = script.getWidgetManager().getDialogue();
+if (dialogue == null || !dialogue.isVisible()) return false;  // null check is unnecessary
+
+// CORRECT - Just check visibility
+Dialogue dialogue = script.getWidgetManager().getDialogue();
+if (!dialogue.isVisible()) return false;
+```
+
+```java
+// WRONG - UIResult is never null (it's like Optional)
+UIResult<String> textResult = dialogue.getText();
+if (textResult == null || !textResult.isFound()) return false;  // null check is unnecessary
+
+// CORRECT - Just check isFound()
+UIResult<String> textResult = dialogue.getText();
+if (!textResult.isFound()) return false;
+```
+
+**Objects guaranteed non-null:**
+| Object | Always non-null? | How to check |
+|--------|------------------|--------------|
+| `Dialogue` | ✅ Yes | Use `.isVisible()` |
+| `UIResult<T>` | ✅ Yes | Use `.isFound()` (like Optional) |
+| `Bank` | ✅ Yes | Use `.isVisible()` |
+| `DepositBox` | ✅ Yes | Use `.isVisible()` |
+| `ItemGroupResult` | ❌ Can be null | Null check required |
+| `ItemSearchResult` | ❌ Can be null | Null check required |
+| `RSObject` | ❌ Can be null | Null check required |
+
+**Rule**: For Dialogue and UIResult, skip the null check - just check `.isVisible()` or `.isFound()`.
+
+---
+
+### 20. Interface Interaction Timing (Wait Before Clicking)
+
+**CRITICAL**: Opening an interface (bank, deposit box, dialogue) doesn't mean it's ready for interaction. Always add a small delay before clicking interface elements.
+
+```java
+// WRONG - Interface visible but not ready for input
+if (script.getWidgetManager().getDepositBox().isVisible()) {
+    script.getWidgetManager().getDepositBox().depositAll(Set.of());  // May fail silently!
+}
+
+// CORRECT - Wait for interface to be ready
+if (script.getWidgetManager().getDepositBox().isVisible()) {
+    // wait for interface to fully load before interacting
+    script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 600));
+    script.getWidgetManager().getDepositBox().depositAll(Set.of());
+}
+```
+
+**Why interfaces need load time:**
+1. **Visual rendering != interactive** - Interface is drawn before buttons are clickable
+2. **Network latency** - Server may not have finished processing
+3. **Animation completion** - Opening animations must finish
+4. **Widget initialization** - Internal state may not be ready
+
+**Recommended delays after opening interfaces:**
+| Interface | Minimum delay | Recommended pattern |
+|-----------|---------------|---------------------|
+| Bank | 300-500ms | `pollFramesUntil(() -> false, weightedRandom(300, 500))` |
+| Deposit Box | 300-600ms | `pollFramesUntil(() -> false, weightedRandom(300, 600))` |
+| Dialogue | 200-400ms | `pollFramesHuman(() -> true, weightedRandom(200, 400))` |
+| Shop | 300-500ms | `pollFramesUntil(() -> false, weightedRandom(300, 500))` |
+
+**Rule**: Always add 300-600ms delay after detecting interface is visible, before interacting with it.
+
+---
+
+### 21. Hull Non-Null Without Visibility Check (The Visibility Trap)
+
+**CRITICAL**: `getConvexHull()` returns a polygon even when the object is completely off-screen. A non-null hull does NOT mean the object is clickable.
+
+```java
+// WRONG - Assumes non-null hull means visible
+RSObject rock = script.getObjectManager().getClosestObject(myPos, "Rocks");
+Polygon hull = rock.getConvexHull();
+if (hull != null) {
+    script.getFinger().tapGameScreen(hull, "Mine");  // Might click nothing!
+}
+
+// CORRECT - Verify visibility before clicking
+RSObject rock = script.getObjectManager().getClosestObject(myPos, "Rocks");
+if (rock == null) return false;
+
+Polygon hull = rock.getConvexHull();
+if (hull == null || hull.numVertices() == 0) {
+    return false;  // no valid hull
+}
+
+// Check how much of the hull is visible on the game screen
+double visibility = script.getWidgetManager().insideGameScreenFactor(
+    hull, List.of(ChatboxComponent.class)  // ignore chatbox overlay
+);
+
+if (visibility < 0.3) {
+    script.log(getClass(), "object not visible enough: " + visibility);
+    return false;  // walk closer or rotate camera
+}
+
+// Now safe to click
+script.getFinger().tapGameScreen(hull, "Mine");
+```
+
+**Visibility factor thresholds:**
+| Factor | Meaning | Recommended Action |
+|--------|---------|-------------------|
+| `< 0.3` | Mostly obscured | Don't click - walk closer or rotate camera |
+| `0.3 - 0.5` | Partially visible | Consider shrinking polygon before clicking |
+| `> 0.5` | Mostly visible | Safe to click |
+
+**Rule**: Always call `insideGameScreenFactor()` before tapping 3D objects. Non-null hull ≠ visible object.
+
+See `docs/interaction-patterns.md` for complete interaction patterns.
+
+---
+
+### 22. activate() Blocking Its Own State Machine (CRITICAL)
+
+When a task uses an enum-based state machine, `activate()` is called **every poll** — not just once. If the activation conditions become false mid-cycle (e.g. inventory empties after dropping items, or `inCombat` flag prevents re-entry), the state machine freezes and never reaches its cleanup/reset state.
+
+```java
+// WRONG - activate() kills its own state machine
+@Override
+public boolean activate() {
+    return countItems() > 0;  // becomes false after last drop, but TRACKING state never runs
+}
+
+// CORRECT - mid-execution guard
+@Override
+public boolean activate() {
+    if (DetectPlayers.crashDetected) return false;  // crash always interrupts
+    if (state != State.INITIAL) return true;        // let state machine finish
+    return countItems() > 0;                        // normal check for fresh activation
+}
+```
+
+**Real bugs caused by this:**
+- `DropToads`: Last toad dropped → inventory=0 → `activate()` false → toad never tracked
+- `AttackChompy`: Attack sent → `inCombat=true` → `activate()` false → stuck 30s until safety valve
+
+**Rule**: Any task with a multi-step state machine MUST check `if (state != INITIAL) return true` before other activation conditions. See `docs/poll-based-architecture.md` for full explanation.
+
+---
+
 ## Debug Logging Best Practices
 
 ### Comprehensive Debug Pattern
@@ -590,10 +892,10 @@ public int poll() {
 
 ## Best Practices Summary
 
-1. **Always null-check** API return values
+1. **Always null-check** API return values (except Dialogue and UIResult which are guaranteed non-null)
 2. **Use pollFramesUntil/pollFramesHuman** not while loops (avoid deprecated submitTask)
 3. **onNewFrame is READ-ONLY** - no actions
-4. **Add 300-500ms delay** after opening bank
+4. **Add 300-500ms delay** after opening bank/interfaces before interacting
 5. **Get fresh snapshots** after inventory/bank changes
 6. **Resources in src/main/resources/**
 7. **Initialize level tracking to 0**
@@ -605,6 +907,12 @@ public int poll() {
 13. **Use RandomUtils** (gaussianRandom, weightedRandom) for human-like timing - never `script.random()`
 14. **Catch RuntimeException** not Exception - let OSMB control flow exceptions bubble up
 15. **Lambda null safety**: Extract `getWorldPosition()` to local variable inside lambdas, null-check before use
+16. **tapGameScreen() for 3D objects**: Use `tapGameScreen()` for world objects (rocks, trees, NPCs), `tap()` only for UI elements
+17. **One action per poll**: Don't chain linear steps in execute() - check state, do ONE action, return
+18. **Randomize timeouts**: Use `gaussianRandom()` or `weightedRandom()` for all wait times - no static values
+19. **Dialogue/UIResult never null**: Just check `.isVisible()` or `.isFound()` - skip null checks
+20. **Wait after interface opens**: Add 300-600ms delay before interacting with freshly opened interfaces
+21. **Check visibility before clicking**: Non-null hull ≠ visible object - always use `insideGameScreenFactor()`
 
 ---
 

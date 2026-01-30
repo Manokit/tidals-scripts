@@ -17,7 +17,7 @@ import java.io.InputStream;
 import java.util.prefs.Preferences;
 
 /**
- * setup ui for gold superheater - discord webhooks configuration
+ * setup ui for gold superheater - discord webhooks and debug configuration
  */
 public class ScriptUI {
     private final Preferences prefs = Preferences.userRoot().node("tidals_gold_superheater");
@@ -27,6 +27,7 @@ public class ScriptUI {
     private static final String PREF_WEBHOOK_URL = "webhook_url";
     private static final String PREF_WEBHOOK_INCLUDE_USER = "webhook_include_user";
     private static final String PREF_WEBHOOK_INTERVAL = "webhook_interval";
+    private static final String PREF_DEBUG_ENABLED = "debug_enabled";
 
     // tidals standard colors
     private static final String BG_COLOR = "#163134";
@@ -43,6 +44,9 @@ public class ScriptUI {
     private CheckBox includeUsernameCheckbox;
     private ComboBox<String> intervalComboBox;
 
+    // debug controls
+    private CheckBox debugCheckBox;
+
     // reference for closing
     private Button startButton;
 
@@ -51,21 +55,25 @@ public class ScriptUI {
     }
 
     public Scene buildScene(ScriptCore core) {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(20, 24, 20, 24));
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setStyle("-fx-background-color: " + BG_COLOR + ";");
+        TabPane tabPane = new TabPane();
+        tabPane.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        // === Webhooks Tab ===
+        VBox webhookRoot = new VBox(12);
+        webhookRoot.setPadding(new Insets(20, 24, 20, 24));
+        webhookRoot.setAlignment(Pos.TOP_CENTER);
+        webhookRoot.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
         // logo
         ImageView logoView = loadLogo();
         if (logoView != null) {
-            root.getChildren().add(logoView);
+            webhookRoot.getChildren().add(logoView);
         }
 
         // version
         Label versionLabel = new Label("v" + TidalsGoldSuperheater.scriptVersion);
         versionLabel.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
-        root.getChildren().add(versionLabel);
+        webhookRoot.getChildren().add(versionLabel);
 
         // === Webhook Section ===
         VBox webhookBox = createSection("Discord Webhooks");
@@ -104,7 +112,6 @@ public class ScriptUI {
             "-fx-border-radius: 4; " +
             "-fx-background-radius: 4;"
         );
-        // style the button cell (visible when closed) with white text
         intervalComboBox.setButtonCell(new ListCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -113,7 +120,6 @@ public class ScriptUI {
                 setStyle("-fx-text-fill: white; -fx-font-size: 12px;");
             }
         });
-        // style dropdown items with white text
         intervalComboBox.setCellFactory(lv -> new ListCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -127,7 +133,27 @@ public class ScriptUI {
             webhookEnabledCheckbox, urlLabel, webhookUrlField,
             includeUsernameCheckbox, intervalLabel, intervalComboBox
         );
-        root.getChildren().add(webhookBox);
+        webhookRoot.getChildren().add(webhookBox);
+
+        Tab webhookTab = new Tab("Webhooks", webhookRoot);
+        webhookTab.setClosable(false);
+
+        // === Debug Tab ===
+        VBox debugRoot = new VBox(12);
+        debugRoot.setPadding(new Insets(20, 24, 20, 24));
+        debugRoot.setAlignment(Pos.TOP_CENTER);
+        debugRoot.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        VBox debugSection = createSection("Debug");
+        debugCheckBox = createCheckbox("Enable verbose logging", prefs.getBoolean(PREF_DEBUG_ENABLED, false));
+        Label debugDesc = createDesc("Logs detailed task activate/execute info for troubleshooting.");
+        debugSection.getChildren().addAll(debugCheckBox, debugDesc);
+        debugRoot.getChildren().add(debugSection);
+
+        Tab debugTab = new Tab("Debug", debugRoot);
+        debugTab.setClosable(false);
+
+        tabPane.getTabs().addAll(webhookTab, debugTab);
 
         // start button
         startButton = new Button("Start Superheating");
@@ -158,9 +184,13 @@ public class ScriptUI {
             "-fx-cursor: hand;"
         ));
         startButton.setOnAction(e -> saveSettings());
-        root.getChildren().add(startButton);
 
-        Scene scene = new Scene(root, 300, 420);
+        VBox layout = new VBox(tabPane, startButton);
+        layout.setSpacing(15);
+        layout.setPadding(new Insets(15));
+        layout.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        Scene scene = new Scene(layout, 340, 420);
         scene.setFill(Color.web(BG_COLOR));
         return scene;
     }
@@ -191,6 +221,14 @@ public class ScriptUI {
         return cb;
     }
 
+    private Label createDesc(String text) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        label.setMaxWidth(280);
+        label.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
+        return label;
+    }
+
     private ImageView loadLogo() {
         try (InputStream in = getClass().getResourceAsStream("/logo.png")) {
             if (in == null) return null;
@@ -217,8 +255,12 @@ public class ScriptUI {
         prefs.put(PREF_WEBHOOK_URL, webhookUrlField.getText().trim());
         prefs.putBoolean(PREF_WEBHOOK_INCLUDE_USER, includeUsernameCheckbox.isSelected());
         prefs.putInt(PREF_WEBHOOK_INTERVAL, intervalMinutes);
+        prefs.putBoolean(PREF_DEBUG_ENABLED, debugCheckBox.isSelected());
 
-        script.log(getClass(), "settings saved");
+        // sync debug to main script
+        TidalsGoldSuperheater.verboseLogging = debugCheckBox.isSelected();
+
+        script.log(getClass(), "settings saved - debug: " + debugCheckBox.isSelected());
 
         // close the window
         ((Stage) startButton.getScene().getWindow()).close();

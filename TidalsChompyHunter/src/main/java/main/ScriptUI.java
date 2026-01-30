@@ -29,6 +29,7 @@ public class ScriptUI {
     private static final String PREF_WEBHOOK_URL = "webhook_url";
     private static final String PREF_WEBHOOK_INCLUDE_USER = "webhook_include_user";
     private static final String PREF_WEBHOOK_INTERVAL = "webhook_interval";
+    private static final String PREF_DEBUG_ENABLED = "debug_enabled";
 
     // tidals standard colors
     private static final String BG_COLOR = "#163134";
@@ -48,6 +49,9 @@ public class ScriptUI {
     private TextField webhookUrlField;
     private CheckBox includeUsernameCheckbox;
     private ComboBox<String> intervalComboBox;
+
+    // debug tab controls
+    private CheckBox debugCheckBox;
 
     public ScriptUI(Script script) {
         this.script = script;
@@ -161,7 +165,22 @@ public class ScriptUI {
         Tab discordTab = new Tab("Discord", discordBox);
         discordTab.setClosable(false);
 
-        tabPane.getTabs().addAll(mainTab, discordTab);
+        // === Debug Tab ===
+        VBox debugRoot = new VBox(12);
+        debugRoot.setPadding(new Insets(20, 24, 20, 24));
+        debugRoot.setAlignment(Pos.TOP_CENTER);
+        debugRoot.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        VBox debugSection = createSection("Debug");
+        debugCheckBox = createCheckbox("Enable verbose logging", prefs.getBoolean(PREF_DEBUG_ENABLED, false));
+        Label debugDesc = createDesc("Logs detailed task activate/execute info for troubleshooting.");
+        debugSection.getChildren().addAll(debugCheckBox, debugDesc);
+        debugRoot.getChildren().add(debugSection);
+
+        Tab debugTab = new Tab("Debug", debugRoot);
+        debugTab.setClosable(false);
+
+        tabPane.getTabs().addAll(mainTab, discordTab, debugTab);
 
         // start button
         Button startButton = new Button("Start Hunting");
@@ -265,8 +284,10 @@ public class ScriptUI {
         prefs.put(PREF_WEBHOOK_URL, webhookUrlField.getText().trim());
         prefs.putBoolean(PREF_WEBHOOK_INCLUDE_USER, includeUsernameCheckbox.isSelected());
         prefs.putInt(PREF_WEBHOOK_INTERVAL, intervalMinutes);
+        prefs.putBoolean(PREF_DEBUG_ENABLED, debugCheckBox.isSelected());
 
         // set static fields on main script
+        TidalsChompyHunter.verboseLogging = debugCheckBox.isSelected();
         TidalsChompyHunter.pluckingEnabled = pluckingCheckbox.isSelected();
         TidalsChompyHunter.antiCrashEnabled = antiCrashCheckbox.isSelected();
         TidalsChompyHunter.webhookEnabled = webhookEnabledCheckbox.isSelected();

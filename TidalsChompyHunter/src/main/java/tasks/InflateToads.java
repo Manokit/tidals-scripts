@@ -56,6 +56,34 @@ public class InflateToads extends Task {
     // screen edge margin - clusters too close to edge cause tap() to fail
     private static final int SCREEN_EDGE_MARGIN = 25;
 
+    // -- poll-based state machine --
+    private enum InflateState {
+        CALCULATE,          // determine how many to inflate
+        FIND_TOAD,          // detect toad positions, select target
+        TAP_TOAD,           // send inflate action
+        WAIT_FOR_PICKUP,    // poll until toad in inventory or timeout
+        CHECK_COMPLETION,   // verify count, decide if done
+        DONE                // cleanup
+    }
+
+    private InflateState inflateState = InflateState.CALCULATE;
+    private int toadsInflated = 0;
+    private int toadsTarget = 0;
+    private int attemptCount = 0;
+    private int maxTotalAttempts = 0;
+    private int previousToadCount = 0;
+    private Rectangle currentClickTarget = null;
+
+    private void resetState() {
+        inflateState = InflateState.CALCULATE;
+        toadsInflated = 0;
+        toadsTarget = 0;
+        attemptCount = 0;
+        maxTotalAttempts = 0;
+        previousToadCount = 0;
+        currentClickTarget = null;
+    }
+
     public InflateToads(Script script) {
         super(script);
     }
@@ -64,7 +92,7 @@ public class InflateToads extends Task {
      * check if verbose logging is enabled
      */
     private boolean isVerbose() {
-        return TidalsChompyHunter.VERBOSE_LOGGING;
+        return TidalsChompyHunter.verboseLogging;
     }
 
     /**
@@ -125,187 +153,179 @@ public class InflateToads extends Task {
         // CRITICAL: abort immediately if crash detected
         if (DetectPlayers.crashDetected) {
             script.log(getClass(), "ABORTING - crash detected, yielding to HopWorld");
+            resetState();
             return false;
         }
 
-        int currentInventory = countBloatedToads();
-        int currentGround = countActiveGroundToads();
-
-        // determine mode based on ground toads
-        boolean stockpileMode = currentGround >= TARGET_GROUND_TOADS;
-
-        if (stockpileMode) {
-            TidalsChompyHunter.task = "stockpiling toads";
-            script.log(getClass(), "stockpile mode: " + currentGround + " on ground, " + currentInventory + " in inv");
-        } else {
-            TidalsChompyHunter.task = "inflating toads";
-            script.log(getClass(), "refill mode: " + currentGround + " on ground, " + currentInventory + " in inv");
+        // INTERRUPT: check for live chompy spawn
+        if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
+            script.log(getClass(), "chompy detected - stopping inflation");
+            resetState();
+            return false;
         }
 
-        // calculate how many toads we can/should inflate
-        int maxToInflate;
-        if (stockpileMode) {
-            // stockpile: fill inventory up to max
-            maxToInflate = MAX_INVENTORY_TOADS - currentInventory;
-        } else {
-            // refill: get ground toads back up to target
-            int groundNeeded = TARGET_GROUND_TOADS - currentGround;
-            // also consider inventory space for extras
-            int invSpace = MAX_INVENTORY_TOADS - currentInventory;
-            maxToInflate = Math.min(groundNeeded + invSpace, groundNeeded + 1); // at least enough for ground + 1
+        // check bellows empty at top of every poll
+        if (TidalsChompyHunter.bellowsEmpty) {
+            script.log(getClass(), "bellows empty detected - need to refill");
+            resetState();
+            return false;
         }
 
-        script.log(getClass(), "will inflate up to " + maxToInflate + " toads");
+        // state: calculate how many to inflate
+        if (inflateState == InflateState.CALCULATE) {
+            int currentInventory = countBloatedToads();
+            int currentGround = countActiveGroundToads();
+            boolean stockpileMode = currentGround >= TARGET_GROUND_TOADS;
 
-        // loop: find and inflate toads
-        for (int i = 0; i < maxToInflate; i++) {
-            // CRITICAL: abort if crash detected
-            if (DetectPlayers.crashDetected) {
-                script.log(getClass(), "crash detected - stopping inflation, yielding to HopWorld");
+            if (stockpileMode) {
+                TidalsChompyHunter.task = "stockpiling toads";
+                script.log(getClass(), "stockpile mode: " + currentGround + " on ground, " + currentInventory + " in inv");
+                toadsTarget = MAX_INVENTORY_TOADS - currentInventory;
+            } else {
+                TidalsChompyHunter.task = "inflating toads";
+                script.log(getClass(), "refill mode: " + currentGround + " on ground, " + currentInventory + " in inv");
+                int groundNeeded = TARGET_GROUND_TOADS - currentGround;
+                int invSpace = MAX_INVENTORY_TOADS - currentInventory;
+                toadsTarget = Math.min(groundNeeded + invSpace, groundNeeded + 1);
+            }
+
+            script.log(getClass(), "will inflate up to " + toadsTarget + " toads");
+            if (toadsTarget <= 0) {
+                resetState();
                 return false;
             }
 
-            // INTERRUPT: check for live chompy spawn (filters out corpses)
-            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
-            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
-                script.log(getClass(), "chompy detected - stopping inflation early");
+            maxTotalAttempts = MAX_INFLATE_ATTEMPTS * 3;
+            TidalsChompyHunter.bellowsEmpty = false;
+            inflateState = InflateState.FIND_TOAD;
+            return true;
+        }
+
+        // state: detect toad positions and select target
+        if (inflateState == InflateState.FIND_TOAD) {
+            // check if done or exhausted attempts
+            if (toadsInflated >= toadsTarget || countBloatedToads() >= MAX_INVENTORY_TOADS) {
+                inflateState = InflateState.DONE;
+                return true;
+            }
+            if (attemptCount >= maxTotalAttempts) {
+                script.log(getClass(), "max attempts reached");
+                inflateState = InflateState.DONE;
                 return true;
             }
 
-            // re-check inventory count
-            int invCount = countBloatedToads();
-            if (invCount >= MAX_INVENTORY_TOADS) {
-                script.log(getClass(), "inventory full (" + invCount + " toads)");
-                break;
-            }
+            previousToadCount = countBloatedToads();
 
-            boolean inflated = findAndInflateToad();
-            if (!inflated) {
-                script.log(getClass(), "failed to inflate toad");
-                return false;
-            }
-
-            script.log(getClass(), "inflated toad " + (i + 1) + "/" + maxToInflate);
-        }
-
-        script.log(getClass(), "finished inflating toads");
-        return true;
-    }
-
-    /**
-     * find a swamp toad and inflate it using pixel cluster detection
-     * re-detects toad positions FRESH before each attempt to handle movement
-     * checks for empty bellows chat message after each attempt
-     */
-    private boolean findAndInflateToad() {
-        int previousCount = countBloatedToads();
-
-        // reset bellows empty flag before starting
-        TidalsChompyHunter.bellowsEmpty = false;
-
-        // total attempts across all toads (reasonable upper bound)
-        int maxTotalAttempts = MAX_INFLATE_ATTEMPTS * 3;
-
-        for (int attempt = 1; attempt <= maxTotalAttempts; attempt++) {
-            // INTERRUPT: check for live chompy spawn before each attempt (filters out corpses)
-            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
-            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
-                script.log(getClass(), "chompy detected - interrupting inflate to attack");
-                return true;  // exit early, let AttackChompy activate
-            }
-
-            // early exit: check if we've reached max inventory toads
-            int currentToads = countBloatedToads();
-            if (currentToads >= MAX_INVENTORY_TOADS) {
-                script.log(getClass(), "already have " + MAX_INVENTORY_TOADS + " toads, exiting early");
-                return true;
-            }
-
-            // check if bellows are empty (from previous attempt's chat)
-            if (TidalsChompyHunter.bellowsEmpty) {
-                script.log(getClass(), "bellows empty detected - need to refill");
-                return false;
-            }
-
-            // re-detect toad positions FRESH each attempt (fixes stale position bug)
-            List<Point> clickPoints = findSwampToadClickPoints();
-            if (clickPoints.isEmpty()) {
+            List<Rectangle> clickTargets = findSwampToadClickTargets();
+            if (clickTargets.isEmpty()) {
                 script.log(getClass(), "no swamp toad sprites found on screen");
+                resetState();
                 return false;
             }
 
-            // DEBUG: log all candidate click points
             if (isVerbose()) {
                 WorldPosition playerPos = script.getWorldPosition();
                 logVerbose("player(" + (playerPos != null ? playerPos.getX() + "," + playerPos.getY() : "null") +
-                        ") " + clickPoints.size() + " candidates: " + clickPoints);
+                        ") " + clickTargets.size() + " candidates");
             }
 
-            // target first/nearest toad from fresh detection
-            Point clickPoint = clickPoints.get(0);
-            script.log(getClass(),"inflate attempt " + attempt + "/" + maxTotalAttempts + " at " + clickPoint);
+            currentClickTarget = clickTargets.get(0);
+            inflateState = InflateState.TAP_TOAD;
+            return true;
+        }
 
-            // tap "Inflate" on fresh toad position (exact point for small sprites)
-            boolean success = script.getFinger().tap(clickPoint, "Inflate");
+        // state: send inflate action
+        if (inflateState == InflateState.TAP_TOAD) {
+            attemptCount++;
+            script.log(getClass(), "inflate attempt " + attemptCount + "/" + maxTotalAttempts +
+                    " at (" + currentClickTarget.x + "," + currentClickTarget.y + ")");
 
-            // DEBUG: log tap result
+            boolean success = script.getFinger().tapGameScreen(currentClickTarget, "Inflate");
+
             if (isVerbose()) {
-                logVerbose("tap " + (success ? "OK" : "FAIL") + " at " + clickPoint);
+                logVerbose("tapGameScreen " + (success ? "OK" : "FAIL"));
             }
 
             if (success) {
-                script.log(getClass(),"inflate action started at " + clickPoint);
-
-                // wait for toad to appear in inventory (handles walking + inflate animation)
-                boolean gotToad = script.pollFramesUntil(() -> {
-                    // check for bellows empty during wait
-                    if (TidalsChompyHunter.bellowsEmpty) {
-                        return true;  // exit poll early
-                    }
-                    return countBloatedToads() > previousCount;
-                }, 8000);  // 8s timeout covers walking + animation
-
-                // check why poll exited
-                if (TidalsChompyHunter.bellowsEmpty) {
-                    script.log(getClass(), "bellows empty detected - need to refill");
-                    return false;
-                }
-
-                if (gotToad) {
-                    script.log(getClass(), "toad inflated successfully");
-                    // humanize: brief pause after picking up toad
-                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 600));
-                    return true;
-                }
-
-                script.log(getClass(), "toad did not arrive in inventory, will re-detect position");
+                script.log(getClass(), "inflate action started at (" + currentClickTarget.x + "," + currentClickTarget.y + ")");
+                inflateState = InflateState.WAIT_FOR_PICKUP;
+            } else {
+                // failed tap - retry with fresh detection
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
+                inflateState = InflateState.FIND_TOAD;
             }
-
-            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 500));
+            return true;
         }
 
-        script.log(getClass(), "failed to inflate any toad after " + maxTotalAttempts + " attempts");
+        // state: wait for toad to appear in inventory
+        if (inflateState == InflateState.WAIT_FOR_PICKUP) {
+            boolean gotToad = script.pollFramesUntil(() -> {
+                if (TidalsChompyHunter.bellowsEmpty) {
+                    return true;
+                }
+                return countBloatedToads() > previousToadCount;
+            }, RandomUtils.gaussianRandom(7000, 9000, 8000, 500));
+
+            if (TidalsChompyHunter.bellowsEmpty) {
+                script.log(getClass(), "bellows empty detected - need to refill");
+                resetState();
+                return false;
+            }
+
+            inflateState = InflateState.CHECK_COMPLETION;
+            if (gotToad) {
+                script.log(getClass(), "toad inflated successfully");
+                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 600));
+                toadsInflated++;
+            } else {
+                script.log(getClass(), "toad did not arrive in inventory, will re-detect position");
+            }
+            return true;
+        }
+
+        // state: check if we should continue or finish
+        if (inflateState == InflateState.CHECK_COMPLETION) {
+            if (toadsInflated >= toadsTarget || countBloatedToads() >= MAX_INVENTORY_TOADS) {
+                inflateState = InflateState.DONE;
+            } else if (attemptCount >= maxTotalAttempts) {
+                script.log(getClass(), "max attempts reached");
+                inflateState = InflateState.DONE;
+            } else {
+                // more toads needed - loop back to find next
+                inflateState = InflateState.FIND_TOAD;
+            }
+            return true;
+        }
+
+        // state: cleanup
+        if (inflateState == InflateState.DONE) {
+            script.log(getClass(), "finished inflating " + toadsInflated + " toads");
+            boolean didWork = toadsInflated > 0;
+            resetState();
+            return didWork;
+        }
+
         return false;
     }
 
     /**
      * find swamp toads on screen, prioritized by distance to player
      * uses minimap NPC positions to determine distance, then matches to sprite clusters
-     * returns click points sorted by distance (closest first)
+     * returns click target rectangles sorted by distance (closest first)
      */
-    private List<Point> findSwampToadClickPoints() {
-        List<Point> clickPoints = new ArrayList<>();
+    private List<Rectangle> findSwampToadClickTargets() {
+        List<Rectangle> clickTargets = new ArrayList<>();
 
         // get player position
         WorldPosition playerPos = script.getWorldPosition();
         if (playerPos == null) {
-            return clickPoints;
+            return clickTargets;
         }
 
         // get NPC positions from minimap, sorted by distance to player
         UIResultList<WorldPosition> npcResult = script.getWidgetManager().getMinimap().getNPCPositions();
         if (npcResult == null || !npcResult.isFound()) {
-            return clickPoints;
+            return clickTargets;
         }
 
         List<WorldPosition> sortedNpcs = npcResult.asList().stream()
@@ -316,7 +336,7 @@ public class InflateToads extends Task {
         // find all swamp toad sprite clusters on screen
         List<PixelCluster> clusters = findSwampToadClusters();
         if (clusters.isEmpty()) {
-            return clickPoints;
+            return clickTargets;
         }
 
         script.log(getClass(),"found " + clusters.size() + " swamp toad sprites, " + sortedNpcs.size() + " NPCs nearby");
@@ -339,25 +359,23 @@ public class InflateToads extends Task {
             }
 
             Rectangle clusterBounds = nearest.getBounds();
-            // add small random offset for humanization (+/- 3 pixels)
-            int offsetX = RandomUtils.uniformRandom(-3, 4);
-            int offsetY = RandomUtils.uniformRandom(-3, 4);
-            Point clickPoint = new Point(
-                    clusterBounds.x + clusterBounds.width / 2 + offsetX,
-                    clusterBounds.y + clusterBounds.height / 2 + offsetY
-            );
 
-            // skip screen edge cases
-            if (isNearScreenEdge(clickPoint)) {
+            // skip screen edge cases (check center point)
+            Point centerPoint = new Point(
+                    clusterBounds.x + clusterBounds.width / 2,
+                    clusterBounds.y + clusterBounds.height / 2
+            );
+            if (isNearScreenEdge(centerPoint)) {
                 continue;
             }
 
             // remove used cluster to avoid duplicates
             clusters.remove(nearest);
-            clickPoints.add(clickPoint);
+            // return cluster bounds as click target - tapGameScreen handles humanization
+            clickTargets.add(clusterBounds);
         }
 
-        return clickPoints;  // already sorted by NPC distance (closest first)
+        return clickTargets;  // already sorted by NPC distance (closest first)
     }
 
     /**

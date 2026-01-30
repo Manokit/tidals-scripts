@@ -43,3 +43,7 @@ TidalsLocalCoordTest_PRD.md
 # ProGuard build artifacts
 **/proguard-usage.txt
 **/*-fat.jar
+
+# Documentation (local reference only)
+docs/
+examples/

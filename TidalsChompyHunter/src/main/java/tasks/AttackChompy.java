@@ -38,7 +38,8 @@ public class AttackChompy extends Task {
     private static final double SHRINK_FACTOR = 0.9;
     private static final int SCAN_RANGE = 15;
     private static final int MAX_TRACKED_CHOMPIES = 3;
-    private static final int KILL_CONFIRMATION_TIMEOUT_MS = 20000;
+    // kill confirmation timeout - randomized on each use for anti-detection
+    // base: 18-22s to cover typical kill time variance
     private static final int PLUCK_MAX_ATTEMPTS = 5;
 
     // pre-inflation constants
@@ -48,7 +49,8 @@ public class AttackChompy extends Task {
     private static final int OGRE_BELLOWS_2 = 2873;
     private static final int OGRE_BELLOWS_1 = 2874;
     private static final int TILE_CUBE_HEIGHT_TOAD = 40;
-    private static final int MONITORING_POLL_MS = 600;
+    // monitoring poll interval - randomized on each use for anti-detection
+    // base: 400-800ms to prevent tight loop patterns
 
     // bloated toad verification within tileCube bounds - high tolerance since area is constrained
     private static final SearchablePixel BLOATED_TOAD_BOUNDED = new SearchablePixel(
@@ -132,6 +134,19 @@ public class AttackChompy extends Task {
     private static long lastNoChompyTime = 0;
     private static final long NO_CHOMPY_COOLDOWN_MS = 3000; // 3 second cooldown
 
+    // poll-based state machine
+    private enum CombatState {
+        SCANNING,           // looking for chompy
+        ATTACKING,          // sending attack action
+        CONFIRMING_COMBAT,  // waiting for health overlay to confirm hit
+        IN_COMBAT,          // monitoring HP, waiting for kill
+        POST_KILL,          // handle kill bookkeeping, corpse detection
+        PLUCKING            // pluck corpses when no live chompies remain
+    }
+    private CombatState state = CombatState.SCANNING;
+    private WorldPosition targetPosition = null;
+    private HealthOverlay healthOverlay = null;
+
     // EXPERIMENTAL: use world position proximity for corpse detection instead of screen distance
     // when enabled, only considers NPCs within 1 tile of kill position (3x3 area)
     // this prevents marking alive chompies as dead in multi-chompy scenarios
@@ -205,7 +220,7 @@ public class AttackChompy extends Task {
      * check if verbose logging is enabled
      */
     private boolean isVerbose() {
-        return TidalsChompyHunter.VERBOSE_LOGGING;
+        return TidalsChompyHunter.verboseLogging;
     }
 
     /**
@@ -230,25 +245,15 @@ public class AttackChompy extends Task {
             return false;
         }
 
+        // if state machine is mid-execution, keep it running to finish combat/pluck
+        if (state != CombatState.SCANNING) {
+            return true;
+        }
+
         // CORE RULE: no ownership claim = no chompies to attack
         // prevents attacking someone else's chompies on fresh login/hop
         if (!TidalsChompyHunter.hasOwnershipClaim()) {
             return false;
-        }
-
-        // don't activate if already in combat (with timeout safety valve)
-        if (inCombat) {
-            // safety valve: if combat has lasted more than 30s, something is stuck
-            long combatDuration = System.currentTimeMillis() - combatStartTime;
-            if (combatDuration > COMBAT_TIMEOUT_MS) {
-                script.log(getClass(), "[activate] STUCK STATE DETECTED - combat timeout exceeded (" + combatDuration + "ms) - resetting");
-                inCombat = false;
-                currentChompyPosition = null;
-                // continue to normal activation
-            } else {
-                script.log(getClass(), "[activate] skipping - already in combat (" + (combatDuration / 1000) + "s)");
-                return false;
-            }
         }
 
         // cooldown after finding no chompies (all corpses)
@@ -324,7 +329,7 @@ public class AttackChompy extends Task {
                 .setWalkMethods(false, true)
                 .breakDistance(2)
                 .tileRandomisationRadius(1)
-                .timeout(5000)
+                .timeout(RandomUtils.weightedRandom(4000, 6000, 0.002))
                 .breakCondition(() -> {
                     WorldPosition pos = script.getWorldPosition();
                     return pos != null && TOAD_DROP_AREA.contains(pos);
@@ -339,23 +344,53 @@ public class AttackChompy extends Task {
         // CRITICAL: abort immediately if crash detected
         if (DetectPlayers.crashDetected) {
             script.log(getClass(), "[execute] ABORTING - crash detected, yielding to HopWorld");
+            resetToScanning();
             return false;
         }
 
         // safety: verify we still have ownership claim (toads could've been consumed during detection)
         if (!TidalsChompyHunter.hasOwnershipClaim()) {
             script.log(getClass(), "[execute] no ownership claim - aborting attack");
+            resetToScanning();
             return false;
         }
 
-        // track that attack sequence is in progress
-        attackInProgress = true;
-
         try {
-        TidalsChompyHunter.task = "hunting chompy";
-        script.log(getClass(), "[execute] === CHOMPY HUNT CYCLE START ===");
+            switch (state) {
+                case SCANNING:          return handleScanning();
+                case ATTACKING:         return handleAttacking();
+                case CONFIRMING_COMBAT: return handleConfirmingCombat();
+                case IN_COMBAT:         return handleInCombat();
+                case POST_KILL:         return handlePostKill();
+                case PLUCKING:          return handlePlucking();
+                default:                resetToScanning(); return true;
+            }
+        } catch (RuntimeException e) {
+            // guaranteed cleanup on any interruption (PriorityTaskException, etc.)
+            resetToScanning();
+            throw e;
+        }
+    }
 
-        // DEBUG: dump current tracking state
+    /**
+     * reset state machine to scanning - clears all combat/attack flags
+     */
+    private void resetToScanning() {
+        state = CombatState.SCANNING;
+        attackInProgress = false;
+        inCombat = false;
+        currentChompyPosition = null;
+        targetPosition = null;
+        healthOverlay = null;
+    }
+
+    /**
+     * SCANNING: detect chompy, acquire target, or monitor
+     */
+    private boolean handleScanning() {
+        TidalsChompyHunter.task = "hunting chompy";
+
+        // debug dump
         if (isVerbose()) {
             WorldPosition playerPos = script.getWorldPosition();
             logVerbose("player: " + (playerPos != null ? playerPos.getX() + "," + playerPos.getY() : "null") +
@@ -367,7 +402,6 @@ public class AttackChompy extends Task {
                     " kills:" + TidalsChompyHunter.killCount +
                     " pluck:" + TidalsChompyHunter.pluckingEnabled);
 
-            // list all ignored positions
             if (!ignoredPositionTimestamps.isEmpty()) {
                 StringBuilder ignored = new StringBuilder("ignored: ");
                 for (Integer key : ignoredPositionTimestamps.keySet()) {
@@ -380,123 +414,152 @@ public class AttackChompy extends Task {
         }
 
         // detect chompy position
-        script.log(getClass(), "[execute] running fresh detection...");
+        script.log(getClass(), "[scanning] running fresh detection...");
         WorldPosition chompyPos = detectChompy();
         if (chompyPos != null) {
-            script.log(getClass(), "[execute] fresh detection found chompy at " + chompyPos.getX() + "," + chompyPos.getY());
-            // track any newly detected chompy
+            script.log(getClass(), "[scanning] fresh detection found chompy at " + chompyPos.getX() + "," + chompyPos.getY());
             trackNewChompy(chompyPos);
         } else {
-            script.log(getClass(), "[execute] fresh detection returned null");
+            script.log(getClass(), "[scanning] fresh detection returned null");
         }
 
         // use fresh detection for targeting (not stale tracked positions)
-        // fresh detection is always accurate - tracked positions become stale as chompy moves
-        WorldPosition targetPos = chompyPos;
+        WorldPosition target = chompyPos;
 
         // fall back to tracking only if no fresh detection
-        if (targetPos == null) {
-            script.log(getClass(), "[execute] falling back to tracked chompies...");
-            targetPos = getNextChompyToAttack();
-            if (targetPos != null) {
-                script.log(getClass(), "[execute] using tracked position: " + targetPos.getX() + "," + targetPos.getY());
+        if (target == null) {
+            script.log(getClass(), "[scanning] falling back to tracked chompies...");
+            target = getNextChompyToAttack();
+            if (target != null) {
+                script.log(getClass(), "[scanning] using tracked position: " + target.getX() + "," + target.getY());
             }
         }
 
-        if (targetPos == null) {
+        if (target == null) {
             // no chompy to attack - monitoring mode
-            script.log(getClass(), "[execute] no target found - entering monitoring mode");
+            script.log(getClass(), "[scanning] no target found - entering monitoring mode");
             TidalsChompyHunter.task = "monitoring for chompy";
 
-            // pre-inflate during downtime
             if (tryPreInflate()) {
-                script.log(getClass(), "[execute] pre-inflated toad during monitoring");
+                script.log(getClass(), "[scanning] pre-inflated toad during monitoring");
             }
 
-            // brief monitoring wait (prevents tight loop)
-            script.log(getClass(), "[execute] waiting " + MONITORING_POLL_MS + "ms before next scan");
-            script.pollFramesUntil(() -> false, MONITORING_POLL_MS);
-            return true;  // return true to keep monitoring
-        }
-
-        script.log(getClass(), "[execute] TARGET ACQUIRED: " + targetPos.getX() + "," + targetPos.getY());
-        currentChompyPosition = targetPos;
-
-        // attack once - no spam, just single tap
-        script.log(getClass(), "[execute] initiating attack...");
-        boolean attacked = attackChompy(targetPos);
-        if (!attacked) {
-            // attack verification failed - will retry detection on next poll
-            script.log(getClass(), "[execute] attack failed - clearing target and retrying next cycle");
-            currentChompyPosition = null;
-            int delay = RandomUtils.weightedRandom(300, 1000, 0.002);
-            script.log(getClass(), "[execute] waiting " + delay + "ms before retry");
-            script.pollFramesUntil(() -> false, delay);
+            int monitoringDelay = RandomUtils.gaussianRandom(400, 800, 600, 100);
+            script.log(getClass(), "[scanning] waiting " + monitoringDelay + "ms before next scan");
+            script.pollFramesUntil(() -> false, monitoringDelay);
             return true;
         }
 
-        // attack sent - enter combat state with guaranteed cleanup
+        script.log(getClass(), "[scanning] TARGET ACQUIRED: " + target.getX() + "," + target.getY());
+        currentChompyPosition = target;
+        targetPosition = target;
+        state = CombatState.ATTACKING;
+        return true; // re-poll to handle ATTACKING state
+    }
+
+    /**
+     * ATTACKING: send attack tap, transition to combat confirmation on success
+     */
+    private boolean handleAttacking() {
+        TidalsChompyHunter.task = "engaging chompy";
+        attackInProgress = true;
+
+        script.log(getClass(), "[attacking] initiating attack at " + targetPosition.getX() + "," + targetPosition.getY());
+        boolean attacked = attackChompy(targetPosition);
+
+        if (!attacked) {
+            script.log(getClass(), "[attacking] attack failed - returning to scan");
+            int delay = RandomUtils.weightedRandom(300, 1000, 0.002);
+            script.pollFramesUntil(() -> false, delay);
+            resetToScanning();
+            return true;
+        }
+
+        // attack sent - transition to combat confirmation
         inCombat = true;
         combatStartTime = System.currentTimeMillis();
-
-        try {
-            TidalsChompyHunter.task = "engaging chompy";
-            script.log(getClass(), "[execute] attack sent - waiting up to 3s for combat confirmation via health overlay...");
-
-            HealthOverlay healthOverlay = new HealthOverlay(script);
-
-            // wait for health overlay to appear (confirms combat started)
-            long combatWaitStart = System.currentTimeMillis();
-            boolean combatStarted = script.pollFramesUntil(() -> {
-                boolean visible = healthOverlay.isVisible();
-                Integer hp = getHealthOverlayHitpoints(healthOverlay);
-                if (visible && hp != null && hp > 0) {
-                    return true;
-                }
-                return false;
-            }, 3000);
-            long combatWaitTime = System.currentTimeMillis() - combatWaitStart;
-
-            if (!combatStarted) {
-                // attack failed to connect - don't count kill, reset and retry
-                script.log(getClass(), "[execute] COMBAT NOT CONFIRMED after " + combatWaitTime + "ms - overlay never showed HP > 0");
-                script.log(getClass(), "[execute] attack likely missed or target was invalid/moved");
-                return true;
-            }
-
-            Integer initialHP = getHealthOverlayHitpoints(healthOverlay);
-            script.log(getClass(), "[execute] COMBAT CONFIRMED after " + combatWaitTime + "ms - chompy HP: " + initialHP);
-            TidalsChompyHunter.task = "killing chompy";
-            script.log(getClass(), "[execute] waiting for kill (timeout: " + KILL_CONFIRMATION_TIMEOUT_MS + "ms)...");
-
-            boolean killed = waitForKillConfirmation(healthOverlay);
-            if (killed) {
-                script.log(getClass(), "[execute] === KILL CONFIRMED ===");
-            } else {
-                script.log(getClass(), "[execute] kill timed out or failed - combat state will be reset");
-            }
-
-            // pluck tracked corpses when no live chompies remain
-            if (TidalsChompyHunter.pluckingEnabled && !TidalsChompyHunter.corpsePositions.isEmpty()) {
-                if (!hasLiveChompy(script)) {
-                    script.log(getClass(), "[execute] no live chompies - plucking " + TidalsChompyHunter.corpsePositions.size() + " corpse(s)");
-                    pluckAllTrackedCorpses();
-                } else {
-                    script.log(getClass(), "[execute] live chompy detected - deferring pluck");
-                }
-            }
-        } finally {
-            // GUARANTEED cleanup - prevents stuck inCombat state
-            inCombat = false;
-            currentChompyPosition = null;
-        }
-
-        script.log(getClass(), "[execute] === CHOMPY HUNT CYCLE END ===");
+        healthOverlay = new HealthOverlay(script);
+        state = CombatState.CONFIRMING_COMBAT;
+        script.log(getClass(), "[attacking] attack sent - transitioning to combat confirmation");
         return true;
-        } finally {
-            // GUARANTEED cleanup - always clear attack flag
-            attackInProgress = false;
+    }
+
+    /**
+     * CONFIRMING_COMBAT: wait for health overlay to appear (confirms attack connected)
+     */
+    private boolean handleConfirmingCombat() {
+        TidalsChompyHunter.task = "engaging chompy";
+
+        long combatWaitStart = System.currentTimeMillis();
+        script.log(getClass(), "[confirming] waiting for health overlay...");
+        boolean combatStarted = script.pollFramesUntil(() -> {
+            boolean visible = healthOverlay.isVisible();
+            Integer hp = getHealthOverlayHitpoints(healthOverlay);
+            return visible && hp != null && hp > 0;
+        }, RandomUtils.gaussianRandom(2500, 3500, 3000, 250));
+        long combatWaitTime = System.currentTimeMillis() - combatWaitStart;
+
+        if (!combatStarted) {
+            script.log(getClass(), "[confirming] COMBAT NOT CONFIRMED after " + combatWaitTime + "ms - overlay never showed HP > 0");
+            script.log(getClass(), "[confirming] attack likely missed or target was invalid/moved");
+            resetToScanning();
+            return true;
         }
+
+        Integer initialHP = getHealthOverlayHitpoints(healthOverlay);
+        script.log(getClass(), "[confirming] COMBAT CONFIRMED after " + combatWaitTime + "ms - chompy HP: " + initialHP);
+        state = CombatState.IN_COMBAT;
+        return true;
+    }
+
+    /**
+     * IN_COMBAT: monitor HP and wait for kill confirmation
+     */
+    private boolean handleInCombat() {
+        TidalsChompyHunter.task = "killing chompy";
+
+        boolean killed = waitForKillConfirmation(healthOverlay);
+        if (killed) {
+            script.log(getClass(), "[combat] === KILL CONFIRMED ===");
+            state = CombatState.POST_KILL;
+        } else {
+            script.log(getClass(), "[combat] kill timed out or failed - resetting");
+            resetToScanning();
+        }
+        return true;
+    }
+
+    /**
+     * POST_KILL: decide whether to pluck or return to scanning
+     */
+    private boolean handlePostKill() {
+        if (TidalsChompyHunter.pluckingEnabled && !TidalsChompyHunter.corpsePositions.isEmpty()) {
+            if (!hasLiveChompy(script)) {
+                script.log(getClass(), "[post-kill] no live chompies - transitioning to pluck " +
+                        TidalsChompyHunter.corpsePositions.size() + " corpse(s)");
+                state = CombatState.PLUCKING;
+                return true;
+            } else {
+                script.log(getClass(), "[post-kill] live chompy detected - deferring pluck");
+            }
+        }
+
+        script.log(getClass(), "[post-kill] === HUNT CYCLE END ===");
+        resetToScanning();
+        return true;
+    }
+
+    /**
+     * PLUCKING: pluck all tracked corpses, then return to scanning
+     */
+    private boolean handlePlucking() {
+        TidalsChompyHunter.task = "plucking corpses";
+        script.log(getClass(), "[plucking] plucking " + TidalsChompyHunter.corpsePositions.size() + " corpse(s)");
+        pluckAllTrackedCorpses();
+
+        script.log(getClass(), "[plucking] === HUNT CYCLE END ===");
+        resetToScanning();
+        return true;
     }
 
     /**
@@ -547,7 +610,17 @@ public class AttackChompy extends Task {
         // check each position and collect ones to remove
         List<WorldPosition> toRemove = new ArrayList<>();
         for (WorldPosition toadPos : TidalsChompyHunter.droppedToadPositions.keySet()) {
+            // skip verification if something is occluding the toad sprite
+            if (isTileOccluded(script, toadPos, playerPos)) {
+                script.log(AttackChompy.class, "skipping toad verify at " + toadPos.getX() + "," + toadPos.getY() + " - occluded by player/chompy");
+                continue;
+            }
             if (!isToadVisibleAt(script, toadPos)) {
+                // pixel check failed - double check via menu entry before removing
+                if (isToadPresentViaMenu(script, toadPos)) {
+                    script.log(AttackChompy.class, "toad at " + toadPos.getX() + "," + toadPos.getY() + " - pixel missed but menu confirmed");
+                    continue;
+                }
                 toRemove.add(toadPos);
                 script.log(AttackChompy.class, "toad gone at " + toadPos.getX() + "," + toadPos.getY());
             }
@@ -599,6 +672,83 @@ public class AttackChompy extends Task {
 
         List<PixelCluster> clusters = result.getClusters();
         return clusters != null && !clusters.isEmpty();
+    }
+
+    /**
+     * check if a tile is occluded by the player or a tracked chompy/corpse
+     * when occluded, pixel cluster detection would miss the toad underneath
+     */
+    private static boolean isTileOccluded(Script script, WorldPosition toadPos, WorldPosition playerPos) {
+        // player standing on the toad
+        if (playerPos != null && playerPos.getX() == toadPos.getX() && playerPos.getY() == toadPos.getY()) {
+            return true;
+        }
+
+        // live chompy on the toad
+        for (SpawnedChompy chompy : trackedChompies) {
+            WorldPosition cPos = chompy.getPosition();
+            if (cPos != null && cPos.getX() == toadPos.getX() && cPos.getY() == toadPos.getY()) {
+                return true;
+            }
+        }
+
+        // dead chompy corpse on the toad
+        int toadKey = posKey(toadPos);
+        if (ignoredPositionTimestamps.containsKey(toadKey)) {
+            return true;
+        }
+
+        // also check corpsePositions set from main script
+        if (TidalsChompyHunter.corpsePositions.contains(toadPos)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * fallback: check if "bloated toad" appears in the right-click menu at this tile
+     * opens menu, peeks at entries, returns null to cancel without selecting
+     */
+    // radius for tight circle tap on tile center for ground item menu checks
+    private static final int TOAD_MENU_TAP_RADIUS = 3;
+
+    private static boolean isToadPresentViaMenu(Script script, WorldPosition toadPos) {
+        Polygon tileCube = script.getSceneProjector().getTileCube(toadPos, TILE_CUBE_HEIGHT_TOAD);
+        if (tileCube == null) {
+            return false;
+        }
+
+        // tight box around tile center - bloated toad is small and centered on the tile
+        Rectangle bounds = tileCube.getBounds();
+        if (bounds == null) {
+            return false;
+        }
+        int cx = bounds.x + bounds.width / 2;
+        int cy = bounds.y + bounds.height / 2;
+        Rectangle tapArea = new Rectangle(
+                cx - TOAD_MENU_TAP_RADIUS, cy - TOAD_MENU_TAP_RADIUS,
+                TOAD_MENU_TAP_RADIUS * 2, TOAD_MENU_TAP_RADIUS * 2
+        );
+
+        final boolean[] found = {false};
+
+        try {
+            script.getFinger().tapGameScreen(tapArea, menuEntries -> {
+                for (var entry : menuEntries) {
+                    String raw = entry.getRawText();
+                    if (raw != null && raw.toLowerCase().contains("bloated toad")) {
+                        found[0] = true;
+                        break;
+                    }
+                }
+                return null; // don't select anything - just peeking
+            });
+        } catch (RuntimeException e) {
+            script.log(AttackChompy.class, "menu check failed at " + toadPos.getX() + "," + toadPos.getY() + ": " + e.getMessage());
+        }
+
+        return found[0];
     }
 
     /**
@@ -670,14 +820,13 @@ public class AttackChompy extends Task {
 
     /**
      * wait for kill confirmation via HP tracking (primary) or chat message (backup)
-     * uses try-finally to guarantee combat state reset even if interrupted by AFK/hop
+     * combat state cleanup is handled by the state machine (resetToScanning)
      */
     private boolean waitForKillConfirmation(HealthOverlay healthOverlay) {
         // reset kill flag
         killDetected = false;
-        boolean killed = false;
 
-        // store position before finally block clears it - used for plucking
+        // store kill position for corpse detection (state machine may clear currentChompyPosition)
         WorldPosition killPosition = currentChompyPosition;
 
         // track combat state - must see overlay visible with HP > 0 before counting kills
@@ -685,117 +834,112 @@ public class AttackChompy extends Task {
         final Integer[] lastKnownHP = {null};
         final long[] lastDebugLog = {0};  // throttle debug logs
 
-        try {
-            // wait for kill confirmation via HP tracking
-            killed = script.pollFramesUntil(() -> {
-                // check chat message (set by main script onNewFrame) - most reliable
-                if (killDetected) {
-                    script.log(getClass(), "kill detected via chat message");
-                    return true;
-                }
+        // randomize kill confirmation timeout (18-22s base)
+        int killTimeout = RandomUtils.gaussianRandom(18000, 22000, 20000, 1000);
+        script.log(getClass(), "[combat] waiting for kill (timeout: " + killTimeout + "ms)...");
 
-                Integer currentHP = getHealthOverlayHitpoints(healthOverlay);
-                boolean overlayVisible = healthOverlay.isVisible();
-
-                // DEBUG: log health overlay state every 500ms
-                if (isVerbose()) {
-                    long now = System.currentTimeMillis();
-                    if (now - lastDebugLog[0] > 500) {
-                        lastDebugLog[0] = now;
-                        logVerbose("HP overlay: visible=" + overlayVisible +
-                                " HP=" + currentHP + " combat=" + wasInCombat[0]);
-                    }
-                }
-
-                // track if we've ever been in combat (overlay visible with HP > 0)
-                if (overlayVisible && currentHP != null && currentHP > 0) {
-                    wasInCombat[0] = true;
-                    lastKnownHP[0] = currentHP;
-                }
-
-                // only count kill if we were actually in combat first
-                if (!wasInCombat[0]) {
-                    // not in combat yet - keep waiting
-                    return false;
-                }
-
-                // primary: HP dropped to 0 (chompy dead)
-                if (currentHP != null && currentHP == 0) {
-                    script.log(getClass(), "kill detected: HP reached 0");
-                    return true;
-                }
-
-                // secondary: overlay disappeared after being visible (chompy dead or despawned)
-                if (!overlayVisible && currentHP == null) {
-                    script.log(getClass(), "kill detected: overlay disappeared after combat");
-                    return true;
-                }
-
-                return false;
-            }, KILL_CONFIRMATION_TIMEOUT_MS);
-
-            if (killed) {
-                // wait briefly for chatbox total to appear (follows "scratch a notch" message)
-                // must wait for value to INCREASE, not just be positive (otherwise subsequent kills pass immediately)
-                int previousTotal = TidalsChompyHunter.gameReportedTotalKills;
-                script.pollFramesUntil(() -> TidalsChompyHunter.gameReportedTotalKills > previousTotal, 2000);
-
-                // sync kill count from game
-                if (TidalsChompyHunter.gameReportedTotalKills > previousTotal) {
-                    int sessionKills = TidalsChompyHunter.gameReportedTotalKills - TidalsChompyHunter.initialTotalKills;
-                    TidalsChompyHunter.killCount = Math.max(TidalsChompyHunter.killCount, sessionKills);
-                    script.log(getClass(), "synced kill count from game: session=" + sessionKills + " total=" + TidalsChompyHunter.gameReportedTotalKills);
-                } else {
-                    // fallback: increment manually
-                    TidalsChompyHunter.killCount++;
-                    script.log(getClass(), "kill count incremented manually: " + TidalsChompyHunter.killCount);
-                }
-
-                // decrement ground toad count (chompy consumed one toad to spawn)
-                if (TidalsChompyHunter.groundToadCount > 0) {
-                    TidalsChompyHunter.groundToadCount--;
-                    script.log(getClass(), "ground toad count decremented to " + TidalsChompyHunter.groundToadCount);
-                }
-
-                // detect corpse position NOW via pixel cluster - chompy moved during combat
-                // must scan immediately while sprite is still visible at death location
-                // pass killPosition to find cluster nearest to where we were attacking
-                WorldPosition corpsePos = findCorpseAtDeath(killPosition);
-                if (corpsePos != null) {
-                    int posKeyVal = posKey(corpsePos);
-                    // safety check: don't re-add already ignored positions
-                    if (ignoredPositionTimestamps.containsKey(posKeyVal)) {
-                        script.log(getClass(), "corpse at " + corpsePos.getX() + "," + corpsePos.getY() +
-                                " already ignored - skipping");
-                        if (isVerbose()) {
-                            logVerbose("posKey=" + posKeyVal + " age=" +
-                                    (System.currentTimeMillis() - ignoredPositionTimestamps.get(posKeyVal)) + "ms");
-                        }
-                    } else if (TidalsChompyHunter.corpsePositions.contains(corpsePos)) {
-                        script.log(getClass(), "corpse at " + corpsePos.getX() + "," + corpsePos.getY() +
-                                " already tracked - skipping duplicate");
-                    } else {
-                        TidalsChompyHunter.corpsePositions.add(corpsePos);
-                        // CRITICAL: also add to ignore list immediately to prevent re-detection
-                        // this prevents the next poll cycle from trying to attack the corpse
-                        int newPosKey = posKey(corpsePos);
-                        ignoredPositionTimestamps.put(newPosKey, System.currentTimeMillis());
-                        script.log(getClass(), "ADDED CORPSE TO IGNORE: " + corpsePos.getX() + "," + corpsePos.getY() +
-                                " posKey=" + newPosKey + " (corpses:" + TidalsChompyHunter.corpsePositions.size() +
-                                " ignored:" + ignoredPositionTimestamps.size() + ")");
-                    }
-                    // defer plucking - will pluck all corpses when no live chompies remain
-                } else {
-                    script.log(getClass(), "could not detect corpse position at death - sprite may have disappeared");
-                }
-
-                // remove killed chompy from tracking
-                removeTrackedChompy(killPosition);
+        // wait for kill confirmation via HP tracking
+        boolean killed = script.pollFramesUntil(() -> {
+            // check chat message (set by main script onNewFrame) - most reliable
+            if (killDetected) {
+                script.log(getClass(), "kill detected via chat message");
+                return true;
             }
-        } finally {
-            // GUARANTEED to run even if interrupted by AFK/hop PriorityTaskException
-            inCombat = false;
-            currentChompyPosition = null;
+
+            Integer currentHP = getHealthOverlayHitpoints(healthOverlay);
+            boolean overlayVisible = healthOverlay.isVisible();
+
+            // DEBUG: log health overlay state every 500ms
+            if (isVerbose()) {
+                long now = System.currentTimeMillis();
+                if (now - lastDebugLog[0] > 500) {
+                    lastDebugLog[0] = now;
+                    logVerbose("HP overlay: visible=" + overlayVisible +
+                            " HP=" + currentHP + " combat=" + wasInCombat[0]);
+                }
+            }
+
+            // track if we've ever been in combat (overlay visible with HP > 0)
+            if (overlayVisible && currentHP != null && currentHP > 0) {
+                wasInCombat[0] = true;
+                lastKnownHP[0] = currentHP;
+            }
+
+            // only count kill if we were actually in combat first
+            if (!wasInCombat[0]) {
+                return false;
+            }
+
+            // primary: HP dropped to 0 (chompy dead)
+            if (currentHP != null && currentHP == 0) {
+                script.log(getClass(), "kill detected: HP reached 0");
+                return true;
+            }
+
+            // secondary: overlay disappeared after being visible (chompy dead or despawned)
+            if (!overlayVisible && currentHP == null) {
+                script.log(getClass(), "kill detected: overlay disappeared after combat");
+                return true;
+            }
+
+            return false;
+        }, killTimeout);
+
+        if (killed) {
+            // wait briefly for chatbox total to appear (follows "scratch a notch" message)
+            // must wait for value to INCREASE, not just be positive (otherwise subsequent kills pass immediately)
+            int previousTotal = TidalsChompyHunter.gameReportedTotalKills;
+            script.pollFramesUntil(() -> TidalsChompyHunter.gameReportedTotalKills > previousTotal,
+                    RandomUtils.gaussianRandom(1500, 2500, 2000, 250));
+
+            // sync kill count from game
+            if (TidalsChompyHunter.gameReportedTotalKills > previousTotal) {
+                int sessionKills = TidalsChompyHunter.gameReportedTotalKills - TidalsChompyHunter.initialTotalKills;
+                TidalsChompyHunter.killCount = Math.max(TidalsChompyHunter.killCount, sessionKills);
+                script.log(getClass(), "synced kill count from game: session=" + sessionKills + " total=" + TidalsChompyHunter.gameReportedTotalKills);
+            } else {
+                // fallback: increment manually
+                TidalsChompyHunter.killCount++;
+                script.log(getClass(), "kill count incremented manually: " + TidalsChompyHunter.killCount);
+            }
+
+            // decrement ground toad count (chompy consumed one toad to spawn)
+            if (TidalsChompyHunter.groundToadCount > 0) {
+                TidalsChompyHunter.groundToadCount--;
+                script.log(getClass(), "ground toad count decremented to " + TidalsChompyHunter.groundToadCount);
+            }
+
+            // detect corpse position NOW via pixel cluster - chompy moved during combat
+            // must scan immediately while sprite is still visible at death location
+            WorldPosition corpsePos = findCorpseAtDeath(killPosition);
+            if (corpsePos != null) {
+                int posKeyVal = posKey(corpsePos);
+                // safety check: don't re-add already ignored positions
+                if (ignoredPositionTimestamps.containsKey(posKeyVal)) {
+                    script.log(getClass(), "corpse at " + corpsePos.getX() + "," + corpsePos.getY() +
+                            " already ignored - skipping");
+                    if (isVerbose()) {
+                        logVerbose("posKey=" + posKeyVal + " age=" +
+                                (System.currentTimeMillis() - ignoredPositionTimestamps.get(posKeyVal)) + "ms");
+                    }
+                } else if (TidalsChompyHunter.corpsePositions.contains(corpsePos)) {
+                    script.log(getClass(), "corpse at " + corpsePos.getX() + "," + corpsePos.getY() +
+                            " already tracked - skipping duplicate");
+                } else {
+                    TidalsChompyHunter.corpsePositions.add(corpsePos);
+                    // CRITICAL: also add to ignore list immediately to prevent re-detection
+                    int newPosKey = posKey(corpsePos);
+                    ignoredPositionTimestamps.put(newPosKey, System.currentTimeMillis());
+                    script.log(getClass(), "ADDED CORPSE TO IGNORE: " + corpsePos.getX() + "," + corpsePos.getY() +
+                            " posKey=" + newPosKey + " (corpses:" + TidalsChompyHunter.corpsePositions.size() +
+                            " ignored:" + ignoredPositionTimestamps.size() + ")");
+                }
+            } else {
+                script.log(getClass(), "could not detect corpse position at death - sprite may have disappeared");
+            }
+
+            // remove killed chompy from tracking
+            removeTrackedChompy(killPosition);
         }
 
         return killed;
@@ -1040,13 +1184,14 @@ public class AttackChompy extends Task {
             pluckStarted = false;
 
             // direct tap "Pluck" - opens menu and clicks in one action
-            boolean plucked = script.getFinger().tap(tileCube, "Pluck");
+            boolean plucked = script.getFinger().tapGameScreen(tileCube, "Pluck");
 
             if (plucked) {
                 script.log(getClass(), "pluck action sent - waiting for chat confirmation");
 
                 // wait for "You start plucking" chat message (covers walking to corpse)
-                boolean confirmed = script.pollFramesUntil(() -> pluckStarted, 6000);
+                boolean confirmed = script.pollFramesUntil(() -> pluckStarted,
+                        RandomUtils.gaussianRandom(5000, 7000, 6000, 500));
 
                 if (confirmed) {
                     script.log(getClass(), "pluck confirmed via chat - waiting for animation to complete");
@@ -1100,12 +1245,13 @@ public class AttackChompy extends Task {
             pluckStarted = false;
 
             // simple direct pluck
-            boolean plucked = script.getFinger().tap(npcTileCube, "Pluck");
+            boolean plucked = script.getFinger().tapGameScreen(npcTileCube, "Pluck");
             if (plucked) {
                 script.log(getClass(), "[fallback] pluck action sent at " + npcPos.getX() + "," + npcPos.getY());
 
                 // wait for chat confirmation
-                boolean confirmed = script.pollFramesUntil(() -> pluckStarted, 6000);
+                boolean confirmed = script.pollFramesUntil(() -> pluckStarted,
+                        RandomUtils.gaussianRandom(5000, 7000, 6000, 500));
 
                 if (confirmed) {
                     script.log(getClass(), "[fallback] pluck confirmed - waiting for animation to complete");
@@ -1379,10 +1525,21 @@ public class AttackChompy extends Task {
 
             // check if we found a valid NPC within threshold
             if (closestValidNpc != null && closestValidDistance < 50) {
-                script.log(getClass(), "[pixelScan] MATCHED chompy at " +
-                        closestValidNpc.getX() + "," + closestValidNpc.getY() +
-                        " (dist=" + (int)closestValidDistance + ")");
-                return closestValidNpc;
+                // if an ignored NPC is much closer to this cluster, the cluster belongs to the corpse
+                // skip it rather than matching to a distant non-ignored NPC (likely a swamp toad)
+                if (closestIgnoredNpc != null && closestIgnoredDistance < closestValidDistance * 0.5) {
+                    long ignoreAge = System.currentTimeMillis() - ignoredPositionTimestamps.get(posKey(closestIgnoredNpc));
+                    script.log(getClass(), "[pixelScan] cluster " + clusterIdx + ": SKIPPED - ignored NPC at " +
+                            closestIgnoredNpc.getX() + "," + closestIgnoredNpc.getY() +
+                            " (d=" + (int)closestIgnoredDistance + ", dead " + (ignoreAge/1000) + "s) is much closer than valid NPC at " +
+                            closestValidNpc.getX() + "," + closestValidNpc.getY() +
+                            " (d=" + (int)closestValidDistance + ")");
+                } else {
+                    script.log(getClass(), "[pixelScan] MATCHED chompy at " +
+                            closestValidNpc.getX() + "," + closestValidNpc.getY() +
+                            " (dist=" + (int)closestValidDistance + ")");
+                    return closestValidNpc;
+                }
             }
 
             // no valid NPC - log why (closest was ignored, or none in range)
@@ -1695,6 +1852,9 @@ public class AttackChompy extends Task {
         // clear cluster cache
         cachedChompyClusters = null;
         cachedChompyClustersTime = 0;
+
+        // note: state machine instance fields (state, targetPosition, healthOverlay)
+        // are reset per-instance via resetToScanning() - static reset can't access them
     }
 
     /**
@@ -1782,7 +1942,7 @@ public class AttackChompy extends Task {
             }
 
             // try to tap "Inflate" - only swamp toads have this action
-            boolean success = script.getFinger().tap(tileCube, "Inflate");
+            boolean success = script.getFinger().tapGameScreen(tileCube, "Inflate");
             if (success) {
                 return npcPos;
             }
@@ -1803,13 +1963,14 @@ public class AttackChompy extends Task {
         }
 
         // tap "Inflate" - game handles walking and using bellows
-        boolean success = script.getFinger().tap(tileCube, "Inflate");
+        boolean success = script.getFinger().tapGameScreen(tileCube, "Inflate");
         if (!success) {
             return false;
         }
 
         // wait for inventory to gain toad (shorter timeout for pre-inflate)
-        boolean gotToad = script.pollFramesUntil(() -> countBloatedToadsInv() > previousCount, 5000);
+        boolean gotToad = script.pollFramesUntil(() -> countBloatedToadsInv() > previousCount,
+                RandomUtils.gaussianRandom(4000, 6000, 5000, 500));
         return gotToad;
     }
 }

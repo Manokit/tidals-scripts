@@ -204,10 +204,111 @@ private boolean isPolygonTapSafe(Polygon poly) {
 
 ---
 
-## Idle Detection During Walking to Bank
+## Movement Stall Detection (MovementChecker)
+
+Use `MovementChecker` from TidalsUtilities to detect when player movement has stalled (misclicks, interrupts, obstacles).
+
+### Why It's Needed
+
+Walking can fail silently:
+- Clicked on game object instead of tile
+- Path blocked by closed door
+- Player interrupted by NPC dialogue
+- Misclick landed on UI element
+
+Without timeout detection, scripts get stuck forever.
+
+### Basic Usage
 
 ```java
-// Track position changes to detect if player got stuck
+import utilities.MovementChecker;
+
+// Create checker with player's starting position
+MovementChecker checker = new MovementChecker(script.getWorldPosition());
+
+// In your polling loop
+while (walking) {
+    WorldPosition current = script.getWorldPosition();
+    if (current == null) continue;
+
+    if (checker.hasTimedOut(current)) {
+        // Player hasn't moved for 800-2000ms (randomized)
+        script.log(getClass(), "movement stalled - retrying");
+        break;
+    }
+
+    // Check if arrived
+    if (current.distanceTo(destination) < 3) {
+        return true;  // success
+    }
+
+    script.pollFramesUntil(() -> false, 100);
+}
+```
+
+### How It Works
+
+1. Records initial position and starts timer
+2. Each `hasTimedOut()` call compares current position
+3. If position changed → resets timer automatically
+4. If position unchanged for `timeout` ms → returns true
+
+### Custom Timeouts
+
+```java
+// Default: random 800-2000ms
+MovementChecker checker = new MovementChecker(position);
+
+// Custom range: 500-1500ms
+MovementChecker checker = new MovementChecker(position, 500, 1500);
+
+// Get the randomized timeout value
+int timeout = checker.getTimeout();
+
+// Manual reset (e.g., before starting movement)
+checker.reset(newPosition);
+```
+
+### Complete Walk-to-Bank Example
+
+```java
+private boolean walkToBank() {
+    WorldPosition target = BANK_POSITION;
+    WorldPosition start = script.getWorldPosition();
+    if (start == null) return false;
+
+    // Initiate walking
+    script.getWalker().walkTo(target, new WalkConfig.Builder().build());
+
+    // Monitor for stalls
+    MovementChecker checker = new MovementChecker(start);
+
+    boolean arrived = script.pollFramesUntil(() -> {
+        WorldPosition current = script.getWorldPosition();
+        if (current == null) return false;
+
+        // Check for stall
+        if (checker.hasTimedOut(current)) {
+            script.log(getClass(), "walk stalled, will retry");
+            return true;  // exit poll to retry
+        }
+
+        // Check for arrival
+        return current.distanceTo(target) < 3;
+    }, 30000);
+
+    // Verify we actually arrived (not just stall-exited)
+    WorldPosition finalPos = script.getWorldPosition();
+    return finalPos != null && finalPos.distanceTo(target) < 3;
+}
+```
+
+### Legacy Pattern (Not Recommended)
+
+The old approach using `AtomicReference<Timer>` still works but is more verbose:
+
+```java
+// Track position changes to detect if player got stuck (LEGACY)
 AtomicReference<Timer> positionChangeTimer = new AtomicReference<>(new Timer());
 AtomicReference<WorldPosition> pos = new AtomicReference<>(null);
 
@@ -226,11 +327,15 @@ pollFramesHuman(() -> {
 }, 20000);
 ```
 
+**Prefer `MovementChecker`** - it handles the complexity for you with proper randomization.
+
 ---
 
 ## Deposit Box (Alternative to Banks)
 
 **Use Case**: Mining areas, certain quests, activities without full bank access.
+
+### Basic Deposit Box Pattern
 
 ```java
 private boolean handleDepositBox() {
@@ -257,6 +362,85 @@ private boolean handleDepositBox() {
     return true;
 }
 ```
+
+### Poll-Based Deposit Box Flow
+
+For proper poll-based architecture, check state and perform one action per poll:
+
+```java
+@Override
+public boolean execute() {
+    WorldPosition myPos = script.getWorldPosition();
+    if (myPos == null) return false;
+
+    DepositBox depositBox = script.getWidgetManager().getDepositBox();
+
+    // State: Not at deposit box? Walk there
+    if (!DEPOSIT_BOX_AREA.contains(myPos)) {
+        task = "Walking to deposit box";
+        script.getWalker().walkTo(DEPOSIT_BOX_AREA.getRandomPosition());
+        return false;
+    }
+
+    // State: Deposit box not open? Open it
+    if (!depositBox.isVisible()) {
+        task = "Opening deposit box";
+        RSObject box = script.getObjectManager().getClosestObject(myPos, "Bank deposit box");
+
+        if (box == null) {
+            script.log(getClass(), "deposit box not found");
+            return false;
+        }
+
+        // Visibility check before interacting
+        Polygon hull = box.getConvexHull();
+        if (hull == null) return false;
+
+        double visibility = script.getWidgetManager().insideGameScreenFactor(
+            hull, List.of(ChatboxComponent.class)
+        );
+
+        if (visibility < 0.3) {
+            // Walk closer
+            script.getWalker().walkTo(box.getWorldPosition());
+            return false;
+        }
+
+        // Interact
+        script.getFinger().tapGameScreen(hull, "Deposit");
+        script.pollFramesUntil(() -> depositBox.isVisible(), RandomUtils.gaussianRandom(4000, 6000, 5000, 500));
+        return false;
+    }
+
+    // State: Have items? Deposit them
+    ItemGroupResult inv = script.getWidgetManager().getInventory().search(Collections.emptySet());
+    if (inv != null && !inv.isEmpty()) {
+        task = "Depositing items";
+        Set<Integer> keepItems = Set.of(ItemID.RUNE_PICKAXE, ItemID.DRAGON_PICKAXE);
+        depositBox.depositAll(keepItems);
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
+        return false;
+    }
+
+    // State: Done depositing, close and move on
+    task = "Closing deposit box";
+    depositBox.close();
+    script.pollFramesUntil(() -> !depositBox.isVisible(), 2000);
+    return false;  // task will deactivate when inventory is empty and box is closed
+}
+```
+
+### Deposit Box vs Regular Bank
+
+| Feature | Deposit Box | Full Bank |
+|---------|-------------|-----------|
+| Deposit items | ✓ | ✓ |
+| Withdraw items | ✗ | ✓ |
+| View bank contents | ✗ | ✓ |
+| Search function | ✗ | ✓ |
+| Locations | Mining areas, specific quest areas | Towns, banks |
+
+**Use deposit box when**: You only need to deposit (mining, woodcutting) and a full bank isn't nearby.
 
 ---
 
@@ -325,6 +509,134 @@ private int bank() {
 
 ---
 
+## Walking to Bank with breakCondition (OSMB Recommended)
+
+When walking to a bank or deposit box, use a `breakCondition` to stop early once the object is loaded in scene.
+
+### Simple Approach: Check Object Exists
+
+Per OSMB: just check if the object is non-null, then let `RSObject::interact` or `RetryUtils` handle the rest.
+
+```java
+private WalkConfig buildWalkConfig(String objectName) {
+    WalkConfig.Builder walkConfig = new WalkConfig.Builder();
+    walkConfig.breakCondition(() -> {
+        RSObject target = script.getObjectManager().getClosestObject(
+                script.getWorldPosition(), objectName
+        );
+        if (target != null) {
+            script.log(getClass(), "[breakCondition] object found in scene, stopping");
+        }
+        return target != null;
+    });
+    return walkConfig.build();
+}
+
+private boolean isObjectInScene(String objectName) {
+    RSObject target = script.getObjectManager().getClosestObject(
+            script.getWorldPosition(), objectName
+    );
+    return target != null;
+}
+```
+
+### Alternative: Check Hull Visibility
+
+Use this approach if you're manually tapping coordinates instead of using `RSObject::interact`:
+
+```java
+walkConfig.breakCondition(() -> {
+    RSObject bank = script.getObjectManager().getClosestObject(myPos, "Bank chest");
+    if (bank == null) return false;
+
+    Polygon hull = bank.getConvexHull();
+    if (hull == null) return false;
+
+    // Check >30% visible, ignoring chatbox (we can tap through it)
+    double visibility = script.getWidgetManager().insideGameScreenFactor(
+        hull, List.of(ChatboxComponent.class)
+    );
+    return visibility >= 0.3;
+});
+```
+
+### Critical: Check UI State FIRST
+
+**Problem**: When bank/deposit UI is open, the 3D object behind it is blocked by the UI overlay. The visibility check returns false, causing walk spam.
+
+```java
+// WRONG - checks object before UI
+@Override
+public boolean execute() {
+    if (!isObjectInScene("Bank Deposit Chest")) {
+        walkToBank();  // Spam! UI is open but object "not visible"
+        return false;
+    }
+    // ...
+}
+
+// CORRECT - checks UI first
+@Override
+public boolean execute() {
+    DepositBox depositBox = script.getWidgetManager().getDepositBox();
+
+    // Check if UI is already open - skip all walking logic
+    if (depositBox.isVisible()) {
+        return handleDepositing(depositBox);
+    }
+
+    // Now safe to check object visibility
+    if (!isObjectInScene("Bank Deposit Chest")) {
+        walkToBank();
+        return false;
+    }
+
+    openDepositBox();
+    return false;
+}
+```
+
+### Complete Walk-to-Bank Pattern
+
+```java
+@Override
+public boolean execute() {
+    // 1. Check if bank UI is already open (skip all walking)
+    Bank bank = script.getWidgetManager().getBank();
+    if (bank.isVisible()) {
+        return handleBanking(bank);
+    }
+
+    WorldPosition myPos = script.getWorldPosition();
+    if (myPos == null) return false;
+
+    // 2. Check if bank object is in scene (close enough)
+    String bankName = "Bank booth";
+    if (!isObjectInScene(bankName)) {
+        task = "Walking to bank";
+        script.getWalker().walkTo(BANK_POSITION, buildWalkConfig(bankName));
+        return false;
+    }
+
+    // 3. Object in scene - open bank
+    task = "Opening bank";
+    RSObject bankObj = script.getObjectManager().getClosestObject(myPos, bankName);
+    RetryUtils.objectInteract(script, bankObj, "Bank", "open bank");
+    return false;
+}
+```
+
+### Why Simple > Complex
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| `object != null` | Simple, fast, works with RetryUtils | Might stop slightly further away |
+| Hull visibility check | Precise, stops when clickable | Complex, fails when UI open |
+
+**Recommendation**: Use the simple `object != null` check when using `RSObject::interact` or `RetryUtils.objectInteract`. They handle visibility/retrying for you.
+
+---
+
 ## Best Practices
 
 1. **Always wait 300-500ms after opening bank** before searching
@@ -333,3 +645,5 @@ private int bank() {
 4. **Check visibility** before clicking bank objects
 5. **Use depositAll with keepItems** instead of manual item selection
 6. **Handle edge cases** like full bank, missing items, etc.
+7. **Check UI state first** before checking object visibility (prevents walk spam)
+8. **Use breakCondition** to stop walking early when target is reachable

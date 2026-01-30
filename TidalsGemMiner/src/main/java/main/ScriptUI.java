@@ -22,6 +22,7 @@ public class ScriptUI {
     private final Preferences prefs = Preferences.userRoot().node("tidals_gem_miner");
     private static final String PREF_LOCATION = "selected_location";
     private static final String PREF_CUTTING_ENABLED = "cutting_enabled";
+    private static final String PREF_DEBUG_ENABLED = "debug_enabled";
 
     // colors matching the paint overlay
     private static final String BG_COLOR = "#163134";
@@ -33,47 +34,40 @@ public class ScriptUI {
     private final Script script;
     private ComboBox<MiningLocation> locationComboBox;
     private CheckBox cuttingCheckBox;
+    private CheckBox debugCheckBox;
 
     public ScriptUI(Script script) {
         this.script = script;
     }
 
     public Scene buildScene(Script script) {
-        VBox root = new VBox(16);
-        root.setPadding(new Insets(20, 24, 20, 24));
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setStyle("-fx-background-color: " + BG_COLOR + ";");
+        TabPane tabPane = new TabPane();
+        tabPane.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        // === Main Tab ===
+        VBox mainBox = new VBox(16);
+        mainBox.setPadding(new Insets(20, 24, 20, 24));
+        mainBox.setAlignment(Pos.TOP_CENTER);
+        mainBox.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
         // logo
         ImageView logoView = loadLogo();
         if (logoView != null) {
-            root.getChildren().add(logoView);
+            mainBox.getChildren().add(logoView);
         }
 
         // version label
         Label versionLabel = new Label("v" + TidalsGemMiner.scriptVersion);
         versionLabel.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
-        root.getChildren().add(versionLabel);
+        mainBox.getChildren().add(versionLabel);
 
         // spacer
         Region spacer = new Region();
         spacer.setPrefHeight(8);
-        root.getChildren().add(spacer);
+        mainBox.getChildren().add(spacer);
 
         // location selection option box
-        VBox locationBox = new VBox(8);
-        locationBox.setAlignment(Pos.CENTER_LEFT);
-        locationBox.setPadding(new Insets(12));
-        locationBox.setStyle(
-                "-fx-background-color: derive(" + BG_COLOR + ", -15%); " +
-                "-fx-border-color: " + BORDER_COLOR + "; " +
-                "-fx-border-width: 1; " +
-                "-fx-border-radius: 4; " +
-                "-fx-background-radius: 4;"
-        );
-
-        Label locationLabel = new Label("Mining Location");
-        locationLabel.setStyle("-fx-text-fill: " + TEXT_LIGHT + "; -fx-font-size: 14px; -fx-font-weight: bold;");
+        VBox locationBox = createSection("Mining Location");
 
         locationComboBox = new ComboBox<>();
         locationComboBox.getItems().addAll(Locations.ALL_LOCATIONS);
@@ -84,7 +78,6 @@ public class ScriptUI {
                 "-fx-font-size: 13px;"
         );
 
-        // custom cell factory to show display names with white text
         locationComboBox.setCellFactory(lv -> new ListCell<MiningLocation>() {
             @Override
             protected void updateItem(MiningLocation item, boolean empty) {
@@ -98,7 +91,6 @@ public class ScriptUI {
             }
         });
 
-        // style the button cell (selected item display) with white text
         locationComboBox.setButtonCell(new ListCell<MiningLocation>() {
             @Override
             protected void updateItem(MiningLocation item, boolean empty) {
@@ -112,7 +104,6 @@ public class ScriptUI {
             }
         });
 
-        // converter for the button cell
         locationComboBox.setConverter(new StringConverter<MiningLocation>() {
             @Override
             public String toString(MiningLocation object) {
@@ -130,38 +121,16 @@ public class ScriptUI {
         MiningLocation defaultLocation = MiningLocation.fromDisplay(savedLocation);
         locationComboBox.setValue(defaultLocation);
 
-        Label locationDesc = new Label("Upper mine has gem rocks on surface. Underground mine is inside cave.");
-        locationDesc.setWrapText(true);
-        locationDesc.setMaxWidth(220);
-        locationDesc.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
-
-        locationBox.getChildren().addAll(locationLabel, locationComboBox, locationDesc);
-        root.getChildren().add(locationBox);
+        Label locationDesc = createDesc("Upper mine has gem rocks on surface. Underground mine is inside cave.");
+        locationBox.getChildren().addAll(locationComboBox, locationDesc);
+        mainBox.getChildren().add(locationBox);
 
         // cutting option box
-        VBox cuttingBox = new VBox(8);
-        cuttingBox.setAlignment(Pos.CENTER_LEFT);
-        cuttingBox.setPadding(new Insets(12));
-        cuttingBox.setStyle(
-                "-fx-background-color: derive(" + BG_COLOR + ", -15%); " +
-                "-fx-border-color: " + BORDER_COLOR + "; " +
-                "-fx-border-width: 1; " +
-                "-fx-border-radius: 4; " +
-                "-fx-background-radius: 4;"
-        );
+        VBox cuttingBox = createSection("Gem Cutting");
 
-        cuttingCheckBox = new CheckBox("Cut gems (drops crushed)");
-        cuttingCheckBox.setSelected(prefs.getBoolean(PREF_CUTTING_ENABLED, false));
-        cuttingCheckBox.setStyle(
-                "-fx-text-fill: " + TEXT_LIGHT + "; " +
-                "-fx-font-size: 14px; " +
-                "-fx-cursor: hand;"
-        );
+        cuttingCheckBox = createCheckbox("Cut gems (drops crushed)", prefs.getBoolean(PREF_CUTTING_ENABLED, false));
 
-        Label cuttingDesc = new Label();
-        cuttingDesc.setWrapText(true);
-        cuttingDesc.setMaxWidth(220);
-        cuttingDesc.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
+        Label cuttingDesc = createDesc("");
         updateCuttingDescription(cuttingDesc);
 
         Label chiselWarning = new Label("Requires chisel in inventory");
@@ -176,7 +145,27 @@ public class ScriptUI {
         });
 
         cuttingBox.getChildren().addAll(cuttingCheckBox, cuttingDesc, chiselWarning);
-        root.getChildren().add(cuttingBox);
+        mainBox.getChildren().add(cuttingBox);
+
+        Tab mainTab = new Tab("Main", mainBox);
+        mainTab.setClosable(false);
+
+        // === Debug Tab ===
+        VBox debugRoot = new VBox(12);
+        debugRoot.setPadding(new Insets(20, 24, 20, 24));
+        debugRoot.setAlignment(Pos.TOP_CENTER);
+        debugRoot.setStyle("-fx-background-color: " + BG_COLOR + ";");
+
+        VBox debugSection = createSection("Debug");
+        debugCheckBox = createCheckbox("Enable verbose logging", prefs.getBoolean(PREF_DEBUG_ENABLED, false));
+        Label debugDesc = createDesc("Logs detailed task activate/execute info for troubleshooting.");
+        debugSection.getChildren().addAll(debugCheckBox, debugDesc);
+        debugRoot.getChildren().add(debugSection);
+
+        Tab debugTab = new Tab("Debug", debugRoot);
+        debugTab.setClosable(false);
+
+        tabPane.getTabs().addAll(mainTab, debugTab);
 
         // start button
         Button startButton = new Button("Start");
@@ -218,12 +207,13 @@ public class ScriptUI {
             ((Stage) startButton.getScene().getWindow()).close();
         });
 
-        root.getChildren().add(startButton);
+        VBox layout = new VBox(tabPane, startButton);
+        layout.setSpacing(15);
+        layout.setPadding(new Insets(15));
+        layout.setStyle("-fx-background-color: " + BG_COLOR + ";");
 
-        Scene scene = new Scene(root);
+        Scene scene = new Scene(layout, 340, 440);
         scene.setFill(Color.web(BG_COLOR));
-        scene.getRoot().autosize();
-
         return scene;
     }
 
@@ -242,6 +232,40 @@ public class ScriptUI {
         }
     }
 
+    private VBox createSection(String title) {
+        VBox box = new VBox(6);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(10));
+        box.setStyle(
+            "-fx-background-color: derive(" + BG_COLOR + ", -15%); " +
+            "-fx-border-color: " + BORDER_COLOR + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 4; " +
+            "-fx-background-radius: 4;"
+        );
+
+        Label header = new Label(title);
+        header.setStyle("-fx-text-fill: " + GOLD + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+        box.getChildren().add(header);
+
+        return box;
+    }
+
+    private CheckBox createCheckbox(String text, boolean selected) {
+        CheckBox cb = new CheckBox(text);
+        cb.setSelected(selected);
+        cb.setStyle("-fx-text-fill: " + TEXT_LIGHT + "; -fx-font-size: 13px; -fx-cursor: hand;");
+        return cb;
+    }
+
+    private Label createDesc(String text) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        label.setMaxWidth(280);
+        label.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 11px;");
+        return label;
+    }
+
     private void updateCuttingDescription(Label label) {
         if (cuttingCheckBox.isSelected()) {
             label.setText("Cuts gems when inventory full. Crushed gems are dropped. Banks only cut gems.");
@@ -253,8 +277,13 @@ public class ScriptUI {
     private void saveSettings() {
         prefs.put(PREF_LOCATION, getSelectedLocation().displayName());
         prefs.putBoolean(PREF_CUTTING_ENABLED, isCuttingEnabled());
-        script.log("SETTINGS", "Location: " + getSelectedLocation().displayName());
-        script.log("SETTINGS", "Cutting: " + (isCuttingEnabled() ? "enabled" : "disabled"));
+        prefs.putBoolean(PREF_DEBUG_ENABLED, debugCheckBox.isSelected());
+
+        TidalsGemMiner.verboseLogging = debugCheckBox.isSelected();
+
+        script.log("SETTINGS", "Location: " + getSelectedLocation().displayName() +
+                   ", cutting: " + (isCuttingEnabled() ? "enabled" : "disabled") +
+                   ", debug: " + debugCheckBox.isSelected());
     }
 
     public MiningLocation getSelectedLocation() {

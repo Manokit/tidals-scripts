@@ -56,11 +56,8 @@ public class TidalsChompyHunter extends Script {
     private static final String SCRIPT_NAME = "ChompyHunter";
     private static final String SESSION_ID = UUID.randomUUID().toString();
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DEBUG MODE - set to true for verbose logging (use for debug builds)
-    // ═══════════════════════════════════════════════════════════════════════════
-    public static final boolean VERBOSE_LOGGING = true;
-    // ═══════════════════════════════════════════════════════════════════════════
+    // debug mode - toggled via ScriptUI Debug tab
+    public static volatile boolean verboseLogging = false;
 
     // stats reporting
     private static long lastStatsSent = 0;
@@ -278,8 +275,8 @@ public class TidalsChompyHunter extends Script {
             new Setup(this),
             new AttackChompy(this),   // chompies interrupt everything else
             new FillBellows(this),
-            new InflateToads(this),
-            new DropToads(this)
+            new DropToads(this),
+            new InflateToads(this)
         );
     }
 
@@ -522,7 +519,7 @@ public class TidalsChompyHunter extends Script {
         List<String> newLines = getNewLines(currentLines, previousChatLines);
 
         // DEBUG: log ALL new chat lines
-        if (VERBOSE_LOGGING && !newLines.isEmpty()) {
+        if (verboseLogging && !newLines.isEmpty()) {
             for (String line : newLines) {
                 log(getClass(), "[DEBUG] chat: \"" + line + "\"");
             }
@@ -725,11 +722,21 @@ public class TidalsChompyHunter extends Script {
     @Override
     public void onPaint(Canvas c) {
         // draw tileCubes around tracked toad positions (green)
+        // also draw cyan circle showing the menu tap area for debugging
+        int tapRadius = 3; // must match TOAD_MENU_TAP_RADIUS in DropToads/AttackChompy
         for (WorldPosition toadPos : droppedToadPositions.keySet()) {
             Polygon tileCube = getSceneProjector().getTileCube(toadPos, 30);
             if (tileCube != null) {
                 c.fillPolygon(tileCube, new Color(0, 255, 0, 50).getRGB(), 0.3);
                 c.drawPolygon(tileCube, Color.GREEN.getRGB(), 1.0);
+
+                // debug: draw the menu tap circle (cyan) at tile center
+                com.osmb.api.shape.Rectangle bounds = tileCube.getBounds();
+                if (bounds != null) {
+                    int cx = bounds.x + bounds.width / 2;
+                    int cy = bounds.y + bounds.height / 2;
+                    c.drawOval(cx - tapRadius, cy - tapRadius, tapRadius * 2, tapRadius * 2, Color.CYAN.getRGB());
+                }
             }
         }
 

@@ -56,6 +56,9 @@ public class TidalsCannonballThiever extends Script {
     private static final Map<Integer, Integer> itemPrices = new ConcurrentHashMap<>();
     private static boolean pricesLoaded = false;
 
+    // debug mode - toggled via ScriptUI Debug tab
+    public static volatile boolean verboseLogging = false;
+
     public static int screenWidth = 0;
     public static int screenHeight = 0;
 

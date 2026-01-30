@@ -27,10 +27,10 @@ public class WaitAtSafety extends Task {
             boolean safe = guardTracker.isSafeToReturn();
             if (safe) script.log("WAIT", "Guard passed!");
             return safe;
-        }, 10000);
+        }, RandomUtils.weightedRandom(8000, 12000, 0.002));
 
         if (RandomUtils.uniformRandom(1, 100) <= 30) {
-            script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(150, 800, 0.002));
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(150, 800, 0.002));
         }
 
         return true;

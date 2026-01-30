@@ -32,7 +32,7 @@ public class Retreat extends Task {
             script.getWalker().walkTo(SAFETY_TILE);
         }
 
-        script.pollFramesUntil(() -> isAtSafetyTile(), 3000);
+        script.pollFramesUntil(() -> isAtSafetyTile(), RandomUtils.weightedRandom(2500, 4000, 0.002));
 
         script.log("RETREAT", "Safe! Waiting for guard to pass...");
         return true;
@@ -41,7 +41,7 @@ public class Retreat extends Task {
     private boolean tapOnTile(WorldPosition tile) {
         Polygon tilePoly = script.getSceneProjector().getTileCube(tile, 0);
         if (tilePoly == null) return false;
-        return script.getFinger().tap(tilePoly);
+        return script.getFinger().tapGameScreen(tilePoly);
     }
 
     private boolean isAtSafetyTile() {

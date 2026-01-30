@@ -1,6 +1,7 @@
 package tasks;
 
 import com.osmb.api.script.Script;
+import com.osmb.api.utils.RandomUtils;
 import main.TidalsGemMiner;
 import utils.Task;
 
@@ -10,12 +11,14 @@ import utils.Task;
  */
 public class HopWorld extends Task {
 
-    // cooldown between consecutive hops (8 seconds)
-    private static final long HOP_COOLDOWN_MS = 8000;
+    // cooldown range between consecutive hops (7-10 seconds) - randomized per check
+    private static final long HOP_COOLDOWN_MIN_MS = 7000;
+    private static final long HOP_COOLDOWN_MAX_MS = 10000;
     private static long lastHopTime = 0;
 
-    // stabilization delay after hop - gives OSMB time to identify our position
-    private static final int POST_HOP_STABILIZATION_MS = 10000;
+    // stabilization delay range after hop (8-12s) - randomized per hop
+    private static final int POST_HOP_STABILIZATION_MIN_MS = 8000;
+    private static final int POST_HOP_STABILIZATION_MAX_MS = 12000;
 
     // guard flag to prevent re-entry during hop
     private static volatile boolean isHopping = false;
@@ -36,9 +39,10 @@ public class HopWorld extends Task {
             return false;
         }
 
-        // check cooldown to prevent rapid hop loops
+        // check cooldown to prevent rapid hop loops (randomized)
         long now = System.currentTimeMillis();
-        if (now - lastHopTime < HOP_COOLDOWN_MS) {
+        long hopCooldown = RandomUtils.gaussianRandom((int) HOP_COOLDOWN_MIN_MS, (int) HOP_COOLDOWN_MAX_MS, (HOP_COOLDOWN_MIN_MS + HOP_COOLDOWN_MAX_MS) / 2.0, (HOP_COOLDOWN_MAX_MS - HOP_COOLDOWN_MIN_MS) / 4.0);
+        if (now - lastHopTime < hopCooldown) {
             return false;
         }
 
@@ -81,9 +85,10 @@ public class HopWorld extends Task {
 
             script.log(getClass(), "hop complete, waiting for position stabilization...");
 
-            // wait for OSMB to stabilize
-            script.pollFramesHuman(() -> true, POST_HOP_STABILIZATION_MS);
-            script.log(getClass(), "stabilization complete, resetting state");
+            // wait for OSMB to stabilize (randomized delay)
+            int stabilizationDelay = RandomUtils.gaussianRandom(POST_HOP_STABILIZATION_MIN_MS, POST_HOP_STABILIZATION_MAX_MS, (POST_HOP_STABILIZATION_MIN_MS + POST_HOP_STABILIZATION_MAX_MS) / 2.0, (POST_HOP_STABILIZATION_MAX_MS - POST_HOP_STABILIZATION_MIN_MS) / 4.0);
+            script.pollFramesHuman(() -> true, stabilizationDelay);
+            script.log(getClass(), "stabilization complete (" + stabilizationDelay + "ms), resetting state");
 
             // reset state for new world
             resetStateForNewWorld();

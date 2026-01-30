@@ -4,6 +4,12 @@
 
 > **NEVER ASSUME A METHOD EXISTS.** Always verify against `docs/`, `examples/`, or existing Tidals scripts.
 
+**IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
+
+After a change with a successful build, always add your changes to bean you're working on, or make a new bean so we can know of recent changes if it breaks anything
+
+When you mark a Bean complete, let me know what bean is best to go next
+
 ---
 
 ## Core Principles
@@ -13,12 +19,12 @@ WHEN USER POSTS LOGS → THERE IS A BUG. INVESTIGATE.
 READ THE STACK TRACE. FIX ROOT CAUSE, NOT SYMPTOM.
 DON'T REINVENT. Read existing code before writing new.
 DON'T OVERENGINEER. No abstractions before they're needed.
+POLL-BASED: One action per poll. Check condition, handle it, return. Don't chain actions.
 WHEN YOU'RE DONE MAKING CHANGES, ALWAYS BUILD THE SCRIPT.
 ALWAYS MAKE A DISCORD_POST.MD (see examples/discord-post.md).
 BEFORE NEW FEATURES OR BIG CHANGES → READ docs/common-mistakes.md FIRST.
 ```
-## If you need API Validation
-You have access to an MCP docs server with full chunks of the API you can call on if needed
+This environment has both ripgrep and ast-grep for searching for docs, feel free to use it
 
 ## Git Commits
 - **ONLY commit when explicitly asked.** Do not auto-commit after making changes.
@@ -210,11 +216,23 @@ Check for `DialogueType.TAP_HERE_TO_CONTINUE` after XP-granting actions.
 | `BankSearchUtils` | **CRITICAL for withdrawals** - types in search box, verifies inventory |
 | `TabUtils` | Tab opening with verification |
 | `DialogueUtils` | Level ups, item selection, chat handling |
+| `MovementChecker` | Detects when player stops moving (misclicks, interrupts) |
 
 **Bank withdrawal pattern:**
 ```java
 BankSearchUtils.searchAndWithdrawVerified(script, itemId, amount, true);
 BankSearchUtils.clickSearchToReset(script);  // MUST reset after each withdrawal
+```
+
+**Movement timeout pattern:**
+```java
+// detect if player stopped moving (misclick, block, interrupt)
+MovementChecker checker = new MovementChecker(script.getLocalPlayer().getWorldPosition());
+while (walking) {
+    if (checker.hasTimedOut(script.getLocalPlayer().getWorldPosition())) {
+        break;  // player stalled - retry or take action
+    }
+}
 ```
 
 Build utilities: `cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build`
@@ -241,6 +259,10 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 4. **Direct tap() preferred** - `tap(shape, "Action")` is safer than tapGetResponse chains
 5. **Screen edges cause crashes** - validate bounds (25px margin) before tapping
 6. **Menu interactions fail** - always use RetryUtils (10 attempts)
+7. **Use tapGameScreen() for 3D objects** - `tap()` can click through UI overlays; use `tapGameScreen()` for rocks, trees, NPCs
+8. **Visibility check required** - `getConvexHull() != null` does NOT mean visible; use `insideGameScreenFactor()` before clicking
+9. **Randomize ALL timeouts** - No static delay values; re-randomize each use with `RandomUtils.weightedRandom(min, max)`
+10. **pollFramesUntil(() -> true) exits immediately** - Returns in ~38ms with no delay! Use `() -> false` for fixed delays
 
 ---
 
@@ -249,6 +271,8 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 **Must Read BEFORE Writing Code:**
 - `docs/critical-concepts.md` - Color bot fundamentals
 - `docs/common-mistakes.md` - **READ THIS FIRST** for new features/major changes. Contains 15+ documented pitfalls with correct patterns.
+- `docs/poll-based-architecture.md` - One action per poll pattern; state machine design
+- `docs/interaction-patterns.md` - tap vs tapGameScreen, visibility checking, MovementChecker
 - `docs/Walker.md` - Walking code pitfalls
 - `docs/Paint.md` - Paint overlay & Setup UI standard
 

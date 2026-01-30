@@ -48,6 +48,9 @@ public class DropToads extends Task {
     // target number of toads on ground
     private static final int TARGET_GROUND_TOADS = 5;
 
+    // wait until inventory is full before dropping (matches InflateToads.MAX_INVENTORY_TOADS)
+    private static final int MAX_INVENTORY_TOADS = 3;
+
     // bloated toad ground detection - for finding untracked toads
     private static final SearchablePixel BLOATED_TOAD_GROUND = new SearchablePixel(
             -8215240,  // RGB int for bloated toad on ground
@@ -65,7 +68,7 @@ public class DropToads extends Task {
      * check if verbose logging is enabled
      */
     private boolean isVerbose() {
-        return TidalsChompyHunter.VERBOSE_LOGGING;
+        return TidalsChompyHunter.verboseLogging;
     }
 
     /**
@@ -83,6 +86,11 @@ public class DropToads extends Task {
         // CRITICAL: don't activate if crash detected - let HopWorld handle it
         if (DetectPlayers.crashDetected) {
             return false;
+        }
+
+        // if state machine is mid-execution, keep it running to finish tracking
+        if (dropState != DropState.WALKING_TO_AREA) {
+            return true;
         }
 
         // only activate after setup is complete
@@ -109,9 +117,9 @@ public class DropToads extends Task {
             return false;  // ground is full, don't activate
         }
 
-        // check if we have bloated toads to drop
+        // only drop when inventory is full - let InflateToads batch up to 3 first
         int toadCount = countBloatedToads();
-        return toadCount > 0;
+        return toadCount >= MAX_INVENTORY_TOADS;
     }
 
     @Override
@@ -119,118 +127,174 @@ public class DropToads extends Task {
         // CRITICAL: abort immediately if crash detected
         if (DetectPlayers.crashDetected) {
             script.log(getClass(), "ABORTING - crash detected, yielding to HopWorld");
+            resetState();
+            return false;
+        }
+
+        // INTERRUPT: check for live chompy spawn (filters out corpses)
+        if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
+            script.log(getClass(), "chompy detected - stopping drops to attack");
+            resetState();
             return false;
         }
 
         TidalsChompyHunter.task = "dropping toads";
 
-        // walk to drop area first
-        if (!walkToDropArea()) {
-            script.log(getClass(), "failed to reach drop area");
-            return false;
-        }
-
-        // verify tracked positions before calculating (removes consumed toads)
-        AttackChompy.verifyAllTrackedToads(script);
-
-        // only drop enough to reach target (3) on ground
-        int groundToads = countActiveGroundToads();
-        int inventoryToads = countBloatedToads();
-        int toDrop = Math.min(inventoryToads, Math.max(0, TARGET_GROUND_TOADS - groundToads));
-
-        script.log(getClass(), "ground: " + groundToads + ", inventory: " + inventoryToads + ", dropping: " + toDrop);
-
-        // DEBUG: dump current toad tracking state
-        if (isVerbose()) {
-            StringBuilder sb = new StringBuilder("tracked toads: ");
-            for (WorldPosition pos : TidalsChompyHunter.droppedToadPositions.keySet()) {
-                sb.append(pos.getX()).append(",").append(pos.getY()).append(" ");
-            }
-            logVerbose(sb.toString().trim());
-        }
-
-        // drop all toads needed, handling collisions
-        int dropped = 0;
-        int maxRetries = 10;  // prevent infinite loop
-        int retries = 0;
-
-        while (dropped < toDrop && countBloatedToads() > 0 && retries < maxRetries) {
-            // CRITICAL: abort if crash detected
-            if (DetectPlayers.crashDetected) {
-                script.log(getClass(), "crash detected - stopping drops, yielding to HopWorld");
+        // state: walk to drop area
+        if (dropState == DropState.WALKING_TO_AREA) {
+            if (!walkToDropArea()) {
+                script.log(getClass(), "failed to reach drop area");
+                resetState();
                 return false;
             }
+            // verify tracked positions and calculate target
+            AttackChompy.verifyAllTrackedToads(script);
+            int groundToads = countActiveGroundToads();
+            int inventoryToads = countBloatedToads();
+            toadsTarget = Math.min(inventoryToads, Math.max(0, TARGET_GROUND_TOADS - groundToads));
+            script.log(getClass(), "ground: " + groundToads + ", inventory: " + inventoryToads + ", dropping: " + toadsTarget);
 
-            // INTERRUPT: check for live chompy spawn before each drop (filters out corpses)
-            // only interrupt if we have ownership claim - otherwise that chompy isn't ours
-            if (TidalsChompyHunter.hasOwnershipClaim() && AttackChompy.hasLiveChompy(script)) {
-                script.log(getClass(), "chompy detected - stopping drops to attack");
-                break;  // exit loop, return true below
+            if (isVerbose()) {
+                StringBuilder sb = new StringBuilder("tracked toads: ");
+                for (WorldPosition pos : TidalsChompyHunter.droppedToadPositions.keySet()) {
+                    sb.append(pos.getX()).append(",").append(pos.getY()).append(" ");
+                }
+                logVerbose(sb.toString().trim());
             }
 
-            // check if next drop position has a corpse - move away first
+            if (toadsTarget <= 0) {
+                resetState();
+                return false;
+            }
+            dropState = DropState.CHECK_POSITION;
+            return true; // re-poll
+        }
+
+        // state: check if next drop position is blocked by corpse
+        if (dropState == DropState.CHECK_POSITION) {
+            if (retries >= MAX_RETRIES) {
+                script.log(getClass(), "max retries reached, finishing with " + toadsDropped + " dropped");
+                resetState();
+                return false;
+            }
+            if (toadsDropped >= toadsTarget || countBloatedToads() <= 0) {
+                dropState = DropState.DONE;
+                return true;
+            }
             if (isNextDropPositionBlocked()) {
                 script.log(getClass(), "corpse at next drop position - moving to new location");
                 walkToNewPosition();
                 retries++;
-                continue;
+                return true; // re-poll, stay in CHECK_POSITION
             }
-
-            // reset collision flag before drop attempt
+            // position clear - proceed to drop
             TidalsChompyHunter.toadAlreadyPlaced = false;
+            dropState = DropState.DROPPING;
+            return true;
+        }
 
+        // state: drop a single toad
+        if (dropState == DropState.DROPPING) {
             if (dropSingleToad()) {
-                // check if collision occurred (chat message detected during drop wait)
+                // check collision
                 if (TidalsChompyHunter.toadAlreadyPlaced) {
                     script.log(getClass(), "toad collision at " +
                             (lastDropPosition != null ? lastDropPosition.getX() + "," + lastDropPosition.getY() : "null") +
                             " - NOT tracking, moving to new position");
                     walkToNewPosition();
                     retries++;
-                    continue;  // retry drop without incrementing dropped
+                    dropState = DropState.CHECK_POSITION;
+                    return true;
                 }
-
-                // no collision - ALWAYS find the toad visually before proceeding
-                // wait for toad to be visible on ground before searching
-                script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(800, 1200, 1000, 100));
-
-                script.log(getClass(), "drop succeeded - searching for toad to track...");
-
-                // search around lastDropPosition (where we were standing), not current position
-                WorldPosition foundToad = findUntrackedToadNearby(lastDropPosition);
-                if (foundToad != null) {
-                    TidalsChompyHunter.droppedToadPositions.put(foundToad, System.currentTimeMillis());
-                    TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
-                    script.log(getClass(), "TRACKED toad at " + foundToad.getX() + "," + foundToad.getY() +
-                            " (" + TidalsChompyHunter.droppedToadPositions.size() + " total tracked)");
-                } else {
-                    // couldn't find toad - try lastDropPosition as fallback
-                    if (lastDropPosition != null) {
-                        TidalsChompyHunter.droppedToadPositions.put(lastDropPosition, System.currentTimeMillis());
-                        TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
-                        script.log(getClass(), "FALLBACK: tracked at lastDropPosition " + lastDropPosition.getX() + "," + lastDropPosition.getY());
-                    } else {
-                        script.log(getClass(), "ERROR: could not find or track toad - this drop is lost");
-                    }
-                }
-
-                dropped++;
-                TidalsChompyHunter.groundToadCount++;
-                script.log(getClass(), "dropped toad " + dropped + "/" + toDrop + " (ground count: " + TidalsChompyHunter.groundToadCount + ")");
-
-                // wait for game to auto-move player after drop (creates straight line of toads)
-                if (dropped < toDrop) {
-                    script.log(getClass(), "waiting for auto-move...");
-                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(900, 1100));
-                }
+                dropState = DropState.WAITING_FOR_TOAD;
             } else {
                 script.log(getClass(), "failed to drop toad");
                 retries++;
+                dropState = DropState.CHECK_POSITION;
             }
+            return true;
         }
 
-        script.log(getClass(), "finished dropping " + dropped + " toads");
-        return dropped > 0;
+        // state: confirm toad landed via menu check on the known drop tile
+        if (dropState == DropState.WAITING_FOR_TOAD) {
+            // brief wait for toad to appear on ground
+            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(400, 700));
+
+            if (lastDropPosition != null) {
+                // fast menu check - confirm "bloated toad" exists at the drop tile
+                boolean confirmed = confirmToadViaMenu(lastDropPosition);
+                if (confirmed) {
+                    TidalsChompyHunter.droppedToadPositions.put(lastDropPosition, System.currentTimeMillis());
+                    TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
+                    script.log(getClass(), "TRACKED toad (menu confirmed) at " + lastDropPosition.getX() + "," + lastDropPosition.getY() +
+                            " (" + TidalsChompyHunter.droppedToadPositions.size() + " total tracked)");
+                } else {
+                    // menu didn't find it - fall back to pixel scan
+                    script.log(getClass(), "menu check missed - falling back to pixel scan...");
+                    dropState = DropState.TRACKING;
+                    return true;
+                }
+            } else {
+                script.log(getClass(), "ERROR: no lastDropPosition - falling back to pixel scan");
+                dropState = DropState.TRACKING;
+                return true;
+            }
+
+            toadsDropped++;
+            TidalsChompyHunter.groundToadCount++;
+            script.log(getClass(), "dropped toad " + toadsDropped + "/" + toadsTarget + " (ground count: " + TidalsChompyHunter.groundToadCount + ")");
+
+            // more to drop? wait for auto-move then loop back
+            if (toadsDropped < toadsTarget && countBloatedToads() > 0) {
+                script.log(getClass(), "waiting for auto-move...");
+                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(900, 1100));
+                dropState = DropState.CHECK_POSITION;
+                return true;
+            }
+            dropState = DropState.DONE;
+            return true;
+        }
+
+        // state: fallback pixel scan if menu check failed
+        if (dropState == DropState.TRACKING) {
+            WorldPosition foundToad = findUntrackedToadNearby(lastDropPosition);
+            if (foundToad != null) {
+                TidalsChompyHunter.droppedToadPositions.put(foundToad, System.currentTimeMillis());
+                TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
+                script.log(getClass(), "TRACKED toad (pixel fallback) at " + foundToad.getX() + "," + foundToad.getY() +
+                        " (" + TidalsChompyHunter.droppedToadPositions.size() + " total tracked)");
+            } else if (lastDropPosition != null) {
+                TidalsChompyHunter.droppedToadPositions.put(lastDropPosition, System.currentTimeMillis());
+                TidalsChompyHunter.lastToadPresentTime = System.currentTimeMillis();
+                script.log(getClass(), "FALLBACK: tracked at lastDropPosition " + lastDropPosition.getX() + "," + lastDropPosition.getY());
+            } else {
+                script.log(getClass(), "ERROR: could not find or track toad - this drop is lost");
+            }
+
+            toadsDropped++;
+            TidalsChompyHunter.groundToadCount++;
+            script.log(getClass(), "dropped toad " + toadsDropped + "/" + toadsTarget + " (ground count: " + TidalsChompyHunter.groundToadCount + ")");
+
+            // more to drop? wait for auto-move then loop back
+            if (toadsDropped < toadsTarget && countBloatedToads() > 0) {
+                script.log(getClass(), "waiting for auto-move...");
+                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(900, 1100));
+                dropState = DropState.CHECK_POSITION;
+                return true;
+            }
+            dropState = DropState.DONE;
+            return true;
+        }
+
+        // state: cleanup
+        if (dropState == DropState.DONE) {
+            script.log(getClass(), "finished dropping " + toadsDropped + " toads");
+            boolean didWork = toadsDropped > 0;
+            resetState();
+            return didWork;
+        }
+
+        return false;
     }
 
     /**
@@ -254,26 +318,32 @@ public class DropToads extends Task {
         script.log(getClass(), "walking to drop area target: " + target.getX() + "," + target.getY());
 
         // precise walk - minimap only, no screen walking
+        // no breakCondition - let walker reach the actual target tile
+        // old breakCondition fired on polygon entry (edge tile) causing first toad to drop far from target
         WalkConfig config = new WalkConfig.Builder()
                 .setWalkMethods(false, true)
                 .breakDistance(0)
                 .tileRandomisationRadius(0)
-                .timeout(8000)
-                .breakCondition(() -> {
-                    WorldPosition pos = script.getWorldPosition();
-                    return pos != null && TOAD_DROP_AREA.contains(pos);
-                })
+                .timeout(RandomUtils.weightedRandom(6000, 10000, 0.002))
                 .build();
 
         boolean arrived = script.getWalker().walkTo(target, config);
 
-        // log final position
+        // wait for player to fully stop at the target before dropping
+        waitForPlayerToStop(3, RandomUtils.gaussianRandom(2000, 3000, 2500, 250));
+
         WorldPosition finalPos = script.getWorldPosition();
         script.log(getClass(),"walk complete, final position: " +
                 (finalPos != null ? finalPos.getX() + "," + finalPos.getY() : "null") +
                 " (target was " + target.getX() + "," + target.getY() + ")");
 
-        return arrived;
+        // verify we actually made it into the drop area
+        if (finalPos != null && !TOAD_DROP_AREA.contains(finalPos)) {
+            script.log(getClass(), "ended outside drop area - walk may have failed");
+            return false;
+        }
+
+        return arrived || (finalPos != null && TOAD_DROP_AREA.contains(finalPos));
     }
 
     /**
@@ -329,7 +399,7 @@ public class DropToads extends Task {
                 .setWalkMethods(false, true)
                 .breakDistance(0)
                 .tileRandomisationRadius(0)
-                .timeout(3000)
+                .timeout(RandomUtils.gaussianRandom(2500, 3500, 3000, 250))
                 .build();
 
         script.getWalker().walkTo(target, config);
@@ -340,8 +410,35 @@ public class DropToads extends Task {
                 (finalPos != null ? finalPos.getX() + "," + finalPos.getY() : "null"));
     }
 
+    // -- poll-based state machine fields --
+    private enum DropState {
+        WALKING_TO_AREA,
+        CHECK_POSITION,
+        DROPPING,
+        WAITING_FOR_TOAD,
+        TRACKING,
+        DONE
+    }
+
+    private DropState dropState = DropState.WALKING_TO_AREA;
+    private int toadsDropped = 0;
+    private int toadsTarget = 0;
+    private int retries = 0;
+    private static final int MAX_RETRIES = 10;
+
     // stores the last drop position for tracking after collision check
     private WorldPosition lastDropPosition = null;
+
+    /**
+     * reset state machine for a fresh drop cycle
+     */
+    private void resetState() {
+        dropState = DropState.WALKING_TO_AREA;
+        toadsDropped = 0;
+        toadsTarget = 0;
+        retries = 0;
+        lastDropPosition = null;
+    }
 
     /**
      * drop a single bloated toad from inventory
@@ -380,7 +477,7 @@ public class DropToads extends Task {
             script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(2000, 3000, 2500, 300));
 
             // wait for player to fully stop moving
-            waitForPlayerToStop(5, 3000);
+            waitForPlayerToStop(5, RandomUtils.gaussianRandom(2500, 3500, 3000, 250));
 
             WorldPosition postDropPos = script.getWorldPosition();
             script.log(getClass(),"POST-DROP position (player moved to): " + (postDropPos != null ? postDropPos.getX() + "," + postDropPos.getY() : "null"));
@@ -440,6 +537,59 @@ public class DropToads extends Task {
      * @param centerPos position to search around (where toad was dropped)
      * @return position of untracked toad, or null if none found
      */
+    /**
+     * fast toad confirmation via menu entry check on the known drop tile
+     * opens right-click menu at the tile and checks if any entry contains "bloated toad"
+     * returns null from the MenuHook to cancel without selecting anything
+     */
+    // radius for the small circle used to tap near the center of a tile for ground item menu checks
+    private static final int TOAD_MENU_TAP_RADIUS = 3;
+
+    private boolean confirmToadViaMenu(WorldPosition toadPos) {
+        Polygon tileCube = script.getSceneProjector().getTileCube(toadPos, 40);
+        if (tileCube == null) {
+            script.log(getClass(), "menu check: tileCube null at " + toadPos.getX() + "," + toadPos.getY());
+            return false;
+        }
+
+        // tight box around tile center - bloated toad is small and centered on the tile
+        com.osmb.api.shape.Rectangle bounds = tileCube.getBounds();
+        if (bounds == null) {
+            return false;
+        }
+        int cx = bounds.x + bounds.width / 2;
+        int cy = bounds.y + bounds.height / 2;
+        com.osmb.api.shape.Rectangle tapArea = new com.osmb.api.shape.Rectangle(
+                cx - TOAD_MENU_TAP_RADIUS, cy - TOAD_MENU_TAP_RADIUS,
+                TOAD_MENU_TAP_RADIUS * 2, TOAD_MENU_TAP_RADIUS * 2
+        );
+
+        // side-effect flag - lambda sets this if bloated toad found in menu
+        final boolean[] found = {false};
+
+        try {
+            script.getFinger().tapGameScreen(tapArea, menuEntries -> {
+                for (var entry : menuEntries) {
+                    String raw = entry.getRawText();
+                    if (raw != null && raw.toLowerCase().contains("bloated toad")) {
+                        found[0] = true;
+                        break;
+                    }
+                }
+                // always return null - we're just peeking, don't select anything
+                return null;
+            });
+        } catch (RuntimeException e) {
+            script.log(getClass(), "menu check failed: " + e.getMessage());
+        }
+
+        if (!found[0]) {
+            script.log(getClass(), "menu check: no 'bloated toad' entry at " + toadPos.getX() + "," + toadPos.getY());
+        }
+
+        return found[0];
+    }
+
     private WorldPosition findUntrackedToadNearby(WorldPosition centerPos) {
         // use provided center, fall back to player position
         WorldPosition searchCenter = centerPos;

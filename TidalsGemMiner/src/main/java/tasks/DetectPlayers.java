@@ -40,12 +40,14 @@ public class DetectPlayers extends Task {
     // reduced from 3 to 1.3 - was causing nearby players to be filtered as "us"
     private static final double SELF_FILTER_DISTANCE = 1.3;
 
-    // post-hop grace period - skip detection while OSMB stabilizes position
-    private static final long POST_HOP_GRACE_MS = 10000;
+    // post-hop grace period range (8-12s) - skip detection while OSMB stabilizes position
+    private static final long POST_HOP_GRACE_MIN_MS = 8000;
+    private static final long POST_HOP_GRACE_MAX_MS = 12000;
     public static long lastHopTimestamp = 0;
 
-    // post-login grace period - skip detection while OSMB identifies our position
-    private static final long POST_LOGIN_GRACE_MS = 10000;
+    // post-login grace period range (8-12s) - skip detection while OSMB identifies our position
+    private static final long POST_LOGIN_GRACE_MIN_MS = 8000;
+    private static final long POST_LOGIN_GRACE_MAX_MS = 12000;
     public static long lastLoginTimestamp = 0;
 
     // state
@@ -128,12 +130,14 @@ public class DetectPlayers extends Task {
             return false;
         }
 
-        // skip during grace periods
+        // skip during grace periods (randomized each check)
         long now = System.currentTimeMillis();
-        if (lastHopTimestamp > 0 && (now - lastHopTimestamp) < POST_HOP_GRACE_MS) {
+        long hopGrace = RandomUtils.gaussianRandom((int) POST_HOP_GRACE_MIN_MS, (int) POST_HOP_GRACE_MAX_MS, (POST_HOP_GRACE_MIN_MS + POST_HOP_GRACE_MAX_MS) / 2.0, (POST_HOP_GRACE_MAX_MS - POST_HOP_GRACE_MIN_MS) / 4.0);
+        if (lastHopTimestamp > 0 && (now - lastHopTimestamp) < hopGrace) {
             return false;
         }
-        if (lastLoginTimestamp > 0 && (now - lastLoginTimestamp) < POST_LOGIN_GRACE_MS) {
+        long loginGrace = RandomUtils.gaussianRandom((int) POST_LOGIN_GRACE_MIN_MS, (int) POST_LOGIN_GRACE_MAX_MS, (POST_LOGIN_GRACE_MIN_MS + POST_LOGIN_GRACE_MAX_MS) / 2.0, (POST_LOGIN_GRACE_MAX_MS - POST_LOGIN_GRACE_MIN_MS) / 4.0);
+        if (lastLoginTimestamp > 0 && (now - lastLoginTimestamp) < loginGrace) {
             return false;
         }
 
@@ -160,7 +164,7 @@ public class DetectPlayers extends Task {
 
         // verbose logging of all dots
         long currentTime = System.currentTimeMillis();
-        if (TidalsGemMiner.VERBOSE_LOGGING && currentTime - lastLogTime >= 3000) {
+        if (TidalsGemMiner.verboseLogging && currentTime - lastLogTime >= 3000) {
             script.log(getClass(), "[verbose] " + playerPositions.size() + " dot(s), our pos: " + formatPos(playerPos) +
                        ", timer: " + (areaOccupiedSince > 0 ? (currentTime - areaOccupiedSince) + "ms" : "inactive") +
                        ", clearCount: " + consecutiveClearReadings);
@@ -201,7 +205,7 @@ public class DetectPlayers extends Task {
                 trackedPlayers.clear();
                 inExitZone = false;
                 consecutiveClearReadings = 0;
-            } else if (TidalsGemMiner.VERBOSE_LOGGING) {
+            } else if (TidalsGemMiner.verboseLogging) {
                 script.log(getClass(), "[verbose] clear reading (" + reason + "), count: " +
                            consecutiveClearReadings + "/" + CLEAR_READINGS_TO_RESET);
             }
@@ -401,13 +405,15 @@ public class DetectPlayers extends Task {
             return false;
         }
 
-        // skip during grace periods
+        // skip during grace periods (randomized each check)
         long now = System.currentTimeMillis();
-        if (lastHopTimestamp > 0 && (now - lastHopTimestamp) < POST_HOP_GRACE_MS) {
+        long hopGrace = RandomUtils.gaussianRandom((int) POST_HOP_GRACE_MIN_MS, (int) POST_HOP_GRACE_MAX_MS, (POST_HOP_GRACE_MIN_MS + POST_HOP_GRACE_MAX_MS) / 2.0, (POST_HOP_GRACE_MAX_MS - POST_HOP_GRACE_MIN_MS) / 4.0);
+        if (lastHopTimestamp > 0 && (now - lastHopTimestamp) < hopGrace) {
             script.log(DetectPlayers.class, "skipping occupied check - within hop grace period");
             return false;
         }
-        if (lastLoginTimestamp > 0 && (now - lastLoginTimestamp) < POST_LOGIN_GRACE_MS) {
+        long loginGrace = RandomUtils.gaussianRandom((int) POST_LOGIN_GRACE_MIN_MS, (int) POST_LOGIN_GRACE_MAX_MS, (POST_LOGIN_GRACE_MIN_MS + POST_LOGIN_GRACE_MAX_MS) / 2.0, (POST_LOGIN_GRACE_MAX_MS - POST_LOGIN_GRACE_MIN_MS) / 4.0);
+        if (lastLoginTimestamp > 0 && (now - lastLoginTimestamp) < loginGrace) {
             script.log(DetectPlayers.class, "skipping occupied check - within login grace period");
             return false;
         }

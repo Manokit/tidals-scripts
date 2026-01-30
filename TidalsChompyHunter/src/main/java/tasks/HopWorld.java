@@ -20,8 +20,7 @@ public class HopWorld extends Task {
 
     // stabilization delay after hop - gives OSMB time to identify our position
     // before Setup checks for other players (prevents false "occupied" detection)
-    // increased to 10s to match login grace period and ensure ScriptCore is fully ready
-    private static final int POST_HOP_STABILIZATION_MS = 10000;
+    // randomized 9-11s to match login grace period and ensure ScriptCore is fully ready
 
     // guard flag to prevent re-entry during hop
     private static volatile boolean isHopping = false;
@@ -98,7 +97,7 @@ public class HopWorld extends Task {
 
             // wait for OSMB to stabilize and identify our position
             // prevents Setup from seeing our own dot as "another player"
-            script.pollFramesHuman(() -> true, POST_HOP_STABILIZATION_MS);
+            script.pollFramesHuman(() -> true, RandomUtils.gaussianRandom(9000, 11000, 10000, 500));
             script.log(getClass(), "stabilization complete, resetting state");
 
             // reset state for new world

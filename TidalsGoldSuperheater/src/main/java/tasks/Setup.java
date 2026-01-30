@@ -53,7 +53,7 @@ public class Setup extends Task {
         // check fire source
         task = "Check equipment";
         script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesUntil(() -> true, RandomUtils.weightedRandom(300, 1000, 0.003));
+        script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1000, 0.003));
         
         com.osmb.api.utils.UIResult<ItemSearchResult> fireResult = script.getWidgetManager().getEquipment().findItem(
             STAFF_OF_FIRE,
