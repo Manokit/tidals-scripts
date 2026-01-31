@@ -2,6 +2,8 @@
 
 > **CRITICAL: OSMB is a COLOR BOT** - Visual/pixel detection only. No memory access. All detection via screen analysis, color matching, and OCR.
 
+> **NO VARPS/VARBITS** - You cannot read varps, varbits, or any game memory values. Quest progress, skill levels, and game state must be detected visually (quest journal tab, skill tab OCR, dialogue text, inventory contents, etc.). Never write code that calls getVarp(), getVarbit(), or similar memory-access methods.
+
 > **NEVER ASSUME A METHOD EXISTS.** Always verify against `docs/`, `examples/`, or existing Tidals scripts.
 
 **IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
@@ -292,6 +294,83 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 **Examples:**
 - `examples/discord-post.md` - Discord post template
 - Existing scripts (TidalsChompyHunter, TidalsGemCutter, etc.)
+
+---
+
+## MCP Map Data Tools
+
+The OSRS MCP server includes map/cache data tools for looking up spawn locations, menu actions, teleports, and transports. **Use these instead of guessing or asking the user.**
+
+### When to Use
+
+| Need | Tool |
+|------|------|
+| Region ID for `regionsToPrioritise()` | `osrs_coords_to_region(x, y)` |
+| Exact menu action string for RetryUtils | `osrs_object_actions(name)` or `osrs_npc_actions(name)` |
+| Item inventory/ground actions (Eat, Wield, Break, etc.) | `osrs_item_actions(name)` |
+| Where an NPC/object spawns in the world | `osrs_npc_spawns(name)` or `osrs_object_spawns(name)` |
+| Finding nearby stairs, ladders, portals | `osrs_transports(near_x, near_y, radius)` |
+| Teleport destination coordinates | `osrs_teleports(query)` |
+
+### Tool Reference
+
+```
+osrs_coords_to_region(x, y)
+  → { regionId, regionX, regionY }
+  Formula: (x >> 6) << 8 | (y >> 6)
+
+osrs_item_actions(name OR id)
+  → [{ id, name, inventoryActions: ["Eat", "Drop"], groundActions: ["Take"] }]
+  Data from OSRS cache (16k+ items). Refresh: node mcp-osrs/scripts/dump-item-actions.mjs
+
+osrs_object_spawns(name OR id, limit=50)
+  → [{ id, name, x, y, plane, regionId }]
+
+osrs_npc_spawns(name OR id, limit=50)
+  → [{ id, name, x, y, plane, regionId, combatLevel, actions }]
+
+osrs_object_actions(name OR id)
+  → [{ id, name, actions: ["Bank", "Collect", ...] }]
+
+osrs_npc_actions(name OR id)
+  → [{ id, name, actions: ["Talk-to", "Bank", ...], combatLevel }]
+
+osrs_teleports(query?, near_x?, near_y?, radius=50)
+  → [{ id, category, menuOption, menuTarget, destinations, destinationCount }]
+
+osrs_transports(query?, near_x?, near_y?, radius=50)
+  → [{ id, category, menuOption, menuTarget, start, destinations, destinationCount }]
+```
+
+### Keeping Data Fresh
+
+After a game update, run these MCP tools to refresh cached data:
+
+| Tool | What it refreshes | When to run |
+|------|-------------------|-------------|
+| `update_item_actions` | Item inventory/ground actions (16k+ items) | After OSRS game update (RuneLite auto-downloads new cache) |
+| `update_osrsbox_data` | Monster drop tables | After osrsreboxed-db GitHub repo updates |
+| `update_soundids_from_wiki` | Sound effect IDs | After wiki editors update |
+| `check_map_data_updates` | Checks if map data fork is behind upstream | Periodically — if behind, user must `git pull` in map-mcp |
+
+### Examples
+
+```
+# Get region ID for Lumbridge to add to regionsToPrioritise()
+osrs_coords_to_region(3222, 3218) → regionId: 12850
+
+# Verify the exact menu action string for a bank booth
+osrs_object_actions("Bank booth") → actions: ["Bank", "Collect"]
+
+# Check if a teleport tab uses "Break" or "Teleport"
+osrs_item_actions("Varrock teleport") → inventoryActions: ["Break", "Varrock", "Grand Exchange", "Toggle", "Drop"]
+
+# Find where Rock Crabs spawn
+osrs_npc_spawns("Rock Crab") → spawns at (2707, 3712) region 10554, combat 13
+
+# Find stairs/ladders near a location
+osrs_transports(near_x=3222, near_y=3218, radius=50) → Lumbridge castle stairs, cellar trapdoor, etc.
+```
 
 ---
 
