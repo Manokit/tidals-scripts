@@ -16,6 +16,7 @@ dSunbleakWCer/gradlew.bat
 dSunbleakWCer/settings.gradle
 .DS_Store
 
+.claude
 .claude/
 .vscode/
 
@@ -46,8 +47,10 @@ TidalsLocalCoordTest_PRD.md
 **/proguard-usage.txt
 **/*-fat.jar
 
-# Documentation (local reference only)
+# Documentation (local reference only, also match symlinks)
+docs
 docs/
+examples
 examples/
 
 # Feedback/review notes
