@@ -5,14 +5,13 @@ import com.osmb.api.script.ScriptDefinition;
 import com.osmb.api.script.SkillCategory;
 import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.visual.image.Image;
-import com.osmb.api.item.ItemGroupResult;
+import com.osmb.api.ui.tabs.Tab;
 import strategies.MortMyreFungusCollector;
 import strategies.SecondaryCollectorStrategy;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -98,12 +97,13 @@ public class TidalsSecondaryCollector extends Script {
     @Override
     public int[] regionsToPrioritise() {
         return new int[]{
-                14642, // ver sinhaza + 4 log tile (mort myre)
-                10290, // kandarin monastery (ardy cloak)
-                12850, // lumbridge + altar
-                9776,  // castle wars (dueling ring)
-                11571, // crafting guild
-                12598  // grand exchange
+                14642, // ver sinhaza bank + 4-log tile
+                13877, // mort myre 3-log tile + bkr fairy ring
+                9541,  // zanaris bank + fairy ring
+                10290, // kandarin monastery altar
+                10546, // monastery fairy ring
+                12850, // lumbridge altar (fallback prayer)
+                11571, // crafting guild bank (crafting cape)
         };
     }
 
@@ -185,9 +185,10 @@ public class TidalsSecondaryCollector extends Script {
         statusMessage = "setting up...";
         log(getClass(), "running setup");
 
-        ItemGroupResult inventoryCheck = getWidgetManager().getInventory().search(Set.of());
-        if (inventoryCheck == null) {
-            log(getClass(), "failed to open inventory");
+        // open inventory tab explicitly before strategy setup
+        boolean tabOpened = getWidgetManager().getTabManager().openTab(Tab.Type.INVENTORY);
+        if (!tabOpened) {
+            log(getClass(), "failed to open inventory tab");
             return 600;
         }
 
@@ -220,13 +221,13 @@ public class TidalsSecondaryCollector extends Script {
         double hours = Math.max(1e-9, elapsed / 3_600_000.0);
         String runtime = formatRuntime(elapsed);
 
-        // colors - dark brown theme to match fungus
-        final Color bgColor = new Color(47, 27, 16);          // #2f1b10 - dark brown background
-        final Color borderColor = new Color(78, 52, 36);      // lighter brown border
-        final Color accentColor = new Color(205, 170, 125);   // golden tan accent
+        // colors - dark teal theme to match swamp
+        final Color bgColor = new Color(22, 49, 52);          // dark teal background
+        final Color borderColor = new Color(44, 85, 82);      // lighter teal border
+        final Color accentColor = new Color(120, 200, 180);   // soft cyan accent
         final Color textLight = new Color(238, 237, 233);     // #eeede9 - off-white text
-        final Color textMuted = new Color(180, 165, 145);     // muted tan for labels
-        final Color valueHighlight = new Color(230, 190, 130); // warm gold for highlights
+        final Color textMuted = new Color(150, 185, 175);     // muted teal for labels
+        final Color valueHighlight = new Color(140, 220, 190); // bright cyan for highlights
 
         // layout
         final int x = 5;
@@ -361,7 +362,7 @@ public class TidalsSecondaryCollector extends Script {
             logoImage = new Image(px, w, h);
             log(getClass(), "logo loaded: " + w + "x" + h);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             log(getClass(), "error loading logo: " + e.getMessage());
         }
     }
@@ -418,7 +419,7 @@ public class TidalsSecondaryCollector extends Script {
             if (code == 200) {
                 log("STATS", "Stats reported: blooms=" + bloomIncrement + ", banked=" + bankedIncrement + ", trips=" + tripsIncrement + ", runtime=" + runtimeSecs + "s");
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }

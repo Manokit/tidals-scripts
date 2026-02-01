@@ -30,15 +30,17 @@ context.md
 
 # Local change logs per script
 **/Changes/
+**/Forum-Changelogs/
 
 build.gradle.planning/
 
 .cursor/
 
-/TidalsLocalCoordTest/*
+# Test/POC/Tester scripts (local-only, not production)
+*Test*/
+*Tester*/
+*POC*/
 TidalsLocalCoordTest_PRD.md
-
-/TidalsDelayTester/*
 
 # ProGuard build artifacts
 **/proguard-usage.txt
@@ -52,8 +54,11 @@ examples/
 osmb-feedback-todo.md
 osmb_code_review_feedback.md
 
+# Utilities (local-only)
+utilities/scripts/
+utilities/src/main/resources/obstacle_spawns.json
+
 # Webwalker (private utility)
-TidalsDaxWalkerPOC/
 utilities/src/main/java/utilities/webwalker/
 Webwalker_POC_PRD.md
 

@@ -1,3 +1,5 @@
+<!-- vibe-rules Integration -->
+
 # OSMB Script Development Guide
 
 > **CRITICAL: OSMB is a COLOR BOT** - Visual/pixel detection only. No memory access. All detection via screen analysis, color matching, and OCR.
@@ -396,3 +398,311 @@ The `examples/` directory contains older reference scripts from various authors.
 ---
 
 *Think visually. Verify interactions. Read existing scripts before writing new code.*
+
+<conare-context-assistant>
+<conare-context-assistant>
+# Conare Context Assistant
+
+You are running inside Conare - a context-aware wrapper for Claude Code. This gives you superpowers!
+
+## What is Conare?
+
+Conare adds persistent context management on top of Claude Code:
+
+1. **Context Items** (Right Panel)
+   - Users can upload websites, PDFs, Google Docs, local files ONCE
+   - These persist across ALL conversations
+   - Users toggle them on/off per conversation
+   - Each shows token count and local/global scope
+   - **UI**: Right panel → Context Items section → Toggle checkboxes
+
+2. **Vibe-Rules** (Right Panel)
+   - Reusable AI instructions that load/unload to CLAUDE.md instantly
+   - Users create rules once, use everywhere
+   - **THIS RULE** is a vibe-rule! User loaded it for this conversation
+   - **UI**: Right panel → Vibe-Rules section → Load/Unload buttons
+
+3. **Vibe-Tools** (Right Panel)
+   - Custom bash scripts exposed as tools
+   - Users enable/disable per conversation
+   - Example: remote-repo tool for GitHub repos
+   - **UI**: Right panel → Vibe-Tools section → Toggle checkboxes
+
+## Your New Capability: Context Suggestions
+
+**IMPORTANT**: Your primary job is still to complete the user's task. Context suggestions are SECONDARY.
+
+After completing a task (or when you hit a knowledge gap), you MAY suggest context improvements:
+
+### When to Suggest Context Items:
+
+1. **Library/Framework Documentation**
+   - User asks about React/Vue/specific library
+   - You notice repeated questions about same tech
+   - Example: "I'd implement this better with React docs. Add https://react.dev to Context Items (right panel) and enable it for richer responses."
+
+2. **Project-Specific Files**
+   - You need architecture docs, API specs, design guidelines
+   - Example: "For better alignment, add your API spec to Context Items. Drag the file or paste URL in the right panel."
+
+3. **Repeated Copy-Paste Context**
+   - User keeps pasting same info
+   - Example: "Instead of pasting this each time, save it as a Context Item (right panel). Toggle it on when needed."
+
+### How to Suggest (NON-INTRUSIVELY):
+
+**Format**:
+```
+[Your main response completing the task]
+
+---
+💡 Context tip: [specific suggestion]
+```
+
+**Examples**:
+
+```
+I've implemented the authentication flow using your current setup.
+
+---
+💡 Context tip: I'd love to make this more robust! Add your company's auth library docs to Context Items (right panel → paste URL). Enable it for security-focused responses.
+```
+
+```
+Fixed the TypeScript errors in your React components.
+
+---
+💡 Context tip: Keep hitting React type issues? Add https://react-typescript-cheatsheet.netlify.app to Context Items. It'll help me give better type suggestions.
+```
+
+**RULES**:
+- NEVER interrupt your main response with suggestions
+- ONLY suggest when genuinely helpful (not every message!)
+- Be SPECIFIC: exact URLs, file names, clear benefit
+- Keep suggestions under 2 sentences
+- Focus on HIGH-VALUE context (official docs, critical specs)
+
+### When to Suggest Vibe-Rules:
+
+If user has coding patterns they repeat:
+- "You keep asking for TypeScript strict mode. Create a vibe-rule for it! Right panel → Vibe-Rules → + button."
+
+If user has project conventions:
+- "These naming conventions should be a vibe-rule. Load it when working on this project, unload for others."
+
+## Remember:
+
+1. **Task First**: Complete user's request fully before any suggestions
+2. **Relevant Only**: Don't suggest docs for tech not in current task
+3. **User Empowerment**: Teach them to fish, don't just suggest
+4. **Right Panel**: Always mention "right panel" for UI location
+5. **Non-Intrusive**: One suggestion per response maximum
+
+You're not just answering questions - you're teaching users to build better context for even better AI responses!
+</conare-context-assistant>
+</conare-context-assistant>
+
+<CLAUDE>
+Always Apply: true - This rule should ALWAYS be applied by the AI
+
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Structure
+
+This is a monorepo containing two projects:
+
+- **tidals-scripts/** - OSMB automation scripts (Java/Gradle)
+- **script-dashboard/** - Statistics dashboard (Next.js/TypeScript)
+
+> **Full documentation**: See `tidals-scripts/CLAUDE.md` for comprehensive script development guide with templates, patterns, and examples.
+
+## Development Mindset
+
+```
+WHEN USER POSTS LOGS → THERE IS A BUG. INVESTIGATE.
+READ THE STACK TRACE. FIX ROOT CAUSE, NOT SYMPTOM.
+DON'T REINVENT. Read existing code before writing new.
+WHEN YOU'RE DONE MAKING CHANGES, ALWAYS BUILD THE SCRIPT.
+```
+
+## tidals-scripts (OSMB Scripts)
+
+> **CRITICAL: OSMB is a COLOR BOT** - Uses visual/pixel detection, NOT injection. All detection is done through screen analysis, color matching, and OCR. You cannot access game memory directly.
+
+**CRITICAL: Never assume a method exists. Always refer to `docs/` files or existing scripts for API verification.**
+
+### Building Scripts
+
+```bash
+# Build a specific script
+osmb build TidalsGemCutter
+
+# Build all scripts
+osmb build all
+
+# Build utilities jar
+cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build
+```
+
+Build output: `<script-dir>/jar/<ScriptName>.jar`
+
+### Shared Utilities (TidalsUtilities.jar)
+
+Always use utility classes instead of custom retry/banking logic:
+
+```java
+// Add to build.gradle
+implementation files('../utilities/jar/TidalsUtilities.jar')
+
+// RetryUtils - menu interactions with 10 retry attempts
+RetryUtils.equipmentInteract(script, itemId, "Teleport", "crafting cape");
+RetryUtils.objectInteract(script, bankChest, "Use", "bank chest");
+RetryUtils.tap(script, polygon, "Pick", "fungus");
+RetryUtils.inventoryInteract(script, item, "Eat", "food");
+
+// BankSearchUtils - CRITICAL for withdrawals (raw bank APIs don't work reliably)
+BankSearchUtils.searchAndWithdrawVerified(script, ItemID.SHARK, 5, true);
+BankSearchUtils.clickSearchToReset(script);  // MUST reset after each withdrawal
+BankSearchUtils.clearSearch(script);          // clear when done
+
+// BankingUtils - bank operations
+BankingUtils.openBankAndWait(script, 15000);
+BankingUtils.depositAllExcept(script, Set.of(ItemID.CHISEL));
+
+// TabUtils, DialogueUtils - see tidals-scripts/CLAUDE.md for full API
+```
+
+### Key Documentation
+
+- `docs/api-reference.md` - Complete API methods
+- `docs/critical-concepts.md` - Color bot fundamentals (MUST READ)
+- `docs/Common-menu-entries.md` - Exact menu action strings
+- `docs/Walker.md` - Walking code (MUST READ before any walking code)
+- `docs/Paint.md` - Paint overlay & Setup UI standard
+- `docs/Reporting-data.md` - Stats reporting to dashboard
+
+### Script Architecture
+
+Scripts use state machine pattern with Task classes:
+```
+TidalsGemCutter/
+├── src/main/java/
+│   ├── main/
+│   │   ├── TidalsGemCutter.java  # Main script (extends Script)
+│   │   └── ScriptUI.java         # JavaFX configuration UI
+│   ├── tasks/
+│   │   ├── Setup.java            # Initial state validation
+│   │   ├── Process.java          # Main activity logic
+│   │   └── Bank.java             # Banking logic
+│   ├── utils/
+│   │   └── Task.java             # Task interface
+│   └── obf/
+│       └── Secrets.java          # API keys (gitignored)
+└── discord_post.md               # Release post (use examples/discord-post.md template)
+```
+
+### Core API Access
+
+```java
+getWidgetManager()      // UI: Bank, Inventory, Dialogue, Tabs, Minimap
+getObjectManager()      // RSObjects (trees, rocks, banks)
+getSceneManager()       // NPCs, ground items, tiles
+getWalker()             // Pathfinding
+getFinger()             // Mouse/touch input
+getPixelAnalyzer()      // Color/pixel detection
+getOCR()                // Text recognition
+```
+
+### Critical Patterns
+
+1. **NPCs use Minimap detection**, not ObjectManager
+2. **Items with identical sprites cannot be distinguished** - use BuffOverlay for charges
+3. **Collision map is static** - verify doors visually via menu response
+4. **Direct tap() preferred** - `getFinger().tap(bounds, "Action")` is safer than tapGetResponse
+5. **Always retry menu interactions** - use RetryUtils (10 attempts default)
+6. **Humanize delays** - use `script.random(200, 400)` between actions, occasional longer pauses
+
+### Standard Bank Regions (Required for Banking Scripts)
+
+Every script using banking MUST override `regionsToPrioritise()` with the standard 60+ region list. See `tidals-scripts/CLAUDE.md` for the complete `BANK_REGIONS` array.
+
+## script-dashboard (Next.js)
+
+### Commands
+
+```bash
+cd script-dashboard
+
+# Development
+npm install
+npx prisma migrate dev
+npm run dev                    # http://localhost:3000
+
+# Production
+npm run build
+npm run lint
+
+# Database
+npx prisma studio              # GUI for database
+npx prisma db push             # Sync schema without migration
+
+# Docker deployment
+docker compose up -d
+```
+
+### Tech Stack
+
+- Next.js 16 with App Router + React 19
+- TypeScript 5
+- Prisma + SQLite
+- Tailwind CSS 4
+- Recharts for charts
+
+### Architecture
+
+**Server Components**: Stats page uses async server components with direct Prisma queries.
+
+**Client Components**: Interactive components in `src/components/` use `'use client'` directive.
+
+**Prisma Singleton**: `src/lib/db.ts` prevents connection issues in development.
+
+### Stats API
+
+**POST /api/stats** - Receives incremental stats from scripts
+- Requires `X-Stats-Key` header
+- All numeric values must be incremental (not cumulative)
+- Body: `{ script, session, gp, xp, runtime, metadata? }`
+
+**GET /api/stats** - Fetch aggregated stats
+- Query params: `days` (default: 7), `script` (optional filter)
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| DATABASE_URL | SQLite path (e.g., `file:./dev.db`) |
+| STATS_API_KEY | API key for script authentication |
+
+### Deployment
+
+**Coolify**: Push to GitHub, set `DATABASE_URL=file:/app/data/prod.db` and `STATS_API_KEY`.
+
+**Docker**: `docker compose up -d` with `STATS_API_KEY` env var set.
+
+## Integration
+
+Scripts report stats to dashboard via HTTP POST every 10 minutes. Stats are incremental - each report contains only the values gained since the last report, which the dashboard aggregates.
+
+Scripts use `obf/Secrets.java` (gitignored) for dashboard credentials:
+```java
+public class Secrets {
+    public static final String STATS_URL = "https://your-dashboard.com/api/stats";
+    public static final String STATS_API = "your-api-key";
+}
+```
+
+</CLAUDE>
+
+<!-- /vibe-rules Integration -->
