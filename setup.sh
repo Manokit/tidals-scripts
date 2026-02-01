@@ -2,29 +2,16 @@
 set -euo pipefail
 
 # Bootstraps a tidals-scripts worktree so Claude can work immediately.
-# Run this inside any worktree (or main) to symlink gitignored resources.
+# Symlinks gitignored dirs (docs, examples, .claude) from main.
+# Git-tracked dirs (.beans, utilities) are left alone — they come with the branch.
 #
-# Usage: ./setup.sh
-#        (or from another worktree: bash /path/to/main/setup.sh)
+# Usage: cd /path/to/worktree && ./setup.sh
 
 HERE="$(pwd)"
-
-# find the main worktree (where the real dirs live)
 MAIN_DIR="$(git worktree list --porcelain | head -1 | sed 's/^worktree //')"
 
 if [[ "$HERE" == "$MAIN_DIR" ]]; then
-    echo "You're in the main worktree — nothing to symlink."
-    echo "Verifying dirs exist..."
-    missing=0
-    for dir in docs examples .claude .beans utilities; do
-        if [[ -d "$HERE/$dir" ]]; then
-            echo "  ✓ $dir"
-        else
-            echo "  ✗ $dir missing!"
-            missing=1
-        fi
-    done
-    [[ $missing -eq 0 ]] && echo "All good." || echo "Some dirs missing — create them manually."
+    echo "You're in the main worktree — nothing to set up."
     exit 0
 fi
 
@@ -32,10 +19,11 @@ echo "Setting up worktree: $HERE"
 echo "Linking from main:   $MAIN_DIR"
 echo ""
 
-# gitignored dirs to symlink from main
-DIRS=(docs examples .claude .beans utilities)
+# only symlink fully-gitignored dirs (docs/, examples/, .claude/)
+# .beans/ and utilities/ are git-tracked — don't touch them
+SYMLINK_DIRS=(docs examples .claude)
 
-for dir in "${DIRS[@]}"; do
+for dir in "${SYMLINK_DIRS[@]}"; do
     src="$MAIN_DIR/$dir"
     dst="$HERE/$dir"
 
@@ -49,11 +37,13 @@ for dir in "${DIRS[@]}"; do
         continue
     fi
 
-    # remove empty dir if git created one
     rm -rf "$dst"
     ln -s "$src" "$dst"
-    echo "  ✓ $dir -> $src"
+    echo "  ✓ $dir"
 done
+
+# restore any git changes the symlinks may have caused
+git checkout -- . 2>/dev/null || true
 
 echo ""
 echo "Ready. Run 'claude' to start working."
