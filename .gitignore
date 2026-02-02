@@ -18,6 +18,8 @@ dSunbleakWCer/settings.gradle
 
 .claude
 .claude/
+.codex
+.codex/
 .vscode/
 
 Example Scripts/
@@ -63,7 +65,12 @@ utilities/src/main/resources/obstacle_spawns.json
 
 # Webwalker (private utility)
 utilities/src/main/java/utilities/webwalker/
+utilities/src/main/java/utilities/FairyRingUtils.java
+
+# Player profile (private utility)
+utilities/src/main/java/utilities/profile/
 Webwalker_POC_PRD.md
+
 
 # PRDs and conductor
 PRDs/

@@ -1,202 +1,141 @@
-# OSMB Scripts Repository - Agent Guide
+# OSMB Script Development Guide
 
 > **CRITICAL: OSMB is a COLOR BOT** - Visual/pixel detection only. No memory access. All detection via screen analysis, color matching, and OCR.
 
+> **NO VARPS/VARBITS** - You cannot read varps, varbits, or any game memory values. Quest progress, skill levels, and game state must be detected visually (quest journal tab, skill tab OCR, dialogue text, inventory contents, etc.). Never write code that calls getVarp(), getVarbit(), or similar memory-access methods.
+
 > **NEVER ASSUME A METHOD EXISTS.** Always verify against `docs/`, `examples/`, or existing Tidals scripts.
 
----
+**IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
 
-## Project Overview
+After a change with a successful build, always add your changes to bean you're working on, or make a new bean so we can know of recent changes if it breaks anything
 
-This is a collection of automation scripts for OSMB (Old School Mobile Bot) - a color-based botting framework for Old School RuneScape. The repository uses a Gradle multi-project structure where each script is a self-contained module.
-
-**Key Characteristics:**
-- **Language:** Java 17
-- **Build System:** Gradle with ProGuard shrinking
-- **Architecture:** Poll-based task system (NOT linear/procedural)
-- **Detection:** Visual/pixel based - no memory injection
-- **API:** OSMB v2 API (local JAR at `API/API.jar`)
+When you mark a Bean complete, let me know what bean is best to go next
 
 ---
 
-## Project Structure
+## Core Principles
 
 ```
-tidals-scripts/
-├── API/
-│   └── API.jar                    # OSMB API dependency (checked in)
-├── utilities/                     # Shared library module
-│   ├── src/main/java/utilities/   # Shared utilities (RetryUtils, BankingUtils, etc.)
-│   ├── src/main/java/utilities/loadout/   # Loadout system
-│   └── jar/TidalsUtilities.jar    # Compiled utilities JAR
-├── docs/                          # Extensive API documentation
-│   ├── critical-concepts.md       # Color bot fundamentals
-│   ├── common-mistakes.md         # 20+ documented pitfalls
-│   ├── poll-based-architecture.md # Core architecture pattern
-│   ├── interaction-patterns.md    # tap vs tapGameScreen, visibility
-│   └── [70+ more .md files]       # Complete API reference
-├── examples/                      # Sample scripts and patterns
-│   ├── discord-post.md            # Discord announcement template
-│   └── [Sample scripts]           # Reference implementations
-├── TidalsScriptName/              # Each script is a top-level module
-│   ├── build.gradle               # Module build config
-│   ├── discord_post.md            # Discord announcement
-│   ├── Changes/                   # Daily changelogs (gitignored)
-│   ├── jar/                       # Output JAR directory
-│   └── src/main/
-│       ├── java/
-│       │   ├── main/
-│       │   │   ├── TidalsScriptName.java   # Main script class
-│       │   │   └── ScriptUI.java           # JavaFX setup UI (optional)
-│       │   ├── tasks/              # Task implementations
-│       │   │   ├── Setup.java
-│       │   │   └── [ActivityTasks].java
-│       │   ├── utils/
-│       │   │   └── Task.java       # Task interface
-│       │   ├── data/               # Locations, configs, enums
-│       │   └── obf/
-│       │       └── Secrets.java    # API keys (gitignored)
-│       └── resources/
-│           └── logo.png            # 208x91px script logo
-├── build.gradle                   # Root build - ProGuard shrinking
-├── settings.gradle                # Multi-project settings
-└── AGENTS.md                      # This file
+WHEN USER POSTS LOGS -> THERE IS A BUG. INVESTIGATE.
+READ THE STACK TRACE. FIX ROOT CAUSE, NOT SYMPTOM.
+DON'T REINVENT. Read existing code before writing new.
+DON'T OVERENGINEER. No abstractions before they're needed.
+POLL-BASED: One action per poll. Check condition, handle it, return. Don't chain actions.
+WHEN YOU'RE DONE MAKING CHANGES, ALWAYS BUILD THE SCRIPT.
+ALWAYS MAKE A DISCORD_POST.MD (see examples/discord-post.md).
+BEFORE NEW FEATURES OR BIG CHANGES -> READ docs/common-mistakes.md FIRST.
 ```
+This environment has both ripgrep and ast-grep for searching for docs, feel free to use it
+
+## Git Commits
+- **ONLY commit when explicitly asked.** Do not auto-commit after making changes.
+- Do not add Co-Authored-By trailers to commit messages.
+- Do not commit `Changes/` directories, `docs/plans/`, or other planning files - these are gitignored and local-only.
+
+## Changelog Management
+
+**Every script should have a `Changes/` directory** for tracking modifications.
+
+When making changes to a script:
+1. Check if `<ScriptName>/Changes/` directory exists - create it if not
+2. Check if today's changelog exists: `<ScriptName>-MM-DD-Changes.md`
+3. If it doesn't exist, create it with the header format below
+4. Append new changes to the existing file if it already exists
+
+**Changelog format:**
+```markdown
+# TidalsScriptName Changes - YYYY-MM-DD
+
+## Summary
+Brief 1-2 sentence overview of all changes made today.
 
 ---
 
-## Build Commands
+## 1. Change Title
 
-### Building Scripts
+**File:** `path/to/file.java` (lines XX-YY)
 
-```bash
-# Build and deploy a single script
-osmb build TidalsGemMiner
+**Problem:** What was broken or missing.
 
-# Build utilities when shared code changes
-osmb build utilities
+**Fix:** What was changed and why.
 
-# List available scripts
-osmb list
-```
-
-### Manual Gradle Build (when osmb CLI unavailable)
-
-```bash
-# Build utilities
-JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build
-
-# Build specific script
-JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :TidalsGemMiner:build
-
-# Build all scripts
-JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle build
-```
-
-**Output Location:** `<script-dir>/jar/<ScriptName>.jar`
-
-**Build Process:**
-1. Compiles Java source
-2. Creates fat JAR with dependencies
-3. Runs ProGuard to shrink (removes unused code)
-4. Outputs final JAR to `jar/` directory
-
----
-
-## Architecture
-
-### Poll-Based Task System
-
-OSMB scripts operate on a polling model. The framework calls `poll()` repeatedly, and each call should perform ONE logical action then return.
-
-**Task Priority Flow:**
-```
-[poll() called]
-    │
-    ├── CrashRecovery.activate()? → Yes → execute(), return
-    │                             └ No ──┐
-    ├── Setup.activate()? ───────────────┼─→ Yes → execute(), return
-    │                                    │   └ No ──┐
-    ├── Bank.activate()? ──────────────────────────┼─→ Yes → execute(), return
-    │                                               │   └ No ──┐
-    └── Mine.activate()? ─────────────────────────────────────┼─→ Yes → execute()
-                                                               └ No → idle
-```
-
-**Task Interface:**
 ```java
-public abstract class Task {
-    protected Script script;
-    
-    public Task(Script script) {
-        this.script = script;
-    }
-    
-    public abstract boolean activate();  // Can this task run right now?
-    public abstract boolean execute();   // Do ONE action, then return
-}
+// relevant code snippet
 ```
 
-**Main Script Structure:**
-```java
-@ScriptDefinition(
-    name = "TidalsScriptName",
-    author = "Tidal",
-    description = "Description",
-    skillCategory = SkillCategory.MINING,
-    version = 1.0
-)
-public class TidalsScriptName extends Script {
-    private List<Task> tasks;
-    
-    @Override
-    public int poll() {
-        for (Task t : tasks) {
-            if (t.activate()) {
-                t.execute();
-                return 0;  // Return sleep time in ms (0 = continue immediately)
-            }
-        }
-        return 600;  // Idle sleep time
-    }
-}
+---
+
+## 2. Next Change...
 ```
+
+**Key points:**
+- Include file paths and line numbers for easy navigation
+- Explain the problem AND the fix
+- Add code snippets for complex changes
+- Number each change sequentially
+- End with version bump reminder if applicable
+
+See `TidalsChompyHunter/Changes/` or `TidalsGemMiner/Changes/` for examples.
+
+---
+
+## Script Architecture
+
+### Folder Structure
+```
+TidalsScriptName/
+├── build.gradle
+├── discord_post.md
+├── Changes/                          # daily changelogs
+│   └── ScriptName-MM-DD-Changes.md
+├── src/main/java/
+│   ├── main/
+│   │   ├── TidalsScriptName.java    # main script, state, paint
+│   │   └── ScriptUI.java            # javafx setup ui (optional)
+│   ├── tasks/
+│   │   ├── Setup.java               # initial validation
+│   │   └── [ActivityTasks].java     # one task per activity
+│   ├── utils/
+│   │   └── Task.java                # task interface
+│   └── obf/
+│       └── Secrets.java             # api keys (gitignored)
+└── src/main/resources/
+    └── logo.png                     # 208x91 png
+```
+
+### Priority-Based Task System
+
+Tasks are evaluated in priority order. First task whose `activate()` returns true runs exclusively.
+
+**Task ordering matters:**
+1. High-priority interrupts (crash detection, world hop)
+2. Setup/validation
+3. Combat/time-sensitive actions
+4. Resource management (banking, restocking)
+5. Main activity (lowest priority)
+
+**Key patterns:**
+- `activate()` - Can this task run right now? Check preconditions only.
+- `execute()` - Do the work. Include interrupt checks in long loops.
+- Use global static fields in main script for cross-task state sharing.
+- Use `volatile` boolean flags for event signaling between `onNewFrame()` and `poll()`.
 
 ### State Management
 
-Share state across tasks using static fields in the main script:
+Main script holds shared state as static fields:
+- `setupComplete`, `task` (current status), `startTime`
+- Activity-specific counters and trackers
+- Settings from UI (pluckingEnabled, webhookEnabled, etc.)
+- Volatile flags for chat events (`killDetected`, `bellowsEmpty`)
 
-```java
-public class TidalsScriptName extends Script {
-    // Cross-task state
-    public static volatile boolean setupDone = false;
-    public static volatile String task = "Starting";
-    public static volatile int itemsProcessed = 0;
-    
-    // For flags set in onNewFrame (thread safety)
-    public static volatile boolean levelUpDetected = false;
-}
-```
+Tasks read/write these directly - no parameter passing through method chains.
 
 ---
 
 ## Coding Standards
 
-### Naming Conventions
-
-- **Classes:** `PascalCase` (e.g., `TidalsGemMiner`, `BankTask`)
-- **Methods:** `camelCase` (e.g., `findNearestBank()`, `isInventoryFull()`)
-- **Constants:** `UPPER_SNAKE_CASE` (e.g., `MAX_RETRY_ATTEMPTS`, `BANK_POSITION`)
-- **Static fields:** `camelCase` (e.g., `setupDone`, `gemsMined`)
-- **Packages:** `main/`, `tasks/`, `utils/`, `data/`, `obf/`
-
-### Indentation
-
-- Use 4-space indentation
-- Opening brace on same line
-
 ### Comments
-
 Blunt, lowercase, explain "why" not "what":
 ```java
 // block hop while toads drain - prevents invisible ground items
@@ -205,7 +144,6 @@ Blunt, lowercase, explain "why" not "what":
 ```
 
 ### Logging
-
 Use prefix-based logging for flow tracking:
 ```java
 script.log(getClass(), "[activate] skipping - already in combat");
@@ -213,120 +151,65 @@ script.log(getClass(), "[execute] starting fresh detection...");
 script.log(getClass(), "[attack] attempt " + attempt + "/" + MAX_ATTEMPTS);
 ```
 
----
-
-## Critical API Patterns
-
-### Timing and Delays
-
-**NEVER use `script.random()`** - produces uniform distribution (robotic).
-
-**Use `RandomUtils` methods:**
-```java
-// FIXED DELAY (animation wait, exact timing)
-script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(1800, 2400, 2100, 150));
-
-// HUMANIZED DELAY (between actions, adds ~500-1000ms variance)
-script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-// CONDITIONAL WAIT
-script.pollFramesUntil(() -> bank.isVisible(), 5000);
-```
-
-**CRITICAL: Lambda Return Values Matter:**
-```java
-// WRONG - Exits IMMEDIATELY (~38ms) - NO WAIT AT ALL
-script.pollFramesUntil(() -> true, 2000);
-
-// CORRECT - Waits full ~2000ms
-script.pollFramesUntil(() -> false, 2000);
-```
-
-### Interaction Methods
-
-| Method | Use Case |
-|--------|----------|
-| `tap(shape, "Action")` | UI elements only (inventory, bank, dialogue) |
-| `tapGameScreen(shape, "Action")` | 3D world objects (rocks, trees, NPCs) |
-
-```java
-// UI interactions
-ItemSearchResult item = script.getWidgetManager().getInventory().getItem(itemId);
-script.getFinger().tap(item.getBounds(), "Use");
-
-// 3D world interactions - MUST verify visibility first
-RSObject rock = script.getObjectManager().getClosestObject(myPos, "Rocks");
-Polygon hull = rock.getConvexHull();
-if (hull == null || hull.numVertices() == 0) return false;
-
-double visibility = script.getWidgetManager().insideGameScreenFactor(
-    hull, List.of(ChatboxComponent.class)
-);
-if (visibility < 0.3) return false;  // Not visible enough
-
-Polygon shrunk = hull.getResized(0.7);  // Shrink to avoid misclicks
-script.getFinger().tapGameScreen(shrunk != null ? shrunk : hull, "Mine");
-```
+### Naming
+- Constants: `MAX_ATTACK_ATTEMPTS`, `SCREEN_EDGE_MARGIN`
+- Static fields: `setupComplete`, `killCount`, `droppedToadPositions`
+- Methods: `findChompyByPixelCluster()`, `waitForKillConfirmation()`
 
 ### Null Checking
-
-**Always null-check API returns** (except Dialogue and UIResult which are guaranteed non-null):
-
+**Every** API call that can return null must be checked:
 ```java
-// These CAN return null - check before use
-RSObject obj = script.getObjectManager().getClosestObject(pos, "Tree");
-if (obj == null) return false;
-
-ItemGroupResult items = script.getWidgetManager().getInventory().search(Set.of(itemId));
-if (items == null || !items.contains(itemId)) return false;
-
-// These are NEVER null - just check visibility/isFound
-Dialogue dialogue = script.getWidgetManager().getDialogue();
-if (!dialogue.isVisible()) return false;
-
-UIResult<String> text = dialogue.getText();
-if (!text.isFound()) return false;
+if (result == null || result.isNotFound()) return;
 ```
 
-### Exception Handling
+### Delays & Timing
+- **NEVER** use `script.random()` - produces uniform distribution (robotic)
+- **NEVER** use `submitTask()` - deprecated, may not block properly
+- **NEVER** use `pollFramesUntil(() -> true, ms)` - exits instantly with NO delay!
+- Use `RandomUtils.weightedRandom()` for short delays (weighted toward faster)
+- Use `RandomUtils.gaussianRandom()` for animation waits (clusters around mean)
+- Fixed delay: `pollFramesUntil(() -> false, ms)` - waits full timeout
+- Humanized delay: `pollFramesHuman(() -> true, ms)` - adds ~500-1000ms human variance
 
-**Catch `RuntimeException`, NOT `Exception`** - OSMB uses exceptions for control flow:
+### Error Handling
+- Catch `RuntimeException`, not `Exception` - let OSMB control flow bubble up
+- Use try-finally for guaranteed state cleanup in long operations
+- Fail fast with sensible defaults, don't swallow errors
 
+### Interrupt Handling
+In long loops, check for interrupts periodically:
 ```java
-// WRONG - Catches OSMB control flow exceptions
-try { ... } catch (Exception e) { ... }
-
-// CORRECT - Only catches actual runtime errors
-try { ... } catch (RuntimeException e) { ... }
+if (CrashDetection.crashDetected) return false;  // yield to higher priority
+if (hasHigherPriorityWork()) return true;        // switch tasks
 ```
 
-### Lambda Safety
-
-Extract `getWorldPosition()` to local variable inside lambdas:
-
-```java
-// WRONG - getWorldPosition() can return null when lambda executes
-script.pollFramesUntil(() -> {
-    RSObject bank = script.getObjectManager().getClosestObject(
-        script.getWorldPosition(), "Bank"  // Might be null!
-    );
-    return bank != null;
-}, 5000);
-
-// CORRECT - Null-check inside lambda
-script.pollFramesUntil(() -> {
-    WorldPosition myPos = script.getWorldPosition();
-    if (myPos == null) return false;  // Gracefully handle
-    RSObject bank = script.getObjectManager().getClosestObject(myPos, "Bank");
-    return bank != null;
-}, 5000);
-```
+### Performance
+- Cache expensive operations (pixel scans) with TTL
+- Use bit-packed position keys instead of string concatenation
+- Validate screen bounds before tapping (25px margin from edges)
+- Use `RectangleArea.contains()` for zone checks
 
 ---
 
-## Shared Utilities
+## Required Elements
 
-Located in `utilities/src/main/java/utilities/`. **Always use these** instead of custom logic:
+### Bank Regions
+Every banking script MUST override `regionsToPrioritise()` with the standard 60+ region list. Copy from an existing script like TidalsGemCutter.
+
+### Version Checking
+Every script MUST include version checking in `onStart()`. See existing scripts for the `getLatestVersion()`, `compareVersions()`, and `checkForUpdates()` methods.
+
+### AFK Control
+Override `canAFK()` and toggle `allowAFK` static field during critical actions.
+
+### Level Up Handling
+Check for `DialogueType.TAP_HERE_TO_CONTINUE` after XP-granting actions.
+
+---
+
+## Shared Utilities (TidalsUtilities.jar)
+
+**Always use these** instead of custom logic:
 
 | Utility | Purpose |
 |---------|---------|
@@ -343,159 +226,509 @@ BankSearchUtils.searchAndWithdrawVerified(script, itemId, amount, true);
 BankSearchUtils.clickSearchToReset(script);  // MUST reset after each withdrawal
 ```
 
----
-
-## Required Script Elements
-
-Every script MUST include:
-
-1. **Version Checking in `onStart()`:**
+**Movement timeout pattern:**
 ```java
-@Override
-public void onStart() {
-    if (checkForUpdates()) {
-        stop();
-        return;
+// detect if player stopped moving (misclick, block, interrupt)
+MovementChecker checker = new MovementChecker(script.getLocalPlayer().getWorldPosition());
+while (walking) {
+    if (checker.hasTimedOut(script.getLocalPlayer().getWorldPosition())) {
+        break;  // player stalled - retry or take action
     }
-    // ... rest of initialization
 }
 ```
 
-2. **Region Priorities (banking scripts):**
+Build utilities: `cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build`
+
+---
+
+## Building Scripts
+
+```bash
+osmb build TidalsScriptName    # build specific script
+osmb build all                  # build all scripts
+osmb list                       # see available scripts
+```
+
+Output: `<script-dir>/jar/<ScriptName>.jar`
+
+---
+
+## Critical Concepts
+
+1. **NPCs use Minimap** - `getMinimap().getNPCPositions()`, not ObjectManager
+2. **Identical sprites can't be distinguished** - use BuffOverlay for charges
+3. **Collision map is static** - verify doors visually via menu response
+4. **Direct tap() preferred** - `tap(shape, "Action")` is safer than tapGetResponse chains
+5. **Screen edges cause crashes** - validate bounds (25px margin from edges)
+6. **Menu interactions fail** - always use RetryUtils (10 attempts)
+7. **Use tapGameScreen() for 3D objects** - `tap()` can click through UI overlays; use `tapGameScreen()` for rocks, trees, NPCs
+8. **Visibility check required** - `getConvexHull() != null` does NOT mean visible; use `insideGameScreenFactor()` before clicking
+9. **Randomize ALL timeouts** - No static delay values; re-randomize each use with `RandomUtils.weightedRandom(min, max)`
+10. **pollFramesUntil(() -> true) exits immediately** - Returns in ~38ms with no delay! Use `() -> false` for fixed delays
+
+---
+
+## Production Patterns
+
+These patterns are used across all production Tidals scripts. Follow them when writing new scripts.
+
+### onNewFrame() Throttling
+
+Every `onNewFrame()` that does expensive work (OCR, chat parsing, player detection) MUST be throttled:
+```java
+private static final long CHAT_PARSE_INTERVAL_MS = 500;
+private long lastChatParseTime = 0;
+
+@Override
+public void onNewFrame() {
+    long now = System.currentTimeMillis();
+    if (now - lastChatParseTime >= CHAT_PARSE_INTERVAL_MS) {
+        updateChatBoxLines();
+        lastChatParseTime = now;
+    }
+}
+```
+
+### Volatile Guards for onNewFrame/Poll Race Conditions
+
+When `onNewFrame()` detects events that your own actions could trigger, guard with `volatile` + try/finally:
+```java
+public static volatile boolean attackInProgress = false;
+
+// In execute():
+attackInProgress = true;
+try {
+    performAttack();
+} finally {
+    attackInProgress = false;
+}
+
+// In onNewFrame():
+if (attackInProgress) return;  // skip detection during our action
+```
+
+### Chat Line Diff Pattern (Game Event Detection)
+
+Detect game messages by diffing chat lines between frames:
+```java
+private List<String> previousChatLines = new ArrayList<>();
+
+private void updateChatBoxLines() {
+    UIResultList<String> chatResult = getWidgetManager().getChatbox().getText();
+    if (chatResult == null || chatResult.isNotFound()) return;
+
+    List<String> currentLines = chatResult.asList();
+    List<String> newLines = new ArrayList<>();
+    for (String line : currentLines) {
+        if (!previousChatLines.contains(line)) newLines.add(line);
+    }
+
+    for (String line : newLines) {
+        if (line.contains("scratch a notch")) { killDetected = true; }
+        if (line.contains("air seems too thin")) { bellowsEmpty = true; }
+    }
+    previousChatLines = new ArrayList<>(currentLines);
+}
+```
+Call this from throttled `onNewFrame()`, signal to tasks via `volatile` flags.
+
+### Resumable State Flag (Multi-Step Sequences)
+
+When a task has a multi-step sequence (e.g., deposit run), use a static boolean to keep `activate()` returning true mid-sequence:
+```java
+public static boolean doingDepositRun = false;
+
+@Override
+public boolean activate() {
+    if (doingDepositRun) return true;  // resume interrupted sequence
+    return inventory.isFull();         // normal activation
+}
+
+@Override
+public boolean execute() {
+    doingDepositRun = true;
+    // ... multi-state logic ...
+    if (sequenceComplete) { doingDepositRun = false; }
+    return true;
+}
+```
+
+### canHopWorlds() / canBreak() / canAFK() Overrides
+
+Every script with multi-phase gameplay MUST override these. Block hops during critical actions, allow during safe states:
 ```java
 @Override
-public int[] regionsToPrioritise() {
-    return new int[]{12850, 12851};  // Your operating regions
+public boolean canHopWorlds() {
+    if (doingDepositRun) return true;     // safe during deposit
+    if (!currentlyThieving) return true;  // safe when idle
+    if (isAtSafetyTile()) return true;    // safe at safety tile
+    return false;                          // block during active gameplay
 }
 ```
 
-3. **AFK Control:**
+### WalkConfig Patterns
+
+Use `breakCondition` to stop walking when the target becomes visible/reachable:
 ```java
-@Override
-public boolean canAFK() {
-    return allowAFK;  // Toggle during critical actions
+// Approach walk: stop when target is on screen
+script.getWalker().walkTo(target, new WalkConfig.Builder()
+    .breakCondition(() -> {
+        RSObject obj = script.getObjectManager().getClosestObject(myPos, "Bank booth");
+        return obj != null && obj.isInteractableOnScreen();
+    })
+    .build());
+```
+
+### Verbose Logging Toggle
+
+Every script should have a debug toggle (set via ScriptUI):
+```java
+public static volatile boolean verboseLogging = false;
+
+// Gate expensive debug logging:
+if (verboseLogging) {
+    script.log(getClass(), "[DEBUG] state: " + state + " pos: " + pos);
 }
 ```
 
-4. **Level Up Handling:**
+### Session ID and Incremental Stats
+
+Stats are sent incrementally using "last sent" tracking:
 ```java
-// Check for level up dialogue after XP-granting actions
-Dialogue dialogue = script.getWidgetManager().getDialogue();
-if (dialogue.getDialogueType() == DialogueType.TAP_HERE_TO_CONTINUE) {
-    dialogue.continueChatDialogue();
-}
+private String sessionId = UUID.randomUUID().toString();
+private int lastSentXp = 0;
+
+// In stats reporting (every 10 min):
+int xpIncrement = xpGained - lastSentXp;
+sendStats(sessionId, xpIncrement);
+lastSentXp = xpGained;
 ```
 
 ---
 
-## Testing Strategy
-
-- **No automated test suite** - testing is manual in OSMB client
-- Use purpose-built test scripts when touching utilities:
-  - `TidalsLoadoutTester` - Test loadout/restocking flows
-  - `TidalsBankTester` - Test banking patterns
-  - `TidalsDelayTester` - Verify timing patterns
-- Cross-check behavior against relevant guides in `docs/`
-
----
-
-## Documentation
+## Documentation Index
 
 **Must Read BEFORE Writing Code:**
 - `docs/critical-concepts.md` - Color bot fundamentals
-- `docs/common-mistakes.md` - 20+ documented pitfalls with correct patterns
-- `docs/poll-based-architecture.md` - One action per poll pattern
-- `docs/interaction-patterns.md` - tap vs tapGameScreen, visibility, MovementChecker
-
-**Reference:**
-- `docs/api-reference.md` - Complete API methods
-- `docs/banking-patterns.md` - Banking, inventory, deposits
+- `docs/common-mistakes.md` - **READ THIS FIRST** for new features/major changes. Contains 27 documented pitfalls with correct patterns.
+- `docs/poll-based-architecture.md` - One action per poll pattern; state machine design
+- `docs/interaction-patterns.md` - tap vs tapGameScreen, visibility checking, MovementChecker
 - `docs/Walker.md` - Walking code pitfalls
 - `docs/Paint.md` - Paint overlay & Setup UI standard
 
-**Online API Docs:** https://doc.osmb.co.uk/documentation
+**Reference:**
+- `docs/api-reference.md` - Complete API methods
+- `docs/Common-menu-entries.md` - Exact menu action strings
+- `docs/banking-patterns.md` - Banking, inventory, deposits
+- `docs/walking-npcs.md` - Walking, NPC interaction, objects
+- `docs/ui-widgets.md` - Dialogue, equipment, minimap
+- `docs/Reporting-data.md` - Stats reporting to dashboard
+
+**Advanced:**
+- `docs/advanced-patterns.md` - Production patterns
+- `docs/advanced-techniques.md` - Ground items, combat, health
+- `docs/specialized-patterns.md` - Altars, minigames, processing
+
+**Examples:**
+- `examples/discord-post.md` - Discord post template
+- Existing scripts (TidalsChompyHunter, TidalsGemCutter, etc.)
 
 ---
 
-## Changelog Management
+## MCP Map Data Tools
 
-Every script should have a `Changes/` directory for tracking modifications:
+The OSRS MCP server includes map/cache data tools for looking up spawn locations, menu actions, teleports, and transports. **Use these instead of guessing or asking the user.**
+
+### When to Use
+
+| Need | Tool |
+|------|------|
+| Region ID for `regionsToPrioritise()` | `osrs_coords_to_region(x, y)` |
+| Exact menu action string for RetryUtils | `osrs_object_actions(name)` or `osrs_npc_actions(name)` |
+| Item inventory/ground actions (Eat, Wield, Break, etc.) | `osrs_item_actions(name)` |
+| Where an NPC/object spawns in the world | `osrs_npc_spawns(name)` or `osrs_object_spawns(name)` |
+| Finding nearby stairs, ladders, portals | `osrs_transports(near_x, near_y, radius)` |
+| Teleport destination coordinates | `osrs_teleports(query)` |
+
+### Tool Reference
 
 ```
-TidalsScriptName/
-└── Changes/
-    └── ScriptName-01-28-Changes.md
+osrs_coords_to_region(x, y)
+  -> { regionId, regionX, regionY }
+  Formula: (x >> 6) << 8 | (y >> 6)
+
+osrs_item_actions(name OR id)
+  -> [{ id, name, inventoryActions: ["Eat", "Drop"], groundActions: ["Take"] }]
+  Data from OSRS cache (16k+ items). Refresh: node mcp-osrs/scripts/dump-item-actions.mjs
+
+osrs_object_spawns(name OR id, limit=50)
+  -> [{ id, name, x, y, plane, regionId }]
+
+osrs_npc_spawns(name OR id, limit=50)
+  -> [{ id, name, x, y, plane, regionId, combatLevel, actions }]
+
+osrs_object_actions(name OR id)
+  -> [{ id, name, actions: ["Bank", "Collect", ...] }]
+
+osrs_npc_actions(name OR id)
+  -> [{ id, name, actions: ["Talk-to", "Bank", ...], combatLevel }]
+
+osrs_teleports(query?, near_x?, near_y?, radius=50)
+  -> [{ id, category, menuOption, menuTarget, destinations, destinationCount }]
+
+osrs_transports(query?, near_x?, near_y?, radius=50)
+  -> [{ id, category, menuOption, menuTarget, start, destinations, destinationCount }]
 ```
 
-**Format:**
-```markdown
-# TidalsScriptName Changes - 2026-01-28
+### Keeping Data Fresh
 
-## Summary
-Brief overview of changes.
+After a game update, run these MCP tools to refresh cached data:
 
----
+| Tool | What it refreshes | When to run |
+|------|-------------------|-------------|
+| `update_item_actions` | Item inventory/ground actions (16k+ items) | After OSRS game update (RuneLite auto-downloads new cache) |
+| `update_osrsbox_data` | Monster drop tables | After osrsreboxed-db GitHub repo updates |
+| `update_soundids_from_wiki` | Sound effect IDs | After wiki editors update |
+| `check_map_data_updates` | Checks if map data fork is behind upstream | Periodically - if behind, user must `git pull` in map-mcp |
 
-## 1. Change Title
+### Examples
 
-**File:** `path/to/file.java` (lines XX-YY)
-
-**Problem:** What was broken.
-
-**Fix:** What was changed.
-
-```java
-// Code snippet
 ```
+# Get region ID for Lumbridge to add to regionsToPrioritise()
+osrs_coords_to_region(3222, 3218) -> regionId: 12850
+
+# Verify the exact menu action string for a bank booth
+osrs_object_actions("Bank booth") -> actions: ["Bank", "Collect"]
+
+# Check if a teleport tab uses "Break" or "Teleport"
+osrs_item_actions("Varrock teleport") -> inventoryActions: ["Break", "Varrock", "Grand Exchange", "Toggle", "Drop"]
+
+# Find where Rock Crabs spawn
+osrs_npc_spawns("Rock Crab") -> spawns at (2707, 3712) region 10554, combat 13
+
+# Find stairs/ladders near a location
+osrs_transports(near_x=3222, near_y=3218, radius=50) -> Lumbridge castle stairs, cellar trapdoor, etc.
 ```
 
 ---
 
-## Discord Post
+## Examples Directory Warning
 
-Every script should have a `discord_post.md` file for Discord announcements.
+The `examples/` directory contains older reference scripts from various authors. These may contain anti-patterns that should **NOT** be copied:
 
-See `examples/discord-post.md` for template and `TidalsCannonballThiever/discord_post.md` for a real example.
+- **Broad `catch (Exception e)` blocks** - Swallows OSMB control flow exceptions (`HaltScriptException`, `PriorityTaskException`). Use `catch (RuntimeException e)` and rethrow OSMB exceptions, or catch specific exceptions like `IOException`.
+- **`pollFramesHuman(() -> false, ...)`** for pure delays - When lambda returns `false`, OSMB adds the timeout to the humanization delay. For pure delays (no condition to check), return `true` for instant completion + human variance.
+- **Missing null checks on `ItemSearchResult`** before `.interact()` - `getItem()` and `getRandomItem()` can return null. Always check before calling methods.
+- **Manual `openTab()` before `search()` calls** - `ItemGroup::search()` automatically opens the required tab. Explicit `openTab()` is redundant.
+- **`Math.random()` or `script.random()`** - Produces uniform distribution (robotic). Use `RandomUtils.weightedRandom()` or `RandomUtils.gaussianRandom()` instead.
 
----
-
-## Security
-
-- Put secrets in `obf/` package (gitignored)
-- Never commit API keys to git
-- Use `obf.Secrets.java` for webhook URLs, API keys
+**Always prefer patterns from production Tidals scripts** (TidalsChompyHunter, TidalsGemCutter, TidalsGemMiner, etc.) or the patterns documented above.
 
 ---
 
-## Commit Guidelines
+## Resources
 
-- Commit messages are short, descriptive sentences
-- No Conventional Commit prefixes
-- Do not add `Co-Authored-By` trailers
-- Do not commit `Changes/` directories or planning files
-
-**PR Requirements:**
-- List affected scripts/modules
-- Note jar builds performed
-- Include manual test notes
-- Add screenshots/logs when paint/UI changes
-
----
-
-## Quick Reference
-
-| Pattern | Correct Usage |
-|---------|---------------|
-| Fixed delay | `pollFramesUntil(() -> false, ms)` |
-| Humanized delay | `pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400))` |
-| 3D object click | `tapGameScreen()` + visibility check |
-| UI click | `tap()` |
-| Random timing | `RandomUtils.gaussianRandom()` or `weightedRandom()` |
-| Menu retries | `RetryUtils.tapGameScreen()` |
-| Bank withdrawal | `BankSearchUtils.searchAndWithdrawVerified()` |
-| Movement timeout | `MovementChecker` |
-| Exception catching | `catch (RuntimeException e)` |
+- **API Docs**: https://doc.osmb.co.uk/documentation
+- **Debug Tool**: Built into OSMB client
 
 ---
 
 *Think visually. Verify interactions. Read existing scripts before writing new code.*
+
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Structure
+
+This is a monorepo containing two projects:
+
+- **tidals-scripts/** - OSMB automation scripts (Java/Gradle)
+- **script-dashboard/** - Statistics dashboard (Next.js/TypeScript)
+
+> **Full documentation**: See `tidals-scripts/CLAUDE.md` for comprehensive script development guide with templates, patterns, and examples.
+
+## Development Mindset
+
+```
+WHEN USER POSTS LOGS -> THERE IS A BUG. INVESTIGATE.
+READ THE STACK TRACE. FIX ROOT CAUSE, NOT SYMPTOM.
+DON'T REINVENT. Read existing code before writing new.
+WHEN YOU'RE DONE MAKING CHANGES, ALWAYS BUILD THE SCRIPT.
+```
+
+## tidals-scripts (OSMB Scripts)
+
+> **CRITICAL: OSMB is a COLOR BOT** - Uses visual/pixel detection, NOT injection. All detection is done through screen analysis, color matching, and OCR. You cannot access game memory directly.
+
+**CRITICAL: Never assume a method exists. Always refer to `docs/` files or existing scripts for API verification.**
+
+### Building Scripts
+
+```bash
+# Build a specific script
+osmb build TidalsGemCutter
+
+# Build all scripts
+osmb build all
+
+# Build utilities jar
+cd tidals-scripts && JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle :utilities:build
+```
+
+Build output: `<script-dir>/jar/<ScriptName>.jar`
+
+### Shared Utilities (TidalsUtilities.jar)
+
+Always use utility classes instead of custom retry/banking logic:
+
+```java
+// Add to build.gradle
+implementation files('../utilities/jar/TidalsUtilities.jar')
+
+// RetryUtils - menu interactions with 10 retry attempts
+RetryUtils.equipmentInteract(script, itemId, "Teleport", "crafting cape");
+RetryUtils.objectInteract(script, bankChest, "Use", "bank chest");
+RetryUtils.tap(script, polygon, "Pick", "fungus");
+RetryUtils.inventoryInteract(script, item, "Eat", "food");
+
+// BankSearchUtils - CRITICAL for withdrawals (raw bank APIs don't work reliably)
+BankSearchUtils.searchAndWithdrawVerified(script, ItemID.SHARK, 5, true);
+BankSearchUtils.clickSearchToReset(script);  // MUST reset after each withdrawal
+BankSearchUtils.clearSearch(script);          // clear when done
+
+// BankingUtils - bank operations
+BankingUtils.openBankAndWait(script, 15000);
+BankingUtils.depositAllExcept(script, Set.of(ItemID.CHISEL));
+
+// TabUtils, DialogueUtils - see tidals-scripts/CLAUDE.md for full API
+```
+
+### Key Documentation
+
+- `docs/api-reference.md` - Complete API methods
+- `docs/critical-concepts.md` - Color bot fundamentals (MUST READ)
+- `docs/Common-menu-entries.md` - Exact menu action strings
+- `docs/Walker.md` - Walking code (MUST READ before any walking code)
+- `docs/Paint.md` - Paint overlay & Setup UI standard
+- `docs/Reporting-data.md` - Stats reporting to dashboard
+
+### Script Architecture
+
+Scripts use state machine pattern with Task classes:
+```
+TidalsGemCutter/
+├── src/main/java/
+│   ├── main/
+│   │   ├── TidalsGemCutter.java  # Main script (extends Script)
+│   │   └── ScriptUI.java         # JavaFX configuration UI
+│   ├── tasks/
+│   │   ├── Setup.java            # Initial state validation
+│   │   ├── Process.java          # Main activity logic
+│   │   └── Bank.java             # Banking logic
+│   ├── utils/
+│   │   └── Task.java             # Task interface
+│   └── obf/
+│       └── Secrets.java          # API keys (gitignored)
+└── discord_post.md               # Release post (use examples/discord-post.md template)
+```
+
+### Core API Access
+
+```java
+getWidgetManager()      // UI: Bank, Inventory, Dialogue, Tabs, Minimap
+getObjectManager()      // RSObjects (trees, rocks, banks)
+getSceneManager()       // NPCs, ground items, tiles
+getWalker()             // Pathfinding
+getFinger()             // Mouse/touch input
+getPixelAnalyzer()      // Color/pixel detection
+getOCR()                // Text recognition
+```
+
+### Critical Patterns
+
+1. **NPCs use Minimap detection**, not ObjectManager
+2. **Items with identical sprites cannot be distinguished** - use BuffOverlay for charges
+3. **Collision map is static** - verify doors visually via menu response
+4. **Direct tap() preferred** - `getFinger().tap(bounds, "Action")` is safer than tapGetResponse
+5. **Always retry menu interactions** - use RetryUtils (10 attempts default)
+6. **Humanize delays** - use `script.random(200, 400)` between actions, occasional longer pauses
+
+### Standard Bank Regions (Required for Banking Scripts)
+
+Every script using banking MUST override `regionsToPrioritise()` with the standard 60+ region list. See `tidals-scripts/CLAUDE.md` for the complete `BANK_REGIONS` array.
+
+## script-dashboard (Next.js)
+
+### Commands
+
+```bash
+cd script-dashboard
+
+# Development
+npm install
+npx prisma migrate dev
+npm run dev                    # http://localhost:3000
+
+# Production
+npm run build
+npm run lint
+
+# Database
+npx prisma studio              # GUI for database
+npx prisma db push             # Sync schema without migration
+
+# Docker deployment
+docker compose up -d
+```
+
+### Tech Stack
+
+- Next.js 16 with App Router + React 19
+- TypeScript 5
+- Prisma + SQLite
+- Tailwind CSS 4
+- Recharts for charts
+
+### Architecture
+
+**Server Components**: Stats page uses async server components with direct Prisma queries.
+
+**Client Components**: Interactive components in `src/components/` use `'use client'` directive.
+
+**Prisma Singleton**: `src/lib/db.ts` prevents connection issues in development.
+
+### Stats API
+
+**POST /api/stats** - Receives incremental stats from scripts
+- Requires `X-Stats-Key` header
+- All numeric values must be incremental (not cumulative)
+- Body: `{ script, session, gp, xp, runtime, metadata? }`
+
+**GET /api/stats** - Fetch aggregated stats
+- Query params: `days` (default: 7), `script` (optional filter)
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| DATABASE_URL | SQLite path (e.g., `file:./dev.db`) |
+| STATS_API_KEY | API key for script authentication |
+
+### Deployment
+
+**Coolify**: Push to GitHub, set `DATABASE_URL=file:/app/data/prod.db` and `STATS_API_KEY`.
+
+**Docker**: `docker compose up -d` with `STATS_API_KEY` env var set.
+
+## Integration
+
+Scripts report stats to dashboard via HTTP POST every 10 minutes. Stats are incremental - each report contains only the values gained since the last report, which the dashboard aggregates.
+
+Scripts use `obf/Secrets.java` (gitignored) for dashboard credentials:
+```java
+public class Secrets {
+    public static final String STATS_URL = "https://your-dashboard.com/api/stats";
+    public static final String STATS_API = "your-api-key";
+}
+```

@@ -6,14 +6,15 @@
 
 > **NO VARPS/VARBITS** - You cannot read varps, varbits, or any game memory values. Quest progress, skill levels, and game state must be detected visually (quest journal tab, skill tab OCR, dialogue text, inventory contents, etc.). Never write code that calls getVarp(), getVarbit(), or similar memory-access methods.
 
-> **NEVER ASSUME A METHOD EXISTS.** Always verify against `docs/`, `examples/`, or existing Tidals scripts.
+**NEVER ASSUME A METHOD EXISTS.** ALWAYS READ DOCS - STOP ASSUMING YOU KNOW HOW TO USE A RECTANGLE, HOW TO CALL A TAP, ALWAYS SEARCH THE DOCS USING RIPGREP OR AST-GREP FOR PATTERNS. YOU HAVE SO MANY DOCS AVAILABLE
 
 **IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
 
 After a change with a successful build, always add your changes to bean you're working on, or make a new bean so we can know of recent changes if it breaks anything
 
-When you mark a Bean complete, let me know what bean is best to go next
+**CRITICAL** WHEN YOU FINISH UPDATING SOMETHING/CHANGING CODE, UPDATE THE BEAN, ALWAYS UPDATE THE BEAN
 
+Every single fucking time you edit code, you update the bean. If you forget you will ruin everything. 
 ---
 
 ## Core Principles
@@ -185,6 +186,8 @@ if (CrashDetection.crashDetected) return false;  // yield to higher priority
 if (hasHigherPriorityWork()) return true;        // switch tasks
 ```
 
+UPDATE THE BEAN
+
 ### Performance
 - Cache expensive operations (pixel scans) with TTL
 - Use bit-packed position keys instead of string concatenation
@@ -267,6 +270,148 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 8. **Visibility check required** - `getConvexHull() != null` does NOT mean visible; use `insideGameScreenFactor()` before clicking
 9. **Randomize ALL timeouts** - No static delay values; re-randomize each use with `RandomUtils.weightedRandom(min, max)`
 10. **pollFramesUntil(() -> true) exits immediately** - Returns in ~38ms with no delay! Use `() -> false` for fixed delays
+11. **obj.interact(action) retries internally** - If the action doesn't exist on the object's menu, `interact()` retries multiple times (~6 attempts), wasting 12+ seconds. Never use `interact()` to *check* if an action exists. For conditional menu interactions (e.g., "Last-destination (xxx)" on fairy rings), skip the probe and go directly to the reliable fallback.
+12. **OSMB shape types ≠ java.awt** - `getConvexHull()` returns `com.osmb.api.shape.Polygon`, `getObjectArea()` returns `RectangleArea` (world-space). Neither converts directly to `Rectangle` (screen-space). Use `tapGetResponse(true, Rectangle)` for screen-space menu reads; don't mix world-space types into tap calls.
+13. **PathExecutor waypoint advancement needs "overtaken" logic** - Distance-based skip (`ARRIVAL_DISTANCE=4`) only advances past waypoints the player is *near*. If the player walks at an angle and overshoots early waypoints by 5+ tiles, `waypointIdx` gets stuck forever. The fix uses a triangle inequality check: if `wp→pathEnd > player→pathEnd`, the waypoint is behind the player and should be skipped. OSMB's `walkPath()` says "Destination reached" instantly when given a backwards segment, triggering infinite stuck loops.
+14. **PathExecutor "near skipped obstacle" must check directionality** - When waypoints near the player are skipped, the obstacle handler fires for any obstacle within 7 tiles — even ones *behind* the player. This causes unnecessary gate/door opens that can trap the player on the wrong side. The fix: only handle a skipped obstacle if `obstacle→pathEnd < player→pathEnd` (obstacle is between player and destination).
+
+---
+
+## Production Patterns
+
+These patterns are used across all production Tidals scripts. Follow them when writing new scripts.
+
+### onNewFrame() Throttling
+
+Every `onNewFrame()` that does expensive work (OCR, chat parsing, player detection) MUST be throttled:
+```java
+private static final long CHAT_PARSE_INTERVAL_MS = 500;
+private long lastChatParseTime = 0;
+
+@Override
+public void onNewFrame() {
+    long now = System.currentTimeMillis();
+    if (now - lastChatParseTime >= CHAT_PARSE_INTERVAL_MS) {
+        updateChatBoxLines();
+        lastChatParseTime = now;
+    }
+}
+```
+
+### Volatile Guards for onNewFrame/Poll Race Conditions
+
+When `onNewFrame()` detects events that your own actions could trigger, guard with `volatile` + try/finally:
+```java
+public static volatile boolean attackInProgress = false;
+
+// In execute():
+attackInProgress = true;
+try {
+    performAttack();
+} finally {
+    attackInProgress = false;
+}
+
+// In onNewFrame():
+if (attackInProgress) return;  // skip detection during our action
+```
+
+### Chat Line Diff Pattern (Game Event Detection)
+
+Detect game messages by diffing chat lines between frames:
+```java
+private List<String> previousChatLines = new ArrayList<>();
+
+private void updateChatBoxLines() {
+    UIResultList<String> chatResult = getWidgetManager().getChatbox().getText();
+    if (chatResult == null || chatResult.isNotFound()) return;
+
+    List<String> currentLines = chatResult.asList();
+    List<String> newLines = new ArrayList<>();
+    for (String line : currentLines) {
+        if (!previousChatLines.contains(line)) newLines.add(line);
+    }
+
+    for (String line : newLines) {
+        if (line.contains("scratch a notch")) { killDetected = true; }
+        if (line.contains("air seems too thin")) { bellowsEmpty = true; }
+    }
+    previousChatLines = new ArrayList<>(currentLines);
+}
+```
+Call this from throttled `onNewFrame()`, signal to tasks via `volatile` flags.
+
+### Resumable State Flag (Multi-Step Sequences)
+
+When a task has a multi-step sequence (e.g., deposit run), use a static boolean to keep `activate()` returning true mid-sequence:
+```java
+public static boolean doingDepositRun = false;
+
+@Override
+public boolean activate() {
+    if (doingDepositRun) return true;  // resume interrupted sequence
+    return inventory.isFull();         // normal activation
+}
+
+@Override
+public boolean execute() {
+    doingDepositRun = true;
+    // ... multi-state logic ...
+    if (sequenceComplete) { doingDepositRun = false; }
+    return true;
+}
+```
+
+### canHopWorlds() / canBreak() / canAFK() Overrides
+
+Every script with multi-phase gameplay MUST override these. Block hops during critical actions, allow during safe states:
+```java
+@Override
+public boolean canHopWorlds() {
+    if (doingDepositRun) return true;     // safe during deposit
+    if (!currentlyThieving) return true;  // safe when idle
+    if (isAtSafetyTile()) return true;    // safe at safety tile
+    return false;                          // block during active gameplay
+}
+```
+
+### WalkConfig Patterns
+
+Use `breakCondition` to stop walking when the target becomes visible/reachable:
+```java
+// Approach walk: stop when target is on screen
+script.getWalker().walkTo(target, new WalkConfig.Builder()
+    .breakCondition(() -> {
+        RSObject obj = script.getObjectManager().getClosestObject(myPos, "Bank booth");
+        return obj != null && obj.isInteractableOnScreen();
+    })
+    .build());
+```
+
+### Verbose Logging Toggle
+
+Every script should have a debug toggle (set via ScriptUI):
+```java
+public static volatile boolean verboseLogging = false;
+
+// Gate expensive debug logging:
+if (verboseLogging) {
+    script.log(getClass(), "[DEBUG] state: " + state + " pos: " + pos);
+}
+```
+
+### Session ID and Incremental Stats
+
+Stats are sent incrementally using "last sent" tracking:
+```java
+private String sessionId = UUID.randomUUID().toString();
+private int lastSentXp = 0;
+
+// In stats reporting (every 10 min):
+int xpIncrement = xpGained - lastSentXp;
+sendStats(sessionId, xpIncrement);
+lastSentXp = xpGained;
+```
 
 ---
 
@@ -274,7 +419,7 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 
 **Must Read BEFORE Writing Code:**
 - `docs/critical-concepts.md` - Color bot fundamentals
-- `docs/common-mistakes.md` - **READ THIS FIRST** for new features/major changes. Contains 15+ documented pitfalls with correct patterns.
+- `docs/common-mistakes.md` - **READ THIS FIRST** for new features/major changes. Contains 27 documented pitfalls with correct patterns.
 - `docs/poll-based-architecture.md` - One action per poll pattern; state machine design
 - `docs/interaction-patterns.md` - tap vs tapGameScreen, visibility checking, MovementChecker
 - `docs/Walker.md` - Walking code pitfalls
@@ -298,6 +443,8 @@ Output: `<script-dir>/jar/<ScriptName>.jar`
 - Existing scripts (TidalsChompyHunter, TidalsGemCutter, etc.)
 
 ---
+
+UPDATE THE BEAN
 
 ## MCP Map Data Tools
 
@@ -497,6 +644,8 @@ If user has project conventions:
 3. **User Empowerment**: Teach them to fish, don't just suggest
 4. **Right Panel**: Always mention "right panel" for UI location
 5. **Non-Intrusive**: One suggestion per response maximum
+
+REMEMBER TO UPDATE THE BEAN
 
 You're not just answering questions - you're teaching users to build better context for even better AI responses!
 </conare-context-assistant>
