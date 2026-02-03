@@ -75,3 +75,10 @@ Webwalker_POC_PRD.md
 # PRDs and conductor
 PRDs/
 .conductor/
+
+# Utilities (private - full directory)
+utilities/
+
+# Beans issue tracker (private)
+.beans/
+.beans.yml
