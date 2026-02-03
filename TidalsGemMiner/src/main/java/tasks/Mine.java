@@ -117,6 +117,14 @@ public class Mine extends Task {
     private long lastChatMatchMs = 0;
     private int lastChatSnapshotHash = 0;
 
+    // visibility failure tracking - prevents infinite loop when cluster has only low-visibility rocks
+    private int consecutiveVisibilityFailures = 0;
+    private String lastVisibilityFailureKey = null;
+    private static final int MAX_VISIBILITY_FAILURES = 3;
+    // short cooldown for rocks that fail visibility checks (20-30s)
+    private static final long VISIBILITY_FAILURE_COOLDOWN_MIN_MS = 20_000;
+    private static final long VISIBILITY_FAILURE_COOLDOWN_MAX_MS = 30_000;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // RECORDS
     // ═══════════════════════════════════════════════════════════════════════════
@@ -257,10 +265,46 @@ public class Mine extends Task {
 
         if (!tapTarget(currentTarget)) {
             logVerbose("[TAPPING] tap failed");
+
+            // track consecutive failures on same rock (visibility-based failures cause infinite loops)
+            String targetKey = currentTarget.position() != null ? posKey(currentTarget.position()) : null;
+            if (targetKey != null) {
+                if (targetKey.equals(lastVisibilityFailureKey)) {
+                    consecutiveVisibilityFailures++;
+                } else {
+                    consecutiveVisibilityFailures = 1;
+                    lastVisibilityFailureKey = targetKey;
+                }
+
+                // after repeated failures on same rock, mark it unavailable and reset cluster
+                if (consecutiveVisibilityFailures >= MAX_VISIBILITY_FAILURES) {
+                    long cooldownMs = RandomUtils.gaussianRandom(
+                        (int) VISIBILITY_FAILURE_COOLDOWN_MIN_MS,
+                        (int) VISIBILITY_FAILURE_COOLDOWN_MAX_MS,
+                        (VISIBILITY_FAILURE_COOLDOWN_MIN_MS + VISIBILITY_FAILURE_COOLDOWN_MAX_MS) / 2.0,
+                        (VISIBILITY_FAILURE_COOLDOWN_MAX_MS - VISIBILITY_FAILURE_COOLDOWN_MIN_MS) / 4.0
+                    );
+                    recentlyMinedRocks.put(targetKey, System.currentTimeMillis() + cooldownMs);
+                    script.log(getClass(), "[TAPPING] rock at " + currentTarget.position() +
+                        " failed visibility " + consecutiveVisibilityFailures + " times, marking unavailable (" +
+                        cooldownMs + "ms cooldown) and resetting cluster");
+
+                    // reset cluster to force picking a new one with visible rocks
+                    activeClusterIndex = -1;
+                    consecutiveVisibilityFailures = 0;
+                    lastVisibilityFailureKey = null;
+                }
+            }
+
             script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(150, 800, 400, 150));
             resetMiningState();
             return false;
         }
+
+        // successful tap - reset visibility failure tracking
+        consecutiveVisibilityFailures = 0;
+        lastVisibilityFailureKey = null;
+
         tapStartPos = script.getWorldPosition();
         miningState = MiningState.APPROACHING;
         return false;
