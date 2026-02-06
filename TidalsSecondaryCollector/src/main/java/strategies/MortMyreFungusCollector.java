@@ -8,19 +8,22 @@ import com.osmb.api.scene.RSObject;
 import com.osmb.api.script.Script;
 import com.osmb.api.shape.Polygon;
 import com.osmb.api.ui.chatbox.dialogue.DialogueType;
-import com.osmb.api.ui.spellbook.SpellNotFoundException;
-import com.osmb.api.ui.spellbook.StandardSpellbook;
 import com.osmb.api.ui.tabs.Tab;
 import com.osmb.api.utils.RandomUtils;
 import com.osmb.api.utils.UIResult;
+import com.osmb.api.visual.PixelCluster;
 import com.osmb.api.visual.SearchablePixel;
 import com.osmb.api.visual.color.ColorModel;
 import com.osmb.api.visual.color.tolerance.impl.SingleThresholdComparator;
+import com.osmb.api.visual.drawing.Canvas;
 import com.osmb.api.walker.WalkConfig;
 import main.TidalsSecondaryCollector.State;
+import strategies.helpers.BankingHelper;
+import strategies.helpers.PrayerHelper;
+import strategies.helpers.ReturnHelper;
 import utilities.RetryUtils;
 
-import java.awt.Point;
+import java.awt.Color;
 import java.util.*;
 
 import static main.TidalsSecondaryCollector.*;
@@ -36,6 +39,11 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
     private final Script script;
 
+    // helpers (initialized after mode detection in verifyRequirements)
+    private BankingHelper bankingHelper;
+    private PrayerHelper prayerHelper;
+    private ReturnHelper returnHelper;
+
     // item ids - bloom tools
     private static final int SILVER_SICKLE_B = 2963;
     private static final int EMERALD_SICKLE_B = 22433;
@@ -43,7 +51,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final int IVANDIS_FLAIL = 22398;
     private static final int BLISTERWOOD_FLAIL = 24699;
 
-    private static final int[] BLOOM_TOOLS = {
+    static final int[] BLOOM_TOOLS = {
             SILVER_SICKLE_B,
             EMERALD_SICKLE_B,
             RUBY_SICKLE_B,
@@ -60,11 +68,11 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final int[] CRAFTING_CAPES = {CRAFTING_CAPE, CRAFTING_CAPE_T};
 
     // prayer restoration
-    private static final int ARDOUGNE_CLOAK_1 = 13121;
-    private static final int ARDOUGNE_CLOAK_2 = 13122;
-    private static final int ARDOUGNE_CLOAK_3 = 13123;
-    private static final int ARDOUGNE_CLOAK_4 = 13124;
-    private static final int[] ARDOUGNE_CLOAKS = {
+    static final int ARDOUGNE_CLOAK_1 = 13121;
+    static final int ARDOUGNE_CLOAK_2 = 13122;
+    static final int ARDOUGNE_CLOAK_3 = 13123;
+    static final int ARDOUGNE_CLOAK_4 = 13124;
+    static final int[] ARDOUGNE_CLOAKS = {
             ARDOUGNE_CLOAK_1, ARDOUGNE_CLOAK_2, ARDOUGNE_CLOAK_3, ARDOUGNE_CLOAK_4
     };
 
@@ -78,31 +86,17 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private static final int MORT_MYRE_FUNGUS = 2970;
 
     // fungus pixel colors (RGB values from debug tool)
-    private static final int FUNGUS_COLOR_1 = -7453660;
-    private static final int FUNGUS_COLOR_2 = -10933482;
-    private static final int FUNGUS_COLOR_3 = -883273;
-    private static final int FUNGUS_COLOR_4 = -8635360;
+    // cluster detection for fungus on logs (single color + cluster = more reliable than multi-color findPixel)
+    private static final int FUNGUS_CLUSTER_COLOR = -7060445;
+    private static final int FUNGUS_CLUSTER_TOLERANCE = 10;
+    private static final int FUNGUS_CLUSTER_MAX_DISTANCE = 11;
+    private static final int FUNGUS_CLUSTER_MIN_SIZE = 5;
 
     // pixel detection settings
-    private static final int COLOR_TOLERANCE = 8;
 
     // ver sinhaza mode locations
     private static final WorldPosition FOUR_LOG_TILE = new WorldPosition(3667, 3255, 0);
     private static final RectangleArea LOG_AREA = new RectangleArea(3665, 3253, 3669, 3257, 0);
-
-    // waypoint path from ver sinhaza teleport to log tile
-    private static final List<WorldPosition> VER_SINHAZA_TO_LOGS_PATH = Arrays.asList(
-        new WorldPosition(3654, 3231, 0),
-        new WorldPosition(3661, 3232, 0),
-        new WorldPosition(3662, 3236, 0),
-        new WorldPosition(3662, 3240, 0),
-        new WorldPosition(3660, 3244, 0),
-        new WorldPosition(3660, 3251, 0),
-        new WorldPosition(3662, 3256, 0),
-        new WorldPosition(3666, 3260, 0),
-        new WorldPosition(3666, 3257, 0),
-        new WorldPosition(3668, 3255, 0)
-    );
 
     // the 4 log positions around the standing tile (ver sinhaza mode)
     private static final WorldPosition[] LOG_POSITIONS = {
@@ -122,31 +116,6 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         new WorldPosition(3473, 3420, 0),
         new WorldPosition(3475, 3420, 0)
     };
-
-    // zanaris banking (fairy ring mode)
-    private static final WorldPosition MORT_MYRE_FAIRY_RING = new WorldPosition(3469, 3431, 0);
-    private static final WorldPosition ZANARIS_BANK_TILE = new WorldPosition(2384, 4459, 0);
-    private static final RectangleArea ZANARIS_AREA = new RectangleArea(2375, 4419, 64, 48, 0);
-    private static final RectangleArea ZANARIS_BANK_AREA = new RectangleArea(2381, 4454, 7, 7, 0);
-    private static final RectangleArea ZANARIS_FAIRY_RING_AREA = new RectangleArea(2408, 4431, 8, 6, 0);
-    private static final RectangleArea MORT_MYRE_FAIRY_RING_AREA = new RectangleArea(3466, 3428, 6, 6, 0);
-
-    // monastery fairy ring return (fairy ring mode)
-    private static final WorldPosition MONASTERY_FAIRY_RING = new WorldPosition(2658, 3230, 0);
-    private static final RectangleArea MONASTERY_FAIRY_AREA = new RectangleArea(2653, 3226, 10, 9, 0);
-
-    // shared locations
-    private static final WorldPosition CRAFTING_GUILD_BANK_CHEST = new WorldPosition(2936, 3280, 0);
-    private static final WorldPosition VER_SINHAZA_BANK_TILE = new WorldPosition(3651, 3211, 0);
-    private static final WorldPosition KANDARIN_ALTAR = new WorldPosition(2605, 3211, 0);
-    private static final WorldPosition LUMBRIDGE_ALTAR = new WorldPosition(3241, 3208, 0);
-
-    // region ids for mort myre / ver sinhaza area
-    private static final int REGION_MORT_MYRE_1 = 14642;
-    private static final int REGION_MORT_MYRE_2 = 14643;
-
-    // prayer restoration areas
-    private static final RectangleArea MONASTERY_AREA = new RectangleArea(2601, 3207, 10, 14, 0);
 
     // track which bloom tool we found during setup
     private int equippedBloomToolId = 0;
@@ -267,6 +236,10 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         RectangleArea targetArea = isFairyRingMode() ? THREE_LOG_AREA : LOG_AREA;
         if (!targetArea.contains(pos)) {
+            if (verboseLogging) {
+                script.log(getClass(), "[debug] not in target area: pos=" + pos
+                        + " area=" + targetArea);
+            }
             script.log(getClass(), "not at log area, need to return");
             return State.RETURNING;
         }
@@ -515,6 +488,9 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         }
         script.log(getClass(), "prayer method: " + prayerMethodUsed);
 
+        // initialize helpers now that mode is detected
+        initHelpers();
+
         // pre-trip prayer restore if not near collection area and prayer not full
         WorldPosition currentPos = script.getWorldPosition();
         WorldPosition targetLogTile = isFairyRingMode() ? THREE_LOG_TILE : FOUR_LOG_TILE;
@@ -524,7 +500,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             Integer prayerPercent = script.getWidgetManager().getMinimapOrbs().getPrayerPointsPercentage();
             if (prayerPercent != null && prayerPercent < 100) {
                 script.log(getClass(), "not near log area and prayer not full (" + prayerPercent + "%), restoring before first trip");
-                restorePrayerBeforeTrip();
+                prayerHelper.restorePrayerBeforeTrip();
             }
         } else {
             script.log(getClass(), "already near log area, skipping pre-trip prayer restore");
@@ -534,81 +510,19 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         return true;
     }
 
-    private void restorePrayerBeforeTrip() {
-        script.log(getClass(), "restoring prayer using: " + detectedPrayerMethod);
-
-        if (detectedPrayerMethod.equals("ardy_inventory")) {
-            ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
-            if (inv != null) {
-                for (int cloakId : ARDOUGNE_CLOAKS) {
-                    if (inv.contains(cloakId)) {
-                        ItemSearchResult cloak = inv.getItem(cloakId);
-                        if (cloak != null) {
-                            boolean success = RetryUtils.inventoryInteract(script, cloak, "Monastery Teleport", "pre-trip ardy cloak (inventory)");
-                            if (success) {
-                                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-                                walkToAltarAndPray(KANDARIN_ALTAR, "kandarin altar");
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-        } else if (detectedPrayerMethod.equals("ardy_equipped")) {
-            script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-            for (int cloakId : ARDOUGNE_CLOAKS) {
-                UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(cloakId);
-                if (ardyCloak.isFound()) {
-                    boolean success = RetryUtils.equipmentInteract(script, cloakId, "Kandarin Monastery", "pre-trip ardy cloak (equipped)");
-                    if (success) {
-                        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-                        walkToAltarAndPray(KANDARIN_ALTAR, "kandarin altar");
-                        return;
-                    }
-                }
-            }
-        } else {
-            try {
-                boolean success = script.getWidgetManager().getSpellbook().selectSpell(
-                        StandardSpellbook.LUMBRIDGE_TELEPORT, null);
-                if (success) {
-                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-                    walkToAltarAndPray(LUMBRIDGE_ALTAR, "lumbridge altar");
-                }
-            } catch (SpellNotFoundException e) {
-                script.log(getClass(), "failed to cast lumbridge teleport: " + e.getMessage());
-            }
-        }
+    // create helper instances after mode detection
+    private void initHelpers() {
+        bankingHelper = new BankingHelper(
+                script, isFairyRingMode(), BLOOM_TOOLS, ARDOUGNE_CLOAKS,
+                () -> cachedInventoryCount,
+                count -> cachedInventoryCount = count
+        );
+        prayerHelper = new PrayerHelper(script, detectedPrayerMethod, ARDOUGNE_CLOAKS, bankingHelper);
+        returnHelper = new ReturnHelper(script, isFairyRingMode(), bankingHelper);
+        returnHelper.setVerbose(verboseLogging);
     }
 
-    // walk to altar and pray - used only during setup (restorePrayerBeforeTrip)
-    private void walkToAltarAndPray(WorldPosition altarPos, String altarName) {
-        WalkConfig config = new WalkConfig.Builder()
-                .breakCondition(() -> {
-                    WorldPosition myPos = script.getWorldPosition();
-                    if (myPos == null) return false;
-                    RSObject altar = script.getObjectManager().getClosestObject(myPos, "Altar");
-                    return altar != null && altar.getWorldPosition().distanceTo(myPos) <= 3;
-                })
-                .breakDistance(3)
-                .build();
-        script.getWalker().walkTo(altarPos, config);
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(500, 800));
-
-        RSObject altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
-        if (altar != null) {
-            boolean success = RetryUtils.objectInteract(script, altar, "Pray-at", altarName);
-            if (success) {
-                script.pollFramesUntil(() -> {
-                    Integer prayerPercent = script.getWidgetManager().getMinimapOrbs().getPrayerPointsPercentage();
-                    return prayerPercent != null && prayerPercent >= 100;
-                }, 5000);
-                script.log(getClass(), "prayer restored");
-            }
-        }
-    }
+    // --- collection ---
 
     @Override
     public int collect() {
@@ -695,8 +609,8 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
 
         bloomCasts++;
 
-        // wait for bloom animation (~3 ticks = 1800ms), ignoreTasks to prevent random tab opens
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(1800, 2000), true);
+        // wait for bloom animation + fungus model to render (~4-5 ticks), ignoreTasks to prevent random tab opens
+        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2400, 2800), true);
 
         // detect fungus and start pickup cycle (one per poll)
         List<WorldPosition> fungusPositions = detectFungusPositions();
@@ -792,7 +706,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             DialogueType dialogueType = script.getWidgetManager().getDialogue().getDialogueType();
             if (dialogueType == DialogueType.CHAT_DIALOGUE || dialogueType == DialogueType.TAP_HERE_TO_CONTINUE) {
                 var textResult = script.getWidgetManager().getDialogue().getText();
-                if (textResult.isFound()) {
+                if (textResult.isFound() && textResult.get() != null) {
                     String dialogueText = textResult.get().toLowerCase();
                     if (dialogueText.contains("full") || dialogueText.contains("inventory")) {
                         script.log(getClass(), "inventory full dialogue detected, syncing cache to 28");
@@ -841,7 +755,7 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         allowAFK = true;
 
         // occasional human delay after collection cycle
-        if (RandomUtils.uniformRandom(0, 3) == 0) {
+        if (RandomUtils.weightedRandom(0, 100) < 25) {
             script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
         }
 
@@ -851,13 +765,16 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
     private List<WorldPosition> detectFungusPositions() {
         List<WorldPosition> positions = new ArrayList<>();
 
-        SingleThresholdComparator tolerance = new SingleThresholdComparator(COLOR_TOLERANCE);
-        SearchablePixel[] fungusColors = {
-            new SearchablePixel(FUNGUS_COLOR_1, tolerance, ColorModel.RGB),
-            new SearchablePixel(FUNGUS_COLOR_2, tolerance, ColorModel.RGB),
-            new SearchablePixel(FUNGUS_COLOR_3, tolerance, ColorModel.RGB),
-            new SearchablePixel(FUNGUS_COLOR_4, tolerance, ColorModel.RGB)
-        };
+        SearchablePixel fungusPixel = new SearchablePixel(
+                FUNGUS_CLUSTER_COLOR,
+                new SingleThresholdComparator(FUNGUS_CLUSTER_TOLERANCE),
+                ColorModel.RGB
+        );
+        PixelCluster.ClusterQuery query = new PixelCluster.ClusterQuery(
+                FUNGUS_CLUSTER_MAX_DISTANCE,
+                FUNGUS_CLUSTER_MIN_SIZE,
+                new SearchablePixel[]{fungusPixel}
+        );
 
         // select log positions based on mode
         WorldPosition[] logPositions = isFairyRingMode() ? THREE_LOG_POSITIONS : LOG_POSITIONS;
@@ -869,8 +786,8 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
                 continue;
             }
 
-            Point fungusPixel = script.getPixelAnalyzer().findPixel(tilePoly, fungusColors);
-            if (fungusPixel != null) {
+            PixelCluster.ClusterSearchResult result = script.getPixelAnalyzer().findClusters(tilePoly, query);
+            if (result != null && !result.getClusters().isEmpty()) {
                 positions.add(logPos);
             }
         }
@@ -914,749 +831,59 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
         return true;
     }
 
+    // --- delegate to helpers ---
+
     @Override
     public int bank() {
-        // check if bank is already open
-        if (script.getWidgetManager().getBank().isVisible()) {
-            return handleBankInterface();
-        }
-
-        // try to find and open bank at current location
-        RSObject bankObject = findNearbyBank();
-        WorldPosition myPos = script.getWorldPosition();
-        if (bankObject != null && myPos != null) {
-            double dist = bankObject.getWorldPosition().distanceTo(myPos);
-            if (dist <= 5) {
-                return openBank(bankObject);
-            }
-            // bank found but too far - walk toward it
-            if (dist <= 30) {
-                script.log(getClass(), "bank " + dist + " tiles away, walking closer");
-                WalkConfig config = new WalkConfig.Builder()
-                        .breakCondition(() -> {
-                            WorldPosition p = script.getWorldPosition();
-                            if (p == null) return false;
-                            RSObject bank = findNearbyBank();
-                            return bank != null && bank.getWorldPosition().distanceTo(p) <= 5;
-                        })
-                        .breakDistance(3)
-                        .build();
-                script.getWalker().walkTo(bankObject.getWorldPosition(), config);
-                return 0;  // re-enter to open bank
-            }
-        }
-
-        // need to teleport to bank
-        return teleportToBank();
+        return bankingHelper.bank();
     }
-
-    private RSObject findNearbyBank() {
-        return script.getObjectManager().getClosestObject(
-                script.getWorldPosition(),
-                "Bank booth", "Bank chest", "Grand Exchange booth"
-        );
-    }
-
-    private int openBank(RSObject bankObject) {
-        Polygon bankPoly = bankObject.getConvexHull();
-        if (bankPoly == null) {
-            script.log(getClass(), "bank polygon null");
-            return 600;
-        }
-
-        String objectName = bankObject.getName();
-        String action = (objectName != null && objectName.toLowerCase().contains("chest")) ? "Use" : "Bank";
-        boolean success = RetryUtils.objectInteract(script, bankObject, action, "bank (" + objectName + ")");
-        if (!success) {
-            return 600;
-        }
-
-        boolean opened = script.pollFramesUntil(() ->
-                        script.getWidgetManager().getBank().isVisible(),
-                5000
-        );
-
-        if (!opened) {
-            script.log(getClass(), "bank didn't open");
-            return 600;
-        }
-
-        return handleBankInterface();
-    }
-
-    private int handleBankInterface() {
-        script.log(getClass(), "handling bank interface");
-
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 500));
-
-        // count fungus in inventory before depositing
-        ItemGroupResult invBeforeDeposit = script.getWidgetManager().getInventory().search(Set.of(MORT_MYRE_FUNGUS));
-        int fungusToBank = 0;
-        if (invBeforeDeposit != null && invBeforeDeposit.contains(MORT_MYRE_FUNGUS)) {
-            fungusToBank = invBeforeDeposit.getAmount(MORT_MYRE_FUNGUS);
-        }
-
-        // deposit all except items we need to keep
-        Set<Integer> keepItems = new HashSet<>(toIntegerSet(ARDOUGNE_CLOAKS));
-
-        // fairy ring mode: also keep bloom tool (it's in inventory, not equipped)
-        if (isFairyRingMode()) {
-            keepItems.addAll(toIntegerSet(BLOOM_TOOLS));
-        }
-
-        script.getWidgetManager().getBank().depositAll(keepItems);
-
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(300, 600));
-
-        // track banked items
-        if (fungusToBank > 0) {
-            itemsBanked += fungusToBank;
-            script.log(getClass(), "banked " + fungusToBank + " fungus (total: " + itemsBanked + ")");
-        }
-
-        // sync cached inventory count after deposit
-        ItemGroupResult inv = script.getWidgetManager().getInventory().search(Set.of());
-        if (inv != null) {
-            cachedInventoryCount = INVENTORY_SIZE - inv.getFreeSlots();
-            script.log(getClass(), "synced cached inventory count: " + cachedInventoryCount);
-        } else {
-            cachedInventoryCount = 0;
-        }
-
-        // close bank
-        script.getWidgetManager().getBank().close();
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-        bankTrips++;
-        script.log(getClass(), "banking complete, bank trips: " + bankTrips);
-
-        return 0;
-    }
-
-    private int teleportToBank() {
-        script.log(getClass(), "teleporting to bank");
-
-        // fairy ring mode: use zanaris banking
-        if (isFairyRingMode()) {
-            return useZanarisBanking();
-        }
-
-        // priority 1: crafting cape (ver sinhaza mode only)
-        try {
-            for (int capeId : CRAFTING_CAPES) {
-                UIResult<ItemSearchResult> cape = script.getWidgetManager().getEquipment().findItem(capeId);
-                if (cape.isFound()) {
-                    return useCraftingCapeTeleport();
-                }
-            }
-        } catch (RuntimeException e) {
-            script.log(getClass(), "error checking crafting cape: " + e.getMessage());
-        }
-
-        // priority 2: ver sinhaza bank
-        return useVerSinhazaBanking();
-    }
-
-    private int useCraftingCapeTeleport() {
-        script.log(getClass(), "using crafting cape teleport");
-
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-        int capeId = 0;
-        for (int id : CRAFTING_CAPES) {
-            if (script.getWidgetManager().getEquipment().findItem(id).isFound()) {
-                capeId = id;
-                break;
-            }
-        }
-
-        if (capeId == 0) {
-            script.log(getClass(), "crafting cape not found");
-            return 600;
-        }
-
-        boolean success = RetryUtils.equipmentInteract(script, capeId, "Teleport", "crafting cape teleport");
-        if (!success) {
-            return 600;
-        }
-
-        // wait for teleport, then re-enter bank() which will find the nearby bank
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-        return 0;
-    }
-
-    private int useVerSinhazaBanking() {
-        script.log(getClass(), "using ver sinhaza bank (drakan's medallion)");
-
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-        boolean success = RetryUtils.equipmentInteract(script, DRAKANS_MEDALLION, "Ver Sinhaza", "drakan's medallion teleport");
-        if (!success) {
-            return 600;
-        }
-
-        // wait for teleport, then re-enter bank() to walk + open
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-        return 0;
-    }
-
-    // --- zanaris banking (fairy ring mode) ---
-
-    private int useZanarisBanking() {
-        script.log(getClass(), "using zanaris bank (fairy ring mode)");
-
-        WorldPosition pos = script.getWorldPosition();
-        if (pos == null) {
-            script.log(getClass(), "can't read position");
-            return 600;
-        }
-
-        // check if already in zanaris
-        if (ZANARIS_AREA.contains(pos)) {
-            script.log(getClass(), "already in zanaris, walking to bank");
-            return walkToZanarisBank();
-        }
-
-        // determine which fairy ring to use based on location
-        boolean nearMonastery = MONASTERY_AREA.contains(pos) || MONASTERY_FAIRY_AREA.contains(pos)
-                || pos.distanceTo(MONASTERY_FAIRY_RING) <= 30;
-        boolean nearThreeLogSpot = THREE_LOG_AREA.contains(pos) || MORT_MYRE_FAIRY_RING_AREA.contains(pos)
-                || pos.distanceTo(MORT_MYRE_FAIRY_RING) <= 30;
-
-        if (nearMonastery) {
-            return useMonasteryFairyRingToZanaris();
-        } else if (nearThreeLogSpot) {
-            return useMortMyreFairyRingToZanaris();
-        } else {
-            // not near either fairy ring - teleport to monastery first
-            script.log(getClass(), "not near any fairy ring, teleporting to monastery");
-            boolean teleported = tryArdougneCloakTeleport();
-            if (!teleported) {
-                script.log(getClass(), "ERROR: failed to teleport to monastery for banking");
-                return 600;
-            }
-            return 0;  // re-enter state machine to continue from monastery
-        }
-    }
-
-    private int useMonasteryFairyRingToZanaris() {
-        script.log(getClass(), "using monastery fairy ring to zanaris");
-
-        RSObject fairyRing = getSpecificObjectAt("Fairy ring", MONASTERY_FAIRY_RING.getX(), MONASTERY_FAIRY_RING.getY(), 0);
-        if (fairyRing == null || !fairyRing.isInteractableOnScreen()) {
-            script.log(getClass(), "monastery fairy ring not on screen, walking to it");
-            WalkConfig config = new WalkConfig.Builder()
-                .enableRun(true)
-                .breakCondition(() -> {
-                    RSObject ring = getSpecificObjectAt("Fairy ring", MONASTERY_FAIRY_RING.getX(), MONASTERY_FAIRY_RING.getY(), 0);
-                    return ring != null && ring.isInteractableOnScreen();
-                })
-                .build();
-            script.getWalker().walkTo(MONASTERY_FAIRY_AREA.getRandomPosition(), config);
-            fairyRing = getSpecificObjectAt("Fairy ring", MONASTERY_FAIRY_RING.getX(), MONASTERY_FAIRY_RING.getY(), 0);
-        }
-
-        if (fairyRing == null) {
-            script.log(getClass(), "ERROR: monastery fairy ring not found");
-            return 600;
-        }
-
-        boolean success = RetryUtils.objectInteract(script, fairyRing, "Zanaris", "monastery fairy ring to zanaris");
-        if (!success) {
-            script.log(getClass(), "failed to interact with monastery fairy ring");
-            return 600;
-        }
-
-        // wait for teleport and verify arrival
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(3000, 4000));
-        boolean arrived = script.pollFramesUntil(() -> {
-            WorldPosition p = script.getWorldPosition();
-            return p != null && ZANARIS_AREA.contains(p);
-        }, 10000);
-
-        if (!arrived) {
-            script.log(getClass(), "failed to arrive in zanaris from monastery");
-            return 600;
-        }
-
-        return walkToZanarisBank();
-    }
-
-    private int useMortMyreFairyRingToZanaris() {
-        script.log(getClass(), "using mort myre fairy ring to zanaris");
-
-        RSObject fairyRing = getSpecificObjectAt("Fairy ring", MORT_MYRE_FAIRY_RING.getX(), MORT_MYRE_FAIRY_RING.getY(), 0);
-        if (fairyRing == null || !fairyRing.isInteractableOnScreen()) {
-            script.log(getClass(), "mort myre fairy ring not on screen, walking to it");
-            WalkConfig config = new WalkConfig.Builder()
-                .enableRun(true)
-                .breakCondition(() -> {
-                    RSObject ring = getSpecificObjectAt("Fairy ring", MORT_MYRE_FAIRY_RING.getX(), MORT_MYRE_FAIRY_RING.getY(), 0);
-                    return ring != null && ring.isInteractableOnScreen();
-                })
-                .build();
-            script.getWalker().walkTo(MORT_MYRE_FAIRY_RING_AREA.getRandomPosition(), config);
-            fairyRing = getSpecificObjectAt("Fairy ring", MORT_MYRE_FAIRY_RING.getX(), MORT_MYRE_FAIRY_RING.getY(), 0);
-        }
-
-        if (fairyRing == null) {
-            script.log(getClass(), "ERROR: mort myre fairy ring not found");
-            return 600;
-        }
-
-        boolean success = RetryUtils.objectInteract(script, fairyRing, "Zanaris", "mort myre fairy ring to zanaris");
-        if (!success) {
-            script.log(getClass(), "failed to interact with mort myre fairy ring");
-            return 600;
-        }
-
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(3000, 4000));
-        boolean arrived = script.pollFramesUntil(() -> {
-            WorldPosition p = script.getWorldPosition();
-            return p != null && ZANARIS_AREA.contains(p);
-        }, 10000);
-
-        if (!arrived) {
-            script.log(getClass(), "failed to arrive in zanaris from mort myre");
-            return 600;
-        }
-
-        return walkToZanarisBank();
-    }
-
-    private int walkToZanarisBank() {
-        script.log(getClass(), "walking to zanaris bank");
-
-        WalkConfig config = new WalkConfig.Builder()
-            .enableRun(true)
-            .breakCondition(() -> {
-                RSObject bank = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank chest");
-                return bank != null && bank.isInteractableOnScreen();
-            })
-            .build();
-
-        script.getWalker().walkTo(ZANARIS_BANK_AREA.getRandomPosition(), config);
-
-        RSObject bankChest = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Bank chest");
-        if (bankChest != null && bankChest.isInteractableOnScreen()) {
-            return openBank(bankChest);
-        }
-
-        script.log(getClass(), "zanaris bank chest not on screen");
-        return 0;  // re-enter state machine
-    }
-
-    // --- prayer restoration ---
 
     @Override
     public int restorePrayer() {
-        WorldPosition myPos = script.getWorldPosition();
-        RSObject altar = myPos != null ? script.getObjectManager().getClosestObject(myPos, "Altar") : null;
-        if (altar != null && myPos != null && altar.getWorldPosition().distanceTo(myPos) <= 5) {
-            return prayAtAltar(altar);
-        }
-
-        WorldPosition pos = script.getWorldPosition();
-        if (pos != null && MONASTERY_AREA.contains(pos)) {
-            script.log(getClass(), "already at monastery area, walking to altar");
-            return walkToKandarinAltar();
-        }
-
-        // priority 1: ardougne cloak (free teleport)
-        if (tryArdougneCloakTeleport()) {
-            return walkToKandarinAltar();
-        }
-
-        // priority 2: lumbridge teleport
-        return useLumbridgeTeleport();
+        return prayerHelper.restorePrayer();
     }
-
-    private boolean tryArdougneCloakTeleport() {
-        // check inventory first
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-        ItemGroupResult inv = script.getWidgetManager().getInventory().search(toIntegerSet(ARDOUGNE_CLOAKS));
-        if (inv != null) {
-            for (int cloakId : ARDOUGNE_CLOAKS) {
-                if (inv.contains(cloakId)) {
-                    ItemSearchResult cloak = inv.getItem(cloakId);
-                    if (cloak != null) {
-                        boolean success = RetryUtils.inventoryInteract(script, cloak, "Monastery Teleport", "ardougne cloak (inventory)");
-                        if (success) {
-                            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // check equipped
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-        for (int cloakId : ARDOUGNE_CLOAKS) {
-            UIResult<ItemSearchResult> ardyCloak = script.getWidgetManager().getEquipment().findItem(cloakId);
-            if (ardyCloak.isFound()) {
-                boolean success = RetryUtils.equipmentInteract(script, cloakId, "Kandarin Monastery", "ardougne cloak (equipped)");
-                if (success) {
-                    script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-                    return true;
-                }
-            }
-        }
-
-        script.log(getClass(), "no ardougne cloak found");
-        return false;
-    }
-
-    private int walkToKandarinAltar() {
-        WorldPosition myPos = script.getWorldPosition();
-        RSObject altar = myPos != null ? script.getObjectManager().getClosestObject(myPos, "Altar") : null;
-
-        if (altar != null && myPos != null && altar.getWorldPosition().distanceTo(myPos) <= 5) {
-            return prayAtAltar(altar);
-        }
-
-        script.log(getClass(), "walking to kandarin altar");
-        WalkConfig config = new WalkConfig.Builder()
-                .breakCondition(() -> {
-                    WorldPosition pos = script.getWorldPosition();
-                    if (pos == null) return false;
-                    RSObject a = script.getObjectManager().getClosestObject(pos, "Altar");
-                    return a != null && a.getWorldPosition().distanceTo(pos) <= 3;
-                })
-                .breakDistance(2)
-                .timeout(10000)
-                .build();
-
-        script.getWalker().walkTo(KANDARIN_ALTAR, config);
-
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(400, 600));
-
-        altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
-        if (altar != null) {
-            script.log(getClass(), "found altar after walking, praying");
-            return prayAtAltar(altar);
-        }
-
-        script.log(getClass(), "altar not visible, searching nearby");
-        return 600;
-    }
-
-    private int useLumbridgeTeleport() {
-        script.log(getClass(), "using lumbridge teleport");
-
-        try {
-            boolean success = script.getWidgetManager().getSpellbook().selectSpell(
-                    StandardSpellbook.LUMBRIDGE_TELEPORT, null);
-
-            if (!success) {
-                script.log(getClass(), "ERROR: failed to cast lumbridge teleport - stopping");
-                script.stop();
-                return 0;
-            }
-
-            script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-            return walkToLumbridgeChurch();
-
-        } catch (SpellNotFoundException e) {
-            script.log(getClass(), "ERROR: lumbridge teleport not available - stopping");
-            script.stop();
-            return 0;
-        }
-    }
-
-    private int walkToLumbridgeChurch() {
-        WorldPosition myPos = script.getWorldPosition();
-        RSObject altar = myPos != null ? script.getObjectManager().getClosestObject(myPos, "Altar") : null;
-
-        if (altar != null && myPos != null && altar.getWorldPosition().distanceTo(myPos) <= 5) {
-            return prayAtAltar(altar);
-        }
-
-        script.log(getClass(), "walking to lumbridge church");
-        WalkConfig config = new WalkConfig.Builder()
-                .breakCondition(() -> {
-                    WorldPosition pos = script.getWorldPosition();
-                    if (pos == null) return false;
-                    RSObject a = script.getObjectManager().getClosestObject(pos, "Altar");
-                    return a != null && a.getWorldPosition().distanceTo(pos) <= 3;
-                })
-                .breakDistance(2)
-                .timeout(15000)
-                .build();
-
-        script.getWalker().walkTo(LUMBRIDGE_ALTAR, config);
-
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(400, 600));
-
-        altar = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Altar");
-        if (altar != null) {
-            script.log(getClass(), "found altar after walking, praying");
-            return prayAtAltar(altar);
-        }
-
-        script.log(getClass(), "lumbridge altar not visible, searching nearby");
-        return 600;
-    }
-
-    private int prayAtAltar(RSObject altar) {
-        boolean success = RetryUtils.objectInteract(script, altar, "Pray-at", "altar");
-        if (!success) {
-            return 600;
-        }
-
-        boolean restored = script.pollFramesUntil(() -> {
-            Integer prayer = script.getWidgetManager().getMinimapOrbs().getPrayerPoints();
-            return prayer != null && prayer >= 30;
-        }, RandomUtils.gaussianRandom(2500, 3500, 3000, 250));
-
-        if (restored) {
-            script.log(getClass(), "prayer restored");
-        } else {
-            script.log(getClass(), "prayer restoration timeout");
-        }
-
-        return 0;
-    }
-
-    // --- return to area ---
 
     @Override
     public int returnToArea() {
-        WorldPosition pos = script.getWorldPosition();
+        return returnHelper.returnToArea();
+    }
 
-        // fairy ring mode: use ardy cloak -> monastery -> fairy ring -> BKR
-        if (isFairyRingMode()) {
-            if (pos != null && THREE_LOG_AREA.contains(pos)) {
-                script.log(getClass(), "already at 3-log area");
-                return 0;
+    // --- paint overlay ---
+
+    @Override
+    public void onPaint(Canvas c) {
+        WorldPosition[] logPositions = isFairyRingMode() ? THREE_LOG_POSITIONS : LOG_POSITIONS;
+
+        for (int i = 0; i < logPositions.length; i++) {
+            Polygon tileCube = script.getSceneProjector().getTileCube(logPositions[i], 50);
+            if (tileCube == null) continue;
+
+            Color fill;
+            Color outline;
+
+            if (pendingFungusPositions != null) {
+                if (i < pendingFungusIndex) {
+                    // already picked this cycle - gray
+                    fill = new Color(128, 128, 128, 50);
+                    outline = Color.GRAY;
+                } else if (pendingFungusPositions.contains(logPositions[i])) {
+                    // pending pickup - green
+                    fill = new Color(0, 255, 0, 50);
+                    outline = Color.GREEN;
+                } else {
+                    // no fungus detected on this log
+                    fill = new Color(128, 128, 128, 50);
+                    outline = Color.GRAY;
+                }
+            } else {
+                // idle - dim red
+                fill = new Color(255, 0, 0, 30);
+                outline = new Color(180, 60, 60);
             }
-            return useFairyRingReturn();
+
+            c.fillPolygon(tileCube, fill.getRGB(), 0.3);
+            c.drawPolygon(tileCube, outline.getRGB(), 1.0);
         }
-
-        // ver sinhaza mode
-        if (pos != null && LOG_AREA.contains(pos)) {
-            script.log(getClass(), "already at log area");
-            return 0;
-        }
-
-        int currentRegion = getCurrentRegion();
-        script.log(getClass(), "current region: " + currentRegion);
-
-        boolean inMortMyre = currentRegion == REGION_MORT_MYRE_1 || currentRegion == REGION_MORT_MYRE_2;
-        if (!inMortMyre) {
-            return useDrakansMedallionTeleport();
-        }
-
-        return walkToLogTile();
-    }
-
-    private int getCurrentRegion() {
-        WorldPosition pos = script.getWorldPosition();
-        if (pos == null) return 0;
-        return ((pos.getX() >> 6) << 8) | (pos.getY() >> 6);
-    }
-
-    private int useDrakansMedallionTeleport() {
-        script.getWidgetManager().getTabManager().openTab(Tab.Type.EQUIPMENT);
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 400));
-
-        boolean success = RetryUtils.equipmentInteract(script, DRAKANS_MEDALLION, "Ver Sinhaza", "drakan's medallion teleport");
-        if (!success) {
-            script.log(getClass(), "ERROR: failed to use drakan's medallion");
-            script.stop();
-            return 0;
-        }
-
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(2000, 3000));
-        return walkToLogTile();
-    }
-
-    private int walkToLogTile() {
-        WorldPosition pos = script.getWorldPosition();
-        if (pos != null && LOG_AREA.contains(pos)) {
-            script.log(getClass(), "arrived at log area");
-            return 0;
-        }
-
-        script.log(getClass(), "walking to 4 log tile via waypoint path");
-
-        WalkConfig config = new WalkConfig.Builder()
-                .setWalkMethods(false, true)
-                .tileRandomisationRadius(0)
-                .breakDistance(2)
-                .timeout(30000)
-                .build();
-
-        boolean arrived = script.getWalker().walkPath(VER_SINHAZA_TO_LOGS_PATH, config);
-
-        if (arrived) {
-            script.log(getClass(), "arrived at log area");
-            return 0;
-        }
-
-        script.log(getClass(), "walk incomplete, will retry");
-        return 600;
-    }
-
-    // --- fairy ring return methods ---
-
-    private int useFairyRingReturn() {
-        WorldPosition pos = script.getWorldPosition();
-        if (pos == null) {
-            script.log(getClass(), "can't read position");
-            return 600;
-        }
-
-        // if in zanaris - use fairy ring directly (skip monastery)
-        if (ZANARIS_AREA.contains(pos)) {
-            script.log(getClass(), "in zanaris, using fairy ring to return to bkr");
-            return useZanarisFairyRingReturn();
-        }
-
-        // if fairy ring already interactable on screen
-        RSObject fairyRing = script.getObjectManager().getClosestObject(pos, "Fairy ring");
-        boolean ringOnScreen = fairyRing != null && fairyRing.isInteractableOnScreen();
-
-        if (ringOnScreen || MONASTERY_FAIRY_AREA.contains(pos)) {
-            return interactWithMonasteryFairyRing();
-        }
-
-        // if in monastery area, walk to fairy ring (prayer restore handled by determineState)
-        if (MONASTERY_AREA.contains(pos)) {
-            script.log(getClass(), "walking to monastery fairy ring");
-            WalkConfig config = new WalkConfig.Builder()
-                .enableRun(true)
-                .breakCondition(() -> {
-                    RSObject ring = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
-                    return ring != null && ring.isInteractableOnScreen();
-                })
-                .build();
-
-            script.getWalker().walkTo(MONASTERY_FAIRY_AREA.getRandomPosition(), config);
-            return 0;  // will re-enter and hit the interactable check above
-        }
-
-        // not at monastery or zanaris - teleport to monastery
-        script.log(getClass(), "teleporting to monastery");
-        boolean teleported = tryArdougneCloakTeleport();
-        if (!teleported) {
-            script.log(getClass(), "ERROR: failed to teleport to monastery");
-            return 600;
-        }
-
-        return 0;  // re-enter state machine
-    }
-
-    private int useZanarisFairyRingReturn() {
-        RSObject fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
-
-        if (fairyRing == null || !fairyRing.isInteractableOnScreen()) {
-            script.log(getClass(), "zanaris fairy ring not on screen, walking to it");
-            WalkConfig config = new WalkConfig.Builder()
-                .enableRun(true)
-                .breakCondition(() -> {
-                    RSObject ring = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
-                    return ring != null && ring.isInteractableOnScreen();
-                })
-                .build();
-            script.getWalker().walkTo(ZANARIS_FAIRY_RING_AREA.getRandomPosition(), config);
-            fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
-        }
-
-        if (fairyRing == null) {
-            script.log(getClass(), "ERROR: zanaris fairy ring not found");
-            return 600;
-        }
-
-        script.log(getClass(), "using zanaris fairy ring last-destination (bkr)");
-        boolean success = RetryUtils.objectInteract(script, fairyRing, "last-destination (bkr)", "zanaris fairy ring to bkr");
-        if (!success) {
-            script.log(getClass(), "failed to interact with zanaris fairy ring");
-            return 600;
-        }
-
-        // wait for teleport animation
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(4000, 5000));
-
-        boolean arrived = script.pollFramesUntil(() -> {
-            WorldPosition p = script.getWorldPosition();
-            if (p == null) return false;
-            return THREE_LOG_AREA.contains(p) || p.distanceTo(MORT_MYRE_FAIRY_RING) <= 10;
-        }, 10000);
-
-        if (!arrived) {
-            script.log(getClass(), "failed to arrive in mort myre from zanaris");
-            return 600;
-        }
-
-        WorldPosition currentPos = script.getWorldPosition();
-        if (THREE_LOG_AREA.contains(currentPos)) {
-            script.log(getClass(), "arrived at mort myre collection area");
-            return 0;
-        }
-
-        return walkToFairyRingLogTile();
-    }
-
-    private int interactWithMonasteryFairyRing() {
-        RSObject fairyRing = script.getObjectManager().getClosestObject(script.getWorldPosition(), "Fairy ring");
-        if (fairyRing == null) {
-            script.log(getClass(), "fairy ring not found");
-            return 600;
-        }
-
-        // use RetryUtils for reliable interaction
-        script.log(getClass(), "using fairy ring last-destination (bkr)");
-        boolean success = RetryUtils.objectInteract(script, fairyRing, "last-destination (bkr)", "monastery fairy ring to bkr");
-        if (!success) {
-            script.log(getClass(), "failed to interact with fairy ring");
-            return 600;
-        }
-
-        // wait for teleport animation
-        script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(4000, 5000));
-
-        boolean arrived = script.pollFramesUntil(() -> {
-            WorldPosition p = script.getWorldPosition();
-            if (p == null) return false;
-            return THREE_LOG_AREA.contains(p) || p.distanceTo(MORT_MYRE_FAIRY_RING) <= 10;
-        }, 10000);
-
-        if (!arrived) {
-            script.log(getClass(), "failed to arrive in mort myre");
-            return 600;
-        }
-
-        WorldPosition currentPos = script.getWorldPosition();
-        if (THREE_LOG_AREA.contains(currentPos)) {
-            script.log(getClass(), "arrived at mort myre collection area");
-            return 0;
-        }
-
-        script.log(getClass(), "arrived near mort myre fairy ring, walking to collection tile");
-        return walkToFairyRingLogTile();
-    }
-
-    private int walkToFairyRingLogTile() {
-        WorldPosition pos = script.getWorldPosition();
-        if (pos != null && THREE_LOG_AREA.contains(pos)) {
-            script.log(getClass(), "arrived at 3-log area");
-            return 0;
-        }
-
-        script.log(getClass(), "walking to 3-log tile");
-        WalkConfig config = new WalkConfig.Builder()
-            .breakDistance(2)
-            .timeout(10000)
-            .build();
-
-        script.getWalker().walkTo(THREE_LOG_TILE, config);
-        return 0;
     }
 
     // --- helpers ---
@@ -1667,17 +894,5 @@ public class MortMyreFungusCollector implements SecondaryCollectorStrategy {
             set.add(i);
         }
         return set;
-    }
-
-    // find object at specific world coordinates (for reliable fairy ring detection)
-    private RSObject getSpecificObjectAt(String name, int worldX, int worldY, int plane) {
-        return script.getObjectManager().getRSObject(obj ->
-                obj != null
-                        && obj.getName() != null
-                        && name.equalsIgnoreCase(obj.getName())
-                        && obj.getWorldX() == worldX
-                        && obj.getWorldY() == worldY
-                        && obj.getPlane() == plane
-        );
     }
 }

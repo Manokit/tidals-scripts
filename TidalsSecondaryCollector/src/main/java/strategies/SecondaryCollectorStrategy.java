@@ -1,5 +1,6 @@
 package strategies;
 
+import com.osmb.api.visual.drawing.Canvas;
 import main.TidalsSecondaryCollector.State;
 
 // base interface for all secondary collector strategies
@@ -23,4 +24,7 @@ public interface SecondaryCollectorStrategy {
 
     // return to collection area
     int returnToArea();
+
+    // draw debug overlays (tileCubes on log positions, etc)
+    default void onPaint(Canvas c) {}
 }

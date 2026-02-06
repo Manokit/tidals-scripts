@@ -1,84 +1,58 @@
-**/.idea/
-**/.gradle/
-**/build/
-**/gradle/
-**/bin/
-/dCannonAFKer
-banner PSD.psd
-/build.gradle
-*/obf/
+# ============================================
+# PUBLIC REPO - Production scripts only
+# Everything is ignored unless explicitly allowed
+# ============================================
+
+# Ignore everything by default
+*
+
+# Allow root files
+!LICENSE
+!README.md
+!.gitignore
+!.gitattributes
+
+# Allow production script directories
+!Tidals*/
+!Tidals*/build.gradle
+!Tidals*/jar/
+!Tidals*/jar/*.jar
+!Tidals*/src/
+!Tidals*/src/**
+
+# Re-exclude private content within script dirs
 **/obf/
-ButterBanner.psd
-/priv-jars/src_com_butterfoundry
-dSunbleakWCer/gradlew
-dSunbleakWCer/gradlewe
-dSunbleakWCer/gradlew.bat
-dSunbleakWCer/settings.gradle
-.DS_Store
-
-.claude
-.claude/
-.codex
-.codex/
-.vscode/
-
-Example Scripts/
-
-#class files
-**/*.class
-
-discord_post.md
-Context.md
-context.md
-
-# Local change logs per script
+**/*-fat.jar
+**/proguard-usage.txt
 **/Changes/
 **/Forum-Changelogs/
+**/discord_post.md
 
-build.gradle.planning/
+# Exclude test/POC scripts even if they match Tidals*
+TidalsBankTester/
+TidalsDelayTester/
+TidalsGEPOC/
+TidalsGEOCRTest/
+TidalsGESellTest/
+TidalsLoadoutTester/
+TidalsLocalCoordTest/
+TidalsProfileTester/
+TidalsWalkerTest/
+TidalsAgentBridge/
+TidalsFlipper/
 
+# Build artifacts
+**/.gradle/
+**/build/
+**/bin/
+**/*.class
+
+# IDE & OS
+**/.idea/
+.claude/
+.codex/
+.vscode/
 .cursor/
-
-# Test/POC/Tester scripts (local-only, not production)
-*Test*/
-*Tester*/
-*POC*/
-TidalsLocalCoordTest_PRD.md
-
-# ProGuard build artifacts
-**/proguard-usage.txt
-**/*-fat.jar
-
-# Documentation (local reference only, also match symlinks)
-docs
-docs/
-examples
-examples/
-
-# Feedback/review notes
-osmb-feedback-todo.md
-osmb_code_review_feedback.md
-
-# Utilities (local-only)
-utilities/scripts/
-utilities/src/main/resources/obstacle_spawns.json
-
-# Webwalker (private utility)
-utilities/src/main/java/utilities/webwalker/
-utilities/src/main/java/utilities/FairyRingUtils.java
-
-# Player profile (private utility)
-utilities/src/main/java/utilities/profile/
-Webwalker_POC_PRD.md
-
-
-# PRDs and conductor
-PRDs/
+.DS_Store
+.worktrees/
 .conductor/
-
-# Utilities (private - full directory)
-utilities/
-
-# Beans issue tracker (private)
-.beans/
-.beans.yml

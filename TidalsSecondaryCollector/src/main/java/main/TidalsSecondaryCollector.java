@@ -45,6 +45,9 @@ public class TidalsSecondaryCollector extends Script {
     public static SecondaryType selectedSecondary = SecondaryType.MORT_MYRE_FUNGUS;
     public static boolean hasVarrockMediumDiary = false; // set to true if you have the diary
 
+    // debug logging — set true for detailed walker/return/state logs
+    public static volatile boolean verboseLogging = false;
+
     // state tracking
     public static boolean setupComplete = false;
     public static State currentState = State.IDLE;
@@ -97,6 +100,7 @@ public class TidalsSecondaryCollector extends Script {
     @Override
     public int[] regionsToPrioritise() {
         return new int[]{
+                // script-specific regions
                 14642, // ver sinhaza bank + 4-log tile
                 13877, // mort myre 3-log tile + bkr fairy ring
                 9541,  // zanaris bank + fairy ring
@@ -104,6 +108,64 @@ public class TidalsSecondaryCollector extends Script {
                 10546, // monastery fairy ring
                 12850, // lumbridge altar (fallback prayer)
                 11571, // crafting guild bank (crafting cape)
+                // standard bank regions
+                13104, // Shantay Pass
+                13105, // Al Kharid
+                13363, // Duel Arena / PvP Arena
+                12338, // Draynor
+                12853, // Varrock East
+                12597, // Varrock West + Cooks Guild
+                12598, // Grand Exchange
+                12342, // Edgeville
+                12084, // Falador East + Mining Guild
+                11828, // Falador West
+                11319, // Warriors Guild
+                11061, // Catherby
+                10806, // Seers
+                11310, // Shilo
+                10284, // Corsair Cove
+                9772,  // Myths Guild
+                10288, // Yanille
+                10545, // Port Khazard
+                10547, // Ardougne East/South
+                10292, // Ardougne East/North
+                10293, // Fishing Guild
+                10039, // Barbarian Assault
+                9782,  // Grand Tree
+                9781,  // Tree Gnome Stronghold
+                9776,  // Castle Wars
+                9265,  // Lletya
+                8748,  // Soul Wars
+                8253,  // Lunar Isle
+                9275,  // Neitiznot
+                9531,  // Jatiszo
+                6461,  // Wintertodt
+                7227,  // Port Piscarilius
+                6458,  // Arceeus
+                6457,  // Kourend Castle
+                6968,  // Hosidius
+                7223,  // Vinery
+                6710,  // Sand Crabs Chest
+                6198,  // Woodcutting Guild
+                5941,  // Land's End
+                5944,  // Shayzien
+                5946,  // Lovakengj South
+                5691,  // Lovekengj North
+                4922,  // Farming Guild
+                4919,  // Chambers of Xeric
+                5938,  // Quetzacalli
+                6448,  // Varlamore West
+                6960,  // Varlamore East
+                6191,  // Hunter Guild
+                5421,  // Aldarin
+                5420,  // Mistrock
+                14638, // Mos'le Harmless
+                14646, // Port Phasmatys
+                12344, // Ferox Enclave
+                12895, // Priff North
+                13150, // Priff South
+                13907, // Museum Camp
+                14908, // Fossil Bank Chest island
         };
     }
 
@@ -309,6 +371,11 @@ public class TidalsSecondaryCollector extends Script {
 
         drawStatLine(c, innerX, innerWidth, paddingX, curY,
                 "Version", SCRIPT_VERSION, textMuted.getRGB(), textMuted.getRGB());
+
+        // draw strategy-specific overlays (tileCubes on log positions)
+        if (setupComplete && activeStrategy != null) {
+            activeStrategy.onPaint(c);
+        }
     }
 
     private void drawStatLine(Canvas c, int innerX, int innerWidth, int paddingX, int y,
