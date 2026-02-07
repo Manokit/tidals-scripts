@@ -33,23 +33,13 @@ public class DepositOres extends Task {
                 .breakDistance(0)
                 .tileRandomisationRadius(0)
                 .build();
-        // stop walking early when close enough and deposit box is interactable
+        // stop walking when deposit box object loads in scene (close enough to interact)
         this.depositBoxWalkConfig = new WalkConfig.Builder()
                 .disableWalkScreen(true)
-                .breakDistance(0)
-                .tileRandomisationRadius(0)
                 .breakCondition(() -> {
-                    WorldPosition myPos = script.getWorldPosition();
-                    if (myPos == null) return false;
-                    // must be within interaction range before breaking
-                    int dx = Math.abs((int) myPos.getX() - 1872);
-                    int dy = Math.abs((int) myPos.getY() - 3301);
-                    if (dx > 4 || dy > 4) return false;
-                    RSObject depositBox = script.getObjectManager().getClosestObject(myPos, "Bank deposit box");
-                    if (depositBox == null) return false;
-                    Polygon poly = depositBox.getConvexHull();
-                    if (poly == null) return false;
-                    return script.getWidgetManager().insideGameScreenFactor(poly, List.of(ChatboxComponent.class)) >= 0.3;
+                    RSObject box = script.getObjectManager().getClosestObject(
+                            script.getWorldPosition(), "Bank deposit box");
+                    return box != null;
                 })
                 .build();
     }
@@ -130,17 +120,8 @@ public class DepositOres extends Task {
             return true; // re-poll to finish
         }
 
-        // state 3: need to walk to deposit box
-        if (!isNearDepositBox()) {
-            script.log("DEPOSIT", "Walking to deposit box...");
-            script.getWalker().walkTo(DEPOSIT_BOX_TILE, depositBoxWalkConfig);
-            script.pollFramesUntil(() -> isNearDepositBox(), RandomUtils.weightedRandom(6000, 10000, 0.002), false);
-            script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(300, 1200, 0.002));
-            return true; // re-poll to handle next state
-        }
-
-        // state 4: at deposit box but need to open it
-        if (!isInventoryEmpty()) {
+        // state 3: deposit box interactable on screen → open it directly
+        if (!isInventoryEmpty() && isDepositBoxInteractable()) {
             if (!openDepositBoxWithMenu()) {
                 script.log("DEPOSIT", "Failed to open deposit box, retrying...");
                 return true;
@@ -161,6 +142,13 @@ public class DepositOres extends Task {
                 script.log("DEPOSIT", "Deposit interface didn't open, retrying...");
             }
             return true; // re-poll to deposit
+        }
+
+        // state 4: deposit box not interactable → walk closer
+        if (!isInventoryEmpty()) {
+            script.log("DEPOSIT", "Walking to deposit box...");
+            script.getWalker().walkTo(DEPOSIT_BOX_TILE, depositBoxWalkConfig);
+            return true; // re-poll — next poll will check interactability
         }
 
         // state 5: inventory empty, deposit complete - clean up and let ReturnToThieving handle walking back
@@ -239,12 +227,12 @@ public class DepositOres extends Task {
         return items == null || items.getFreeSlots() == 28;
     }
 
-    private boolean isNearDepositBox() {
-        WorldPosition pos = script.getWorldPosition();
-        if (pos == null) return false;
-        int x = (int) pos.getX();
-        int y = (int) pos.getY();
-        return Math.abs(x - 1872) <= 2 && Math.abs(y - 3301) <= 2;
+    private boolean isDepositBoxInteractable() {
+        WorldPosition myPos = script.getWorldPosition();
+        if (myPos == null) return false;
+        RSObject depositBox = script.getObjectManager().getClosestObject(myPos, "Bank deposit box");
+        if (depositBox == null) return false;
+        return depositBox.isInteractableOnScreen();
     }
 
     private boolean isDepositInterfaceOpen() {
