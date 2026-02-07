@@ -90,7 +90,15 @@ public class Bank extends Task {
         }
 
         if (!bankResult.contains(itemToWithdraw)) {
-            script.log(getClass(), "out of " + itemName + ", stopping");
+            if (allUncutsMode) {
+                script.log(getClass(), "out of " + itemName + ", trying next gem type");
+                if (((TidalsGemCutter) script).advanceToNextGem()) {
+                    return false;
+                }
+                script.log(getClass(), "no more uncut gems in bank, stopping");
+            } else {
+                script.log(getClass(), "out of " + itemName + ", stopping");
+            }
             script.stop();
             return false;
         }
@@ -135,6 +143,7 @@ public class Bank extends Task {
 
         AtomicReference<Timer> posTimer = new AtomicReference<>(new Timer());
         AtomicReference<WorldPosition> prevPos = new AtomicReference<>(null);
+        final long idleTimeout = RandomUtils.weightedRandom(1500, 2500, 0.002);
 
         script.pollFramesHuman(() -> {
             WorldPosition current = script.getWorldPosition();
@@ -145,7 +154,7 @@ public class Bank extends Task {
                 prevPos.set(current);
             }
 
-            return script.getWidgetManager().getBank().isVisible() || posTimer.get().timeElapsed() > RandomUtils.weightedRandom(1500, 2500, 0.002);
+            return script.getWidgetManager().getBank().isVisible() || posTimer.get().timeElapsed() > idleTimeout;
         }, RandomUtils.weightedRandom(12000, 18000, 0.002));
     }
 }

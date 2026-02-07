@@ -87,7 +87,7 @@ public class HopWorld extends Task {
 
             // wait for OSMB to stabilize (randomized delay)
             int stabilizationDelay = RandomUtils.gaussianRandom(POST_HOP_STABILIZATION_MIN_MS, POST_HOP_STABILIZATION_MAX_MS, (POST_HOP_STABILIZATION_MIN_MS + POST_HOP_STABILIZATION_MAX_MS) / 2.0, (POST_HOP_STABILIZATION_MAX_MS - POST_HOP_STABILIZATION_MIN_MS) / 4.0);
-            script.pollFramesHuman(() -> true, stabilizationDelay);
+            script.pollFramesUntil(() -> false, stabilizationDelay);
             script.log(getClass(), "stabilization complete (" + stabilizationDelay + "ms), resetting state");
 
             // reset state for new world

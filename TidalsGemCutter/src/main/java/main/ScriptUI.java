@@ -36,8 +36,9 @@ public class ScriptUI {
     private CheckBox includeUsernameCheckBox;
     private CheckBox debugCheckBox;
 
-    // Uncut gem options (semi-precious first, then precious)
+    // Uncut gem options (All uncuts first, then semi-precious, then precious)
     private static final Integer[] GEM_OPTIONS = {
+            TidalsGemCutter.ALL_UNCUTS_SENTINEL,
             ItemID.UNCUT_OPAL,
             ItemID.UNCUT_JADE,
             ItemID.UNCUT_RED_TOPAZ,
@@ -103,12 +104,14 @@ public class ScriptUI {
             }
         });
 
-        // Disable bolt tips for semi-precious gems (no bolt tip variants exist)
+        // Disable bolt tips for semi-precious gems and "All uncuts" mode
         gemComboBox.setOnAction(e -> {
             Integer selected = gemComboBox.getSelectionModel().getSelectedItem();
+            boolean isAllUncuts = selected != null && selected == TidalsGemCutter.ALL_UNCUTS_SENTINEL;
             boolean isCrushable = selected != null && CRUSHABLE_GEMS.contains(selected);
-            makeBoltTipsCheckBox.setDisable(isCrushable);
-            if (isCrushable) {
+            boolean disableBoltTips = isAllUncuts || isCrushable;
+            makeBoltTipsCheckBox.setDisable(disableBoltTips);
+            if (disableBoltTips) {
                 makeBoltTipsCheckBox.setSelected(false);
                 useBankedGemsCheckBox.setSelected(false);
                 useBankedGemsCheckBox.setDisable(true);
@@ -116,8 +119,9 @@ public class ScriptUI {
         });
 
         // Set initial state for bolt tips based on loaded gem
+        boolean initialIsAllUncuts = savedGemId == TidalsGemCutter.ALL_UNCUTS_SENTINEL;
         boolean initialIsCrushable = CRUSHABLE_GEMS.contains(savedGemId);
-        if (initialIsCrushable) {
+        if (initialIsAllUncuts || initialIsCrushable) {
             makeBoltTipsCheckBox.setDisable(true);
             makeBoltTipsCheckBox.setSelected(false);
             useBankedGemsCheckBox.setDisable(true);
@@ -214,7 +218,9 @@ public class ScriptUI {
         comboBox.setConverter(new StringConverter<>() {
             @Override
             public String toString(Integer itemId) {
-                return itemId != null ? core.getItemManager().getItemName(itemId) : "";
+                if (itemId == null) return "";
+                if (itemId == TidalsGemCutter.ALL_UNCUTS_SENTINEL) return "All uncuts";
+                return core.getItemManager().getItemName(itemId);
             }
 
             @Override
@@ -235,14 +241,19 @@ public class ScriptUI {
             protected void updateItem(Integer itemId, boolean empty) {
                 super.updateItem(itemId, empty);
                 if (itemId != null && !empty) {
-                    String name = core.getItemManager().getItemName(itemId);
-                    ImageView imageView = JavaFXUtils.getItemImageView(core, itemId);
-                    if (imageView != null) {
-                        imageView.setFitWidth(16);
-                        imageView.setFitHeight(16);
+                    if (itemId == TidalsGemCutter.ALL_UNCUTS_SENTINEL) {
+                        setText("All uncuts");
+                        setGraphic(null);
+                    } else {
+                        String name = core.getItemManager().getItemName(itemId);
+                        ImageView imageView = JavaFXUtils.getItemImageView(core, itemId);
+                        if (imageView != null) {
+                            imageView.setFitWidth(16);
+                            imageView.setFitHeight(16);
+                        }
+                        setGraphic(imageView);
+                        setText(name);
                     }
-                    setGraphic(imageView);
-                    setText(name);
                 } else {
                     setText(null);
                     setGraphic(null);

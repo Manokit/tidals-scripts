@@ -97,7 +97,7 @@ public class HopWorld extends Task {
 
             // wait for OSMB to stabilize and identify our position
             // prevents Setup from seeing our own dot as "another player"
-            script.pollFramesHuman(() -> true, RandomUtils.gaussianRandom(9000, 11000, 10000, 500));
+            script.pollFramesUntil(() -> false, RandomUtils.gaussianRandom(9000, 11000, 10000, 500));
             script.log(getClass(), "stabilization complete, resetting state");
 
             // reset state for new world

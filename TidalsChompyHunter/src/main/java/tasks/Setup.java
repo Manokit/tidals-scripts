@@ -182,7 +182,7 @@ public class Setup extends Task {
             long waitTime = loginGraceMs - timeSinceLogin;
             script.log(getClass(), "waiting " + (waitTime / 1000) + "s for position stabilization...");
             task = "stabilizing position...";
-            script.pollFramesHuman(() -> true, (int) waitTime);
+            script.pollFramesUntil(() -> false, (int) waitTime);
             script.log(getClass(), "stabilization complete - checking for players");
         }
 

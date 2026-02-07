@@ -35,7 +35,7 @@ public class Mine extends Task {
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════
     private static final String TARGET_OBJECT_NAME = "Gem rocks";
-    // stuck timeout range (4-6 minutes) - randomized per check
+    // stuck timeout range (4-6 minutes) - randomized on init and each success
     private static final long STUCK_TIMEOUT_MIN_MS = 4 * 60 * 1000;
     private static final long STUCK_TIMEOUT_MAX_MS = 6 * 60 * 1000;
     private static final String NO_ORE_MESSAGE = "there is currently no ore available in this rock";
@@ -102,6 +102,7 @@ public class Mine extends Task {
     // ═══════════════════════════════════════════════════════════════════════════
     private final Map<String, Long> recentlyMinedRocks = new HashMap<>();
     private long lastSuccessfulAction = 0;
+    private long stuckThreshold = 0;
     private int consecutiveMisclickCount = 0;
     private String lastMisclickPositionKey = null;
     private Set<String> emptyRockPositionKeys = new HashSet<>();
@@ -367,9 +368,8 @@ public class Mine extends Task {
     private boolean isStuckTooLong() {
         if (lastSuccessfulAction == 0) {
             lastSuccessfulAction = System.currentTimeMillis();
+            stuckThreshold = RandomUtils.gaussianRandom((int) STUCK_TIMEOUT_MIN_MS, (int) STUCK_TIMEOUT_MAX_MS, (STUCK_TIMEOUT_MIN_MS + STUCK_TIMEOUT_MAX_MS) / 2.0, (STUCK_TIMEOUT_MAX_MS - STUCK_TIMEOUT_MIN_MS) / 4.0);
         }
-        // randomize threshold each check to avoid detectable patterns
-        long stuckThreshold = RandomUtils.gaussianRandom((int) STUCK_TIMEOUT_MIN_MS, (int) STUCK_TIMEOUT_MAX_MS, (STUCK_TIMEOUT_MIN_MS + STUCK_TIMEOUT_MAX_MS) / 2.0, (STUCK_TIMEOUT_MAX_MS - STUCK_TIMEOUT_MIN_MS) / 4.0);
         return System.currentTimeMillis() - lastSuccessfulAction > stuckThreshold;
     }
 
@@ -750,6 +750,7 @@ public class Mine extends Task {
     private void onMiningSuccess(WorldPosition rockPos, boolean isUpperMine) {
         gemsMined++;
         lastSuccessfulAction = System.currentTimeMillis();
+        stuckThreshold = RandomUtils.gaussianRandom((int) STUCK_TIMEOUT_MIN_MS, (int) STUCK_TIMEOUT_MAX_MS, (STUCK_TIMEOUT_MIN_MS + STUCK_TIMEOUT_MAX_MS) / 2.0, (STUCK_TIMEOUT_MAX_MS - STUCK_TIMEOUT_MIN_MS) / 4.0);
         consecutiveNoOreCount = 0;
         consecutiveMisclickCount = 0;
         lastMisclickPositionKey = null;

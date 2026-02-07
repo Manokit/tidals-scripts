@@ -275,7 +275,7 @@ public class InflateToads extends Task {
             inflateState = InflateState.CHECK_COMPLETION;
             if (gotToad) {
                 script.log(getClass(), "toad inflated successfully");
-                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(200, 600));
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(200, 600));
                 toadsInflated++;
             } else {
                 script.log(getClass(), "toad did not arrive in inventory, will re-detect position");

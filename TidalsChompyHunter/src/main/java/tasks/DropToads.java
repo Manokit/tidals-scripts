@@ -247,7 +247,7 @@ public class DropToads extends Task {
             // more to drop? wait for auto-move then loop back
             if (toadsDropped < toadsTarget && countBloatedToads() > 0) {
                 script.log(getClass(), "waiting for auto-move...");
-                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(900, 1100));
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(900, 1100));
                 dropState = DropState.CHECK_POSITION;
                 return true;
             }
@@ -278,7 +278,7 @@ public class DropToads extends Task {
             // more to drop? wait for auto-move then loop back
             if (toadsDropped < toadsTarget && countBloatedToads() > 0) {
                 script.log(getClass(), "waiting for auto-move...");
-                script.pollFramesHuman(() -> true, RandomUtils.weightedRandom(900, 1100));
+                script.pollFramesUntil(() -> false, RandomUtils.weightedRandom(900, 1100));
                 dropState = DropState.CHECK_POSITION;
                 return true;
             }

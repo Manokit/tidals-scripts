@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.osmb.scripts'
-version = '1.0'
+version = ''
 
 repositories {
     mavenCentral()

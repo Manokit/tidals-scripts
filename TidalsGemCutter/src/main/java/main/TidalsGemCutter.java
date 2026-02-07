@@ -36,11 +36,11 @@ import java.util.function.Predicate;
         name = "TidalsGemCutter",
         description = "Cuts gems using a chisel",
         skillCategory = SkillCategory.CRAFTING,
-        version = 1.5,
+        version = 1.6,
         author = "Tidaleus"
 )
 public class TidalsGemCutter extends Script {
-    public static final String scriptVersion = "1.5";
+    public static final String scriptVersion = "1.6";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
@@ -62,6 +62,14 @@ public class TidalsGemCutter extends Script {
     public static boolean makeBoltTips = false;      // Set from UI
     public static boolean useBankedGems = false;     // Set from UI
     public static boolean shouldBank = false;
+
+    // all uncuts mode
+    public static final int ALL_UNCUTS_SENTINEL = -1;
+    public static boolean allUncutsMode = false;
+    public static final List<Integer> GEM_PRIORITY = List.of(
+            ItemID.UNCUT_DIAMOND, ItemID.UNCUT_RUBY, ItemID.UNCUT_EMERALD,
+            ItemID.UNCUT_SAPPHIRE, ItemID.UNCUT_RED_TOPAZ, ItemID.UNCUT_JADE, ItemID.UNCUT_OPAL
+    );
 
     public static int craftCount = 0;
     public static String task = "Initialize";
@@ -129,6 +137,25 @@ public class TidalsGemCutter extends Script {
     public TidalsGemCutter(Object scriptCore) {
         super(scriptCore);
         this.xpTracking = new XPTracking(this);
+    }
+
+    public boolean advanceToNextGem() {
+        Set<Integer> allUncutIds = new HashSet<>(GEM_PRIORITY);
+        com.osmb.api.item.ItemGroupResult bankResult = getWidgetManager().getBank().search(allUncutIds);
+        if (bankResult == null) return false;
+
+        for (int uncutId : GEM_PRIORITY) {
+            if (uncutId == selectedUncutGemID) continue;
+            if (bankResult.contains(uncutId)) {
+                String oldName = getItemManager().getItemName(selectedUncutGemID);
+                selectedUncutGemID = uncutId;
+                selectedCutGemID = UNCUT_TO_CUT.getOrDefault(uncutId, 0);
+                String newName = getItemManager().getItemName(selectedUncutGemID);
+                log("INFO", "Switched from " + oldName + " to " + newName);
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -210,13 +237,25 @@ public class TidalsGemCutter extends Script {
         Scene scene = ui.buildScene(this);
         getStageController().show(scene, "Gem Cutter Options", false);
 
-        selectedUncutGemID = ui.getSelectedUncutGemId();
-        selectedCutGemID = UNCUT_TO_CUT.getOrDefault(selectedUncutGemID, 0);
-        makeBoltTips = ui.isMakeBoltTips();
-        useBankedGems = ui.isUseBankedGems();
+        int selectedOption = ui.getSelectedUncutGemId();
 
-        if (makeBoltTips) {
-            selectedBoltTipID = CUT_TO_BOLT_TIPS.getOrDefault(selectedCutGemID, 0);
+        if (selectedOption == ALL_UNCUTS_SENTINEL) {
+            allUncutsMode = true;
+            makeBoltTips = false;
+            useBankedGems = false;
+            selectedUncutGemID = GEM_PRIORITY.get(0);
+            selectedCutGemID = UNCUT_TO_CUT.getOrDefault(selectedUncutGemID, 0);
+            log("INFO", "All uncuts mode - starting with " + getItemManager().getItemName(selectedUncutGemID));
+        } else {
+            allUncutsMode = false;
+            selectedUncutGemID = selectedOption;
+            selectedCutGemID = UNCUT_TO_CUT.getOrDefault(selectedUncutGemID, 0);
+            makeBoltTips = ui.isMakeBoltTips();
+            useBankedGems = ui.isUseBankedGems();
+
+            if (makeBoltTips) {
+                selectedBoltTipID = CUT_TO_BOLT_TIPS.getOrDefault(selectedCutGemID, 0);
+            }
         }
 
         log("INFO", "uncut: " + selectedUncutGemID + ", cut: " + selectedCutGemID);
@@ -470,6 +509,9 @@ public class TidalsGemCutter extends Script {
             itemLabel = "Bolt tips";
         } else {
             itemName = getItemManager().getItemName(selectedUncutGemID).replace("Uncut ", "");
+            if (allUncutsMode) {
+                itemName += " (All)";
+            }
             itemLabel = "Gem type";
         }
         drawStatLine(c, innerX, innerWidth, paddingX, curY, itemLabel, itemName, textMuted.getRGB(), accentGold.getRGB());

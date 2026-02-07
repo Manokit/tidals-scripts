@@ -48,7 +48,7 @@ public class Setup extends Task {
             script.log(getClass(), "login timestamp set - waiting for grace period before player detection");
 
             // wait 10s for position to stabilize before checking for players
-            script.pollFramesHuman(() -> true, 10000);
+            script.pollFramesUntil(() -> false, 10000);
             script.log(getClass(), "grace period complete - checking for other players...");
 
             // check if world is occupied
