@@ -36,7 +36,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-@ScriptDefinition(name = "TidalsCannonballThiever", description = "Thieves cannonballs from Port Roberts stalls while avoiding guards", skillCategory = SkillCategory.THIEVING, version = 2.0, author = "Tidalus")
+@ScriptDefinition(name = "TidalsCannonballThiever", threadUrl = "https://wiki.osmb.co.uk/article/tidals-cannonball-thiever", skillCategory = SkillCategory.THIEVING, version = 2.0, author = "Tidalus")
 public class TidalsCannonballThiever extends Script {
     public static final String scriptVersion = "2.0";
     private static final String SCRIPT_NAME = "CannonballThiever";

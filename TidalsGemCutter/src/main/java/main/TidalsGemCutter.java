@@ -34,7 +34,7 @@ import java.util.function.Predicate;
 
 @ScriptDefinition(
         name = "TidalsGemCutter",
-        description = "Cuts gems using a chisel",
+        threadUrl = "https://wiki.osmb.co.uk/article/tidals-gem-cutter",
         skillCategory = SkillCategory.CRAFTING,
         version = 1.6,
         author = "Tidaleus"

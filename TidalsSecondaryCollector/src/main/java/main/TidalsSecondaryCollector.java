@@ -22,7 +22,7 @@ import java.util.UUID;
 
 @ScriptDefinition(
         name = "TidalsSecondaryCollector",
-        description = "Collects herblore secondaries for ironmen",
+        threadUrl = "https://wiki.osmb.co.uk/article/tidals-gem-cutter",
         skillCategory = SkillCategory.HERBLORE,
         version = 1.0,
         author = "Tidaleus"

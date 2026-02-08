@@ -33,7 +33,7 @@ import java.util.function.Predicate;
 
 @ScriptDefinition(
         name = "TidalsGoldSuperheater",
-        description = "Superheats gold ore into gold bars using magic",
+        threadUrl = "https://wiki.osmb.co.uk/article/tidals-gold-superheater",
         skillCategory = SkillCategory.MAGIC,
         version = 1.6,
         author = "Tidaleus"

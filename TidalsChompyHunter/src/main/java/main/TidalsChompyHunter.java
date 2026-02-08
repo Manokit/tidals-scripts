@@ -46,7 +46,7 @@ import java.util.UUID;
 
 @ScriptDefinition(
         name = "TidalsChompyHunter",
-        description = "Hunts chompy birds for Western Provinces Diary",
+        threadUrl = "https://wiki.osmb.co.uk/article/tidals-chompy-hunter",
         skillCategory = SkillCategory.COMBAT,
         version = 1.5,
         author = "Tidaleus"

@@ -38,7 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @ScriptDefinition(
         name = "TidalsGemMiner",
         author = "Tidal",
-        description = "Mines gems at Shilo Village with optional cutting",
+        threadUrl = "https://wiki.osmb.co.uk/article/tidals-gem-miner",
         skillCategory = SkillCategory.MINING,
         version = 1.2
 )
