@@ -24,12 +24,12 @@ import java.util.UUID;
         name = "TidalsSecondaryCollector",
         threadUrl = "https://wiki.osmb.co.uk/article/tidals-gem-cutter",
         skillCategory = SkillCategory.HERBLORE,
-        version = 1.0,
+        version = 1.1,
         author = "Tidaleus"
 )
 public class TidalsSecondaryCollector extends Script {
 
-    public static final String SCRIPT_VERSION = "1.0";
+    public static final String SCRIPT_VERSION = "1.1";
     private static final String SCRIPT_NAME = "SecondaryCollector";
     private static final String SESSION_ID = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

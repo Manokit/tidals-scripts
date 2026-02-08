@@ -40,10 +40,10 @@ import java.util.concurrent.ConcurrentHashMap;
         author = "Tidal",
         threadUrl = "https://wiki.osmb.co.uk/article/tidals-gem-miner",
         skillCategory = SkillCategory.MINING,
-        version = 1.2
+        version = 1.3
 )
 public class TidalsGemMiner extends Script {
-    public static final String scriptVersion = "1.2";
+    public static final String scriptVersion = "1.3";
 
     // debug mode - toggled via ScriptUI Debug tab
     public static volatile boolean verboseLogging = false;

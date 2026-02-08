@@ -48,11 +48,11 @@ import java.util.UUID;
         name = "TidalsChompyHunter",
         threadUrl = "https://wiki.osmb.co.uk/article/tidals-chompy-hunter",
         skillCategory = SkillCategory.COMBAT,
-        version = 1.5,
+        version = 1.6,
         author = "Tidaleus"
 )
 public class TidalsChompyHunter extends Script {
-    public static final String SCRIPT_VERSION = "1.5";
+    public static final String SCRIPT_VERSION = "1.6";
     private static final String SCRIPT_NAME = "ChompyHunter";
     private static final String SESSION_ID = UUID.randomUUID().toString();
 

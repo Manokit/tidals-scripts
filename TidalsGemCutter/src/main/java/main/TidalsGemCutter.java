@@ -36,11 +36,11 @@ import java.util.function.Predicate;
         name = "TidalsGemCutter",
         threadUrl = "https://wiki.osmb.co.uk/article/tidals-gem-cutter",
         skillCategory = SkillCategory.CRAFTING,
-        version = 1.6,
+        version = 1.7,
         author = "Tidaleus"
 )
 public class TidalsGemCutter extends Script {
-    public static final String scriptVersion = "1.6";
+    public static final String scriptVersion = "1.7";
     private final String scriptName = "GemCutter";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;

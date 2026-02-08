@@ -35,11 +35,11 @@ import java.util.function.Predicate;
         name = "TidalsGoldSuperheater",
         threadUrl = "https://wiki.osmb.co.uk/article/tidals-gold-superheater",
         skillCategory = SkillCategory.MAGIC,
-        version = 1.6,
+        version = 1.7,
         author = "Tidaleus"
 )
 public class TidalsGoldSuperheater extends Script {
-    public static final String scriptVersion = "1.6";
+    public static final String scriptVersion = "1.7";
     private final String scriptName = "GoldSuperheater";
     private static String sessionId = UUID.randomUUID().toString();
     private static long lastStatsSent = 0;
