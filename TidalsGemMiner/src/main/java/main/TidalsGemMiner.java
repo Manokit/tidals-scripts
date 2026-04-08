@@ -15,6 +15,7 @@ import tasks.DetectPlayers;
 import tasks.HopWorld;
 import tasks.Mine;
 import tasks.Setup;
+import utilities.FreeTelemetrySupport;
 import utils.Task;
 import utils.XPTracking;
 
@@ -530,54 +531,33 @@ public class TidalsGemMiner extends Script {
     }
 
     private void sendStats(int miningXp, int craftingXp, int gemsMined, int gemsCut, long gpEarned, long runtimeSecs) {
-        try {
-            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
-                return;
-            }
+        if (obf.Secrets.DASHBOARD_BASE_URL == null || obf.Secrets.DASHBOARD_BASE_URL.isEmpty()) {
+            return;
+        }
 
-            // skip if nothing to report
-            if (miningXp == 0 && craftingXp == 0 && gemsMined == 0 && gemsCut == 0 && gpEarned == 0 && runtimeSecs == 0) {
-                return;
-            }
+        if (miningXp == 0 && craftingXp == 0 && gemsMined == 0 && gemsCut == 0 && gpEarned == 0 && runtimeSecs == 0) {
+            return;
+        }
 
-            // xp = mining + crafting combined for dashboard total
-            int totalXp = miningXp + craftingXp;
-
-            String json = String.format(
-                "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":%d,\"xp\":%d,\"runtime\":%d,\"gemsMined\":%d,\"gemsCut\":%d,\"miningXp\":%d,\"craftingXp\":%d}",
+        int totalXp = miningXp + craftingXp;
+        boolean sent = FreeTelemetrySupport.sendHeartbeat(
+                obf.Secrets.DASHBOARD_BASE_URL,
                 SCRIPT_NAME,
                 SESSION_ID,
-                gpEarned,
-                totalXp,
                 runtimeSecs,
-                gemsMined,
-                gemsCut,
-                miningXp,
-                craftingXp
-            );
-
-            URL url = new URL(obf.Secrets.STATS_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                log("STATS", "Stats sent: miningXp=" + miningXp + ", craftingXp=" + craftingXp +
+                Map.of(
+                        "gp", gpEarned,
+                        "xp", totalXp,
+                        "gemsMined", gemsMined,
+                        "gemsCut", gemsCut,
+                        "miningXp", miningXp,
+                        "craftingXp", craftingXp
+                ),
+                message -> log("STATS", message)
+        );
+        if (sent) {
+            log("STATS", "Telemetry sent: miningXp=" + miningXp + ", craftingXp=" + craftingXp +
                     ", gems=" + gemsMined + "/" + gemsCut + ", gp=" + gpEarned + ", runtime=" + runtimeSecs + "s");
-            } else {
-                log("STATS", "Failed to send stats, HTTP " + code);
-            }
-        } catch (IOException e) {
-            log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
         }
     }
 

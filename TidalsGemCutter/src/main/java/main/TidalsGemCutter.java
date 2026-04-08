@@ -12,6 +12,7 @@ import javafx.scene.Scene;
 import tasks.Bank;
 import tasks.Process;
 import tasks.Setup;
+import utilities.FreeTelemetrySupport;
 import utils.Task;
 import utils.XPTracking;
 
@@ -735,47 +736,28 @@ public class TidalsGemCutter extends Script {
     }
 
     private void sendStats(int xpIncrement, int craftIncrement, long runtimeSecs) {
-        try {
-            // only send if Secrets are configured
-            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
-                return;
-            }
+        if (obf.Secrets.DASHBOARD_BASE_URL == null || obf.Secrets.DASHBOARD_BASE_URL.isEmpty()) {
+            return;
+        }
 
-            // skip if nothing to report
-            if (xpIncrement == 0 && craftIncrement == 0 && runtimeSecs == 0) {
-                return;
-            }
+        if (xpIncrement == 0 && craftIncrement == 0 && runtimeSecs == 0) {
+            return;
+        }
 
-            String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"gemsCut\":%d}",
-                    scriptName,
-                    sessionId,
-                    xpIncrement,
-                    runtimeSecs,
-                    craftIncrement
-            );
-
-            URL url = new URL(obf.Secrets.STATS_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                log("STATS", "Stats reported: xp=" + xpIncrement + ", gems=" + craftIncrement + ", runtime=" + runtimeSecs + "s");
-            } else {
-                log("STATS", "Failed to report stats, HTTP " + code);
-            }
-        } catch (IOException e) {
-            log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
+        boolean sent = FreeTelemetrySupport.sendHeartbeat(
+                obf.Secrets.DASHBOARD_BASE_URL,
+                scriptName,
+                sessionId,
+                runtimeSecs,
+                Map.of(
+                        "gp", 0,
+                        "xp", xpIncrement,
+                        "gemsCut", craftIncrement
+                ),
+                message -> log("STATS", message)
+        );
+        if (sent) {
+            log("STATS", "Telemetry reported: xp=" + xpIncrement + ", gems=" + craftIncrement + ", runtime=" + runtimeSecs + "s");
         }
     }
 

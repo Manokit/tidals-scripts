@@ -56,3 +56,4 @@ TidalsFlipper/
 .DS_Store
 .worktrees/
 .conductor/
+.omx/

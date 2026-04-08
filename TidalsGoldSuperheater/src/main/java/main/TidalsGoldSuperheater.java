@@ -11,6 +11,7 @@ import javafx.scene.Scene;
 import tasks.Bank;
 import tasks.Process;
 import tasks.Setup;
+import utilities.FreeTelemetrySupport;
 import utils.Task;
 import utils.XPTracking;
 
@@ -628,54 +629,32 @@ public class TidalsGoldSuperheater extends Script {
     }
 
     private void sendStats(int magicXp, int smithingXp, int bars, long runtimeSecs) {
-        try {
-            // Only send if Secrets are configured
-            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
-                log("STATS", "STATS_URL not configured, skipping");
-                return;
-            }
+        if (obf.Secrets.DASHBOARD_BASE_URL == null || obf.Secrets.DASHBOARD_BASE_URL.isEmpty()) {
+            log("STATS", "DASHBOARD_BASE_URL not configured, skipping");
+            return;
+        }
 
-            // skip if nothing to report
-            if (magicXp == 0 && smithingXp == 0 && bars == 0 && runtimeSecs == 0) {
-                return;
-            }
+        if (magicXp == 0 && smithingXp == 0 && bars == 0 && runtimeSecs == 0) {
+            return;
+        }
 
-            log("STATS", "Sending stats to: " + obf.Secrets.STATS_URL);
-
-            // send magic + smithing as combined xp, but also include separate fields in metadata
-            int totalXp = magicXp + smithingXp;
-            String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":%d,\"runtime\":%d,\"barsCreated\":%d,\"magicXp\":%d,\"smithingXp\":%d}",
-                    scriptName,
-                    sessionId,
-                    totalXp,
-                    runtimeSecs,
-                    bars,
-                    magicXp,
-                    smithingXp
-            );
-
-            URL url = new URL(obf.Secrets.STATS_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                log("STATS", "Stats reported: magic=" + magicXp + ", smith=" + smithingXp + ", bars=" + bars + ", runtime=" + runtimeSecs + "s");
-            } else {
-                log("STATS", "Failed to report stats, HTTP " + code);
-            }
-        } catch (IOException e) {
-            log("STATS", "Error sending stats: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+        int totalXp = magicXp + smithingXp;
+        boolean sent = FreeTelemetrySupport.sendHeartbeat(
+                obf.Secrets.DASHBOARD_BASE_URL,
+                scriptName,
+                sessionId,
+                runtimeSecs,
+                Map.of(
+                        "gp", 0,
+                        "xp", totalXp,
+                        "barsCreated", bars,
+                        "magicXp", magicXp,
+                        "smithingXp", smithingXp
+                ),
+                message -> log("STATS", message)
+        );
+        if (sent) {
+            log("STATS", "Telemetry reported: magic=" + magicXp + ", smith=" + smithingXp + ", bars=" + bars + ", runtime=" + runtimeSecs + "s");
         }
     }
 

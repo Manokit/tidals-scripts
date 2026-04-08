@@ -8,6 +8,7 @@ import com.osmb.api.visual.image.Image;
 import com.osmb.api.ui.tabs.Tab;
 import strategies.MortMyreFungusCollector;
 import strategies.SecondaryCollectorStrategy;
+import utilities.FreeTelemetrySupport;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -449,45 +450,30 @@ public class TidalsSecondaryCollector extends Script {
     }
 
     private void sendStats(int bloomIncrement, int bankedIncrement, int tripsIncrement, long runtimeSecs) {
-        try {
-            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
-                return;
-            }
+        if (obf.Secrets.DASHBOARD_BASE_URL == null || obf.Secrets.DASHBOARD_BASE_URL.isEmpty()) {
+            return;
+        }
 
-            // skip if nothing to report
-            if (bloomIncrement == 0 && bankedIncrement == 0 && tripsIncrement == 0 && runtimeSecs == 0) {
-                return;
-            }
+        if (bloomIncrement == 0 && bankedIncrement == 0 && tripsIncrement == 0 && runtimeSecs == 0) {
+            return;
+        }
 
-            String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":0,\"runtime\":%d,\"bloomCasts\":%d,\"itemsBanked\":%d,\"bankTrips\":%d}",
-                    SCRIPT_NAME,
-                    SESSION_ID,
-                    runtimeSecs,
-                    bloomIncrement,
-                    bankedIncrement,
-                    tripsIncrement
-            );
-
-            URL url = new URL(obf.Secrets.STATS_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                log("STATS", "Stats reported: blooms=" + bloomIncrement + ", banked=" + bankedIncrement + ", trips=" + tripsIncrement + ", runtime=" + runtimeSecs + "s");
-            }
-        } catch (Exception e) {
-            log("STATS", "Error sending stats: " + e.getClass().getSimpleName());
+        boolean sent = FreeTelemetrySupport.sendHeartbeat(
+                obf.Secrets.DASHBOARD_BASE_URL,
+                SCRIPT_NAME,
+                SESSION_ID,
+                runtimeSecs,
+                Map.of(
+                        "gp", 0,
+                        "xp", 0,
+                        "bloomCasts", bloomIncrement,
+                        "itemsBanked", bankedIncrement,
+                        "bankTrips", tripsIncrement
+                ),
+                message -> log("STATS", message)
+        );
+        if (sent) {
+            log("STATS", "Telemetry reported: blooms=" + bloomIncrement + ", banked=" + bankedIncrement + ", trips=" + tripsIncrement + ", runtime=" + runtimeSecs + "s");
         }
     }
 }

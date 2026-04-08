@@ -21,6 +21,7 @@ import tasks.FillBellows;
 import tasks.HopWorld;
 import tasks.InflateToads;
 import tasks.Setup;
+import utilities.FreeTelemetrySupport;
 import utils.Task;
 
 import javax.imageio.ImageIO;
@@ -42,6 +43,7 @@ import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @ScriptDefinition(
@@ -964,44 +966,29 @@ public class TidalsChompyHunter extends Script {
      * send stats to dashboard API (incremental values)
      */
     private void sendStats(int killIncrement, long runtimeSecs, int arrowsUsedIncrement) {
-        try {
-            if (obf.Secrets.STATS_URL == null || obf.Secrets.STATS_URL.isEmpty()) {
-                return;
-            }
+        if (obf.Secrets.DASHBOARD_BASE_URL == null || obf.Secrets.DASHBOARD_BASE_URL.isEmpty()) {
+            return;
+        }
 
-            // skip if nothing to report
-            if (killIncrement == 0 && runtimeSecs == 0 && arrowsUsedIncrement == 0) {
-                return;
-            }
+        if (killIncrement == 0 && runtimeSecs == 0 && arrowsUsedIncrement == 0) {
+            return;
+        }
 
-            String json = String.format(
-                    "{\"script\":\"%s\",\"session\":\"%s\",\"gp\":0,\"xp\":0,\"runtime\":%d,\"kills\":%d,\"arrowsUsed\":%d}",
-                    SCRIPT_NAME,
-                    SESSION_ID,
-                    runtimeSecs,
-                    killIncrement,
-                    arrowsUsedIncrement
-            );
-
-            URL url = new URL(obf.Secrets.STATS_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("X-Stats-Key", obf.Secrets.STATS_API);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                log(getClass(), "stats reported: kills=" + killIncrement + ", arrows=" + arrowsUsedIncrement + ", runtime=" + runtimeSecs + "s");
-            }
-        } catch (IOException e) {
-            log(getClass(), "stats error: " + e.getClass().getSimpleName());
+        boolean sent = FreeTelemetrySupport.sendHeartbeat(
+                obf.Secrets.DASHBOARD_BASE_URL,
+                SCRIPT_NAME,
+                SESSION_ID,
+                runtimeSecs,
+                Map.of(
+                        "gp", 0,
+                        "xp", 0,
+                        "kills", killIncrement,
+                        "arrowsUsed", arrowsUsedIncrement
+                ),
+                message -> log("STATS", message)
+        );
+        if (sent) {
+            log(getClass(), "telemetry sent: kills=" + killIncrement + ", arrows=" + arrowsUsedIncrement + ", runtime=" + runtimeSecs + "s");
         }
     }
 
